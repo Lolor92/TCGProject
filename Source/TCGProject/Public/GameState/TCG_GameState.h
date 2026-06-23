@@ -65,13 +65,28 @@ public:
 public:
 	// Creates a new card instance and adds it to the match.
 	// For now this is useful for test cards later.
-	FTCGCardInstance& AddCardInstance(FName CardDefinitionId, int32 OwnerPlayerIndex, ETCGCardLocation StartingLocation);
+	FTCGCardInstance& AddCardInstance(FName CardDefinitionId, ETCGCardElement Element, int32 BaseAttack,
+		int32 OwnerPlayerIndex, ETCGCardLocation StartingLocation);
 
 	// Finds a card by its unique instance id.
 	FTCGCardInstance* FindCardInstance(const FGuid& CardInstanceId);
 
 	// Const version for read-only checks.
 	const FTCGCardInstance* FindCardInstance(const FGuid& CardInstanceId) const;
+	
+	// Finds the top card in a stack.
+	FTCGCardInstance* FindTopCardInStack(const FGuid& StackId);
+	const FTCGCardInstance* FindTopCardInStack(const FGuid& StackId) const;
+
+	// Basic stack rule: same element can stack on same element.
+	// Exceptions come later.
+	bool CanPlaceCardOnStack(const FGuid& CardInstanceId, const FGuid& TargetStackId) const;
+
+	// Places a card on the board as a brand-new stack.
+	bool PlaceCardAsNewStack(const FGuid& CardInstanceId, FName ZoneId);
+
+	// Places a card on top of an existing stack.
+	bool PlaceCardOnStack(const FGuid& CardInstanceId, const FGuid& TargetStackId);
 
 	// Moves a card to a new location.
 	// Later this will trigger effects like OnSentToGraveyard or OnBanished.
@@ -84,4 +99,7 @@ public:
 	// Counts how many cards are underneath this card in its stack.
 	// This prepares the +1 attack per card underneath rule.
 	int32 GetCardsUnderneathCount(const FGuid& CardInstanceId) const;
+	
+	// Base attack + 1 for each card underneath it.
+	int32 GetFinalAttack(const FGuid& CardInstanceId) const;
 };

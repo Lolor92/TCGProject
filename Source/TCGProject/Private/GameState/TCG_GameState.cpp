@@ -33,15 +33,15 @@ void ATCG_GameState::SetCurrentTurnPlayer(int32 NewPlayerIndex)
 	CurrentTurnPlayerIndex = NewPlayerIndex;
 }
 
-FTCGCardInstance& ATCG_GameState::AddCardInstance(FName CardDefinitionId, int32 OwnerPlayerIndex, 
-	ETCGCardLocation StartingLocation)
+FTCGCardInstance& ATCG_GameState::AddCardInstance(FName CardDefinitionId, ETCGCardElement Element, int32 BaseAttack,
+	int32 OwnerPlayerIndex, ETCGCardLocation StartingLocation)
 {
 	FTCGCardInstance NewCard;
 	NewCard.CardDefinitionId = CardDefinitionId;
+	NewCard.Element = Element;
+	NewCard.BaseAttack = BaseAttack;
 	NewCard.OwnerPlayerIndex = OwnerPlayerIndex;
 	NewCard.Location = StartingLocation;
-
-	// Not stacked yet.
 	NewCard.StackId.Invalidate();
 	NewCard.StackIndex = INDEX_NONE;
 	NewCard.ZoneId = NAME_None;
@@ -73,6 +73,78 @@ const FTCGCardInstance* ATCG_GameState::FindCardInstance(const FGuid& CardInstan
 	}
 
 	return nullptr;
+}
+
+FTCGCardInstance* ATCG_GameState::FindTopCardInStack(const FGuid& StackId)
+{
+	if (!StackId.IsValid()) return nullptr;
+
+	FTCGCardInstance* TopCard = nullptr;
+
+	for (FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.StackId != StackId || Card.Location != ETCGCardLocation::Board) continue;
+		if (!TopCard || Card.StackIndex > TopCard->StackIndex) TopCard = &Card;
+	}
+
+	return TopCard;
+}
+
+const FTCGCardInstance* ATCG_GameState::FindTopCardInStack(const FGuid& StackId) const
+{
+	if (!StackId.IsValid()) return nullptr;
+
+	const FTCGCardInstance* TopCard = nullptr;
+
+	for (const FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.StackId != StackId || Card.Location != ETCGCardLocation::Board) continue;
+		if (!TopCard || Card.StackIndex > TopCard->StackIndex) TopCard = &Card;
+	}
+
+	return TopCard;
+}
+
+bool ATCG_GameState::CanPlaceCardOnStack(const FGuid& CardInstanceId, const FGuid& TargetStackId) const
+{
+	const FTCGCardInstance* CardToPlace = FindCardInstance(CardInstanceId);
+	const FTCGCardInstance* TopCard = FindTopCardInStack(TargetStackId);
+
+	if (!CardToPlace || !TopCard) return false;
+
+	// Core rule for now: same element can stack on same element.
+	// Exceptions will be added later through effects/rules.
+	return CardToPlace->Element == TopCard->Element;
+}
+
+bool ATCG_GameState::PlaceCardAsNewStack(const FGuid& CardInstanceId, FName ZoneId)
+{
+	FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
+	if (!Card) return false;
+
+	Card->Location = ETCGCardLocation::Board;
+	Card->ZoneId = ZoneId;
+	Card->StackId = FGuid::NewGuid();
+	Card->StackIndex = 0;
+
+	return true;
+}
+
+bool ATCG_GameState::PlaceCardOnStack(const FGuid& CardInstanceId, const FGuid& TargetStackId)
+{
+	if (!CanPlaceCardOnStack(CardInstanceId, TargetStackId)) return false;
+
+	FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
+	FTCGCardInstance* TopCard = FindTopCardInStack(TargetStackId);
+
+	if (!Card || !TopCard) return false;
+
+	Card->Location = ETCGCardLocation::Board;
+	Card->ZoneId = TopCard->ZoneId;
+	Card->StackId = TargetStackId;
+	Card->StackIndex = TopCard->StackIndex + 1;
+
+	return true;
 }
 
 bool ATCG_GameState::MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLocation NewLocation)
@@ -130,4 +202,12 @@ int32 ATCG_GameState::GetCardsUnderneathCount(const FGuid& CardInstanceId) const
 	}
 
 	return Count;
+}
+
+int32 ATCG_GameState::GetFinalAttack(const FGuid& CardInstanceId) const
+{
+	const FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
+	if (!Card) return 0;
+
+	return Card->BaseAttack + GetCardsUnderneathCount(CardInstanceId);
 }

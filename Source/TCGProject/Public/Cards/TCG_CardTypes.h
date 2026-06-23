@@ -125,6 +125,15 @@ public:
 	// Higher number = closer to the top.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Stack")
 	int32 StackIndex = INDEX_NONE;
+	
+	// Runtime snapshot of the card element.
+	// This lets rules check stack legality without loading the card asset every time.
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
+	ETCGCardElement Element = ETCGCardElement::Fire;
+
+	// Runtime snapshot of printed attack.
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
+	int32 BaseAttack = 0;
 
 public:
 	FTCGCardInstance()
