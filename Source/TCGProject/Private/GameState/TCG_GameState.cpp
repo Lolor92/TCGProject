@@ -115,10 +115,8 @@ FTCGCardInstance& ATCG_GameState::AddDebugCardInstance(FName CardDefinitionId, E
 	{
 		if (FTCGCardInstance* CardInstance = AddCardInstanceFromDefinition(CardDefinition, OwnerPlayerIndex, StartingLocation))
 		{
-			UE_LOG(LogTemp, Warning,
-				TEXT("TCG Debug: Added card from definition asset %s ATK %d"),
-				*CardInstance->CardDefinitionId.ToString(),
-				CardInstance->BaseAttack);
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Added card from definition asset %s ATK %d Effects %d"),
+				*CardInstance->CardDefinitionId.ToString(), CardInstance->BaseAttack, CardDefinition->Effects.Num());
 
 			return *CardInstance;
 		}
@@ -301,35 +299,7 @@ int32 ATCG_GameState::GetPrintedEffectRefsForCard(const FTCGCardInstance& Card, 
 		return OutEffectRefs.Num();
 	}
 
-	const bool bHasKnownFallbackEffects =
-		Card.CardDefinitionId == DebugCard_FireDeckB ||
-		Card.CardDefinitionId == DebugCard_FireDeckA;
-
-	if (bHasKnownFallbackEffects)
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("TCG Debug: Using fallback printed effects for %s"),
-			*Card.CardDefinitionId.ToString());
-	}
-
-	// Temporary fallback until card definition assets/registry exist.
-	if (Card.CardDefinitionId == DebugCard_FireDeckB)
-	{
-		FTCGCardEffectRef EffectRef;
-		EffectRef.Trigger = ETCGEffectTrigger::OnPlay;
-		EffectRef.EffectId = DebugEffect_Draw1;
-		OutEffectRefs.Add(EffectRef);
-	}
-
-	if (Card.CardDefinitionId == DebugCard_FireDeckA)
-	{
-		FTCGCardEffectRef EffectRef;
-		EffectRef.Trigger = ETCGEffectTrigger::OnPlay;
-		EffectRef.EffectId = DebugEffect_GainAttackForCardsUnderneath;
-		OutEffectRefs.Add(EffectRef);
-	}
-
-	return OutEffectRefs.Num();
+	return 0;
 }
 
 int32 ATCG_GameState::GetPrintedEffectsForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, TArray<FName>& OutEffectIds) const
@@ -338,6 +308,13 @@ int32 ATCG_GameState::GetPrintedEffectsForCardTrigger(const FTCGCardInstance& Ca
 
 	TArray<FTCGCardEffectRef> EffectRefs;
 	GetPrintedEffectRefsForCard(Card, EffectRefs);
+
+	if (EffectRefs.Num() <= 0 && (Card.CardDefinitionId == DebugCard_FireDeckA || Card.CardDefinitionId == DebugCard_FireDeckB))
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: Expected printed effects for %s but none were found"),
+			*Card.CardDefinitionId.ToString());
+	}
 
 	for (const FTCGCardEffectRef& EffectRef : EffectRefs)
 	{
