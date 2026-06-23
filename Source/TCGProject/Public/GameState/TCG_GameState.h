@@ -9,10 +9,11 @@ UENUM(BlueprintType)
 enum class ETCGMatchPhase : uint8
 {
 	WaitingForPlayers UMETA(DisplayName = "Waiting For Players"),
-	Draw              UMETA(DisplayName = "Draw"),
-	Main              UMETA(DisplayName = "Main"),
-	Battle            UMETA(DisplayName = "Battle"),
-	End               UMETA(DisplayName = "End")
+	Draw UMETA(DisplayName = "Draw"),
+	Main UMETA(DisplayName = "Main"),
+	Battle UMETA(DisplayName = "Battle"),
+	End UMETA(DisplayName = "End"),
+	GameOver UMETA(DisplayName = "Game Over")
 };
 
 UENUM(BlueprintType)
@@ -65,15 +66,11 @@ public:
 	TArray<FTCGCardInstance> MatchCards;
 
 public:
-	// Server should call this when both players are ready.
 	void StartMatch();
-
-	// Server should call this when moving to another phase.
 	void SetPhase(ETCGMatchPhase NewPhase);
-	
 	void SetMatchResult(ETCGMatchResult NewMatchResult);
-
-	// Server should call this when changing active player.
+	void EndMatch(ETCGMatchResult FinalResult);
+	bool IsMatchOver() const;
 	void SetCurrentTurnPlayer(int32 NewPlayerIndex);
 
 public:

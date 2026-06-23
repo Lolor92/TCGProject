@@ -35,6 +35,17 @@ void ATCG_GameState::SetMatchResult(ETCGMatchResult NewMatchResult)
 	MatchResult = NewMatchResult;
 }
 
+void ATCG_GameState::EndMatch(ETCGMatchResult FinalResult)
+{
+	SetMatchResult(FinalResult);
+	SetPhase(ETCGMatchPhase::GameOver);
+}
+
+bool ATCG_GameState::IsMatchOver() const
+{
+	return MatchResult != ETCGMatchResult::None;
+}
+
 void ATCG_GameState::SetCurrentTurnPlayer(int32 NewPlayerIndex)
 {
 	CurrentTurnPlayerIndex = NewPlayerIndex;
@@ -360,21 +371,21 @@ void ATCG_GameState::CheckLoseConditionAfterBattle()
 
 	if (!bPlayer0HasBoardCard && !bPlayer1HasBoardCard)
 	{
-		SetMatchResult(ETCGMatchResult::Draw);
+		EndMatch(ETCGMatchResult::Draw);
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: draw, both players have no board cards"));
 		return;
 	}
 
 	if (!bPlayer0HasBoardCard)
 	{
-		SetMatchResult(ETCGMatchResult::Player1Wins);
+		EndMatch(ETCGMatchResult::Player1Wins);
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: Player 0 loses"));
 		return;
 	}
 
 	if (!bPlayer1HasBoardCard)
 	{
-		SetMatchResult(ETCGMatchResult::Player0Wins);
+		EndMatch(ETCGMatchResult::Player0Wins);
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: Player 1 loses"));
 		return;
 	}
@@ -546,6 +557,12 @@ void ATCG_GameState::RunDebugTurnFlow()
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase resolved: %s"), bBattleResolved ? TEXT("true") : TEXT("false"));
 
 	CheckLoseConditionAfterBattle();
+
+	if (IsMatchOver())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Match ended after battle"));
+		return;
+	}
 
 	SetPhase(ETCGMatchPhase::End);
 
