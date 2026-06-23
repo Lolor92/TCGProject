@@ -364,34 +364,31 @@ bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player
 	return true;
 }
 
-void ATCG_GameState::CheckLoseConditionAfterBattle()
+ETCGMatchResult ATCG_GameState::CheckLoseConditionAfterBattle() const
 {
 	const bool bPlayer0HasBoardCard = DoesPlayerHaveAnyCardOnBoard(0);
 	const bool bPlayer1HasBoardCard = DoesPlayerHaveAnyCardOnBoard(1);
 
 	if (!bPlayer0HasBoardCard && !bPlayer1HasBoardCard)
 	{
-		EndMatch(ETCGMatchResult::Draw);
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: draw, both players have no board cards"));
-		return;
+		return ETCGMatchResult::Draw;
 	}
 
 	if (!bPlayer0HasBoardCard)
 	{
-		EndMatch(ETCGMatchResult::Player1Wins);
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: Player 0 loses"));
-		return;
+		return ETCGMatchResult::Player1Wins;
 	}
 
 	if (!bPlayer1HasBoardCard)
 	{
-		EndMatch(ETCGMatchResult::Player0Wins);
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: Player 1 loses"));
-		return;
+		return ETCGMatchResult::Player0Wins;
 	}
 
-	SetMatchResult(ETCGMatchResult::None);
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: no player loses"));
+	return ETCGMatchResult::None;
 }
 
 void ATCG_GameState::GetCardsInLocation(int32 PlayerIndex, ETCGCardLocation Location, TArray<FTCGCardInstance>& OutCards) const
@@ -556,10 +553,11 @@ void ATCG_GameState::RunDebugTurnFlow()
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase resolved: %s"), bBattleResolved ? TEXT("true") : TEXT("false"));
 
-	CheckLoseConditionAfterBattle();
+	const ETCGMatchResult BattleMatchResult = CheckLoseConditionAfterBattle();
 
-	if (IsMatchOver())
+	if (BattleMatchResult != ETCGMatchResult::None)
 	{
+		EndMatch(BattleMatchResult);
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Match ended after battle"));
 		return;
 	}
