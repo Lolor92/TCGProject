@@ -1,9 +1,9 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Cards/TCG_CardTypes.h"
 #include "GameFramework/GameState.h"
 #include "TCG_GameState.generated.h"
-
 
 UENUM(BlueprintType)
 enum class ETCGMatchPhase : uint8
@@ -16,8 +16,13 @@ enum class ETCGMatchPhase : uint8
 };
 
 /**
- * GameState exists on server and clients.
- * This stores shared match state: turn, phase, active player.
+ * GameState exists on the server and all clients.
+ *
+ * It stores shared match state:
+ * - turn
+ * - phase
+ * - active player
+ * - card instances
  */
 UCLASS()
 class TCGPROJECT_API ATCG_GameState : public AGameState
@@ -27,7 +32,6 @@ class TCGPROJECT_API ATCG_GameState : public AGameState
 public:
 	ATCG_GameState();
 
-	// Replication setup.
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 public:
@@ -43,6 +47,11 @@ public:
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
 	ETCGMatchPhase CurrentPhase = ETCGMatchPhase::WaitingForPlayers;
 
+	// All card copies currently known by the match.
+	// This is gameplay state, not visual actors.
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Cards")
+	TArray<FTCGCardInstance> MatchCards;
+
 public:
 	// Server should call this when both players are ready.
 	void StartMatch();
@@ -52,4 +61,27 @@ public:
 
 	// Server should call this when changing active player.
 	void SetCurrentTurnPlayer(int32 NewPlayerIndex);
+
+public:
+	// Creates a new card instance and adds it to the match.
+	// For now this is useful for test cards later.
+	FTCGCardInstance& AddCardInstance(FName CardDefinitionId, int32 OwnerPlayerIndex, ETCGCardLocation StartingLocation);
+
+	// Finds a card by its unique instance id.
+	FTCGCardInstance* FindCardInstance(const FGuid& CardInstanceId);
+
+	// Const version for read-only checks.
+	const FTCGCardInstance* FindCardInstance(const FGuid& CardInstanceId) const;
+
+	// Moves a card to a new location.
+	// Later this will trigger effects like OnSentToGraveyard or OnBanished.
+	bool MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLocation NewLocation);
+
+	// Returns true if the player has at least one card on the board.
+	// This prepares your lose condition, but does not enforce it yet.
+	bool DoesPlayerHaveAnyCardOnBoard(int32 PlayerIndex) const;
+
+	// Counts how many cards are underneath this card in its stack.
+	// This prepares the +1 attack per card underneath rule.
+	int32 GetCardsUnderneathCount(const FGuid& CardInstanceId) const;
 };
