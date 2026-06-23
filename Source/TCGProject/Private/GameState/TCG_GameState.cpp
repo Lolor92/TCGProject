@@ -211,3 +211,34 @@ int32 ATCG_GameState::GetFinalAttack(const FGuid& CardInstanceId) const
 
 	return Card->BaseAttack + GetCardsUnderneathCount(CardInstanceId);
 }
+
+void ATCG_GameState::CreateDebugTestCards()
+{
+	MatchCards.Empty();
+
+	FTCGCardInstance& Player0FireA = AddCardInstance("Debug_Fire_A", ETCGCardElement::Fire, 2, 0, ETCGCardLocation::Hand);
+	FTCGCardInstance& Player0FireB = AddCardInstance("Debug_Fire_B", ETCGCardElement::Fire, 3, 0, ETCGCardLocation::Hand);
+	FTCGCardInstance& Player0Water = AddCardInstance("Debug_Water_A", ETCGCardElement::Water, 4, 0, ETCGCardLocation::Hand);
+	FTCGCardInstance& Player1Dark = AddCardInstance("Debug_Dark_A", ETCGCardElement::Dark, 5, 1, ETCGCardLocation::Hand);
+
+	const FGuid FireAId = Player0FireA.CardInstanceId;
+	const FGuid FireBId = Player0FireB.CardInstanceId;
+	const FGuid WaterId = Player0Water.CardInstanceId;
+	const FGuid DarkId = Player1Dark.CardInstanceId;
+
+	PlaceCardAsNewStack(FireAId, "Player0_Field_0");
+
+	const FTCGCardInstance* FireAOnBoard = FindCardInstance(FireAId);
+	if (!FireAOnBoard) return;
+
+	const bool bFireOnFire = PlaceCardOnStack(FireBId, FireAOnBoard->StackId);
+	const bool bWaterOnFire = PlaceCardOnStack(WaterId, FireAOnBoard->StackId);
+
+	PlaceCardAsNewStack(DarkId, "Player1_Field_0");
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Fire on Fire success: %s"), bFireOnFire ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Water on Fire success: %s"), bWaterOnFire ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 0 has board card: %s"), DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 1 has board card: %s"), DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: FireB final attack: %d"), GetFinalAttack(FireBId));
+}

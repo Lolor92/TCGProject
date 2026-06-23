@@ -31,6 +31,7 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		if (TCGGameState)
 		{
 			TCGGameState->StartMatch();
+			TCGGameState->CreateDebugTestCards();
 		}
 	}
 }

@@ -102,4 +102,7 @@ public:
 	
 	// Base attack + 1 for each card underneath it.
 	int32 GetFinalAttack(const FGuid& CardInstanceId) const;
+	
+	// Temporary debug setup so we can test match cards and stack rules.
+	void CreateDebugTestCards();
 };
