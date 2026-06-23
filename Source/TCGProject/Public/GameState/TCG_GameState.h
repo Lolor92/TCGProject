@@ -132,6 +132,12 @@ public:
 	
 	bool DrawCard(int32 PlayerIndex);
 	
+	// Draws multiple cards for a player.
+	int32 DrawCards(int32 PlayerIndex, int32 Count);
+	
+	// Temporary setup until real deck data exists.
+	void SetupDebugMatch();
+	
 	// Temporary debug setup so we can test match cards and stack rules.
 	void CreateDebugTestCards();
 };

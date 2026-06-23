@@ -356,6 +356,52 @@ bool ATCG_GameState::DrawCard(int32 PlayerIndex)
 	return true;
 }
 
+int32 ATCG_GameState::DrawCards(int32 PlayerIndex, int32 Count)
+{
+	int32 DrawnCount = 0;
+
+	for (int32 i = 0; i < Count; ++i)
+	{
+		if (!DrawCard(PlayerIndex)) break;
+		DrawnCount++;
+	}
+
+	return DrawnCount;
+}
+
+void ATCG_GameState::SetupDebugMatch()
+{
+	MatchCards.Empty();
+
+	AddCardInstance("Debug_Fire_Deck_A", ETCGCardElement::Fire, 1, 0, ETCGCardLocation::Deck);
+	AddCardInstance("Debug_Water_Deck_A", ETCGCardElement::Water, 2, 0, ETCGCardLocation::Deck);
+	AddCardInstance("Debug_Fire_Deck_B", ETCGCardElement::Fire, 3, 0, ETCGCardLocation::Deck);
+
+	AddCardInstance("Debug_Dark_Deck_A", ETCGCardElement::Dark, 5, 1, ETCGCardLocation::Deck);
+	AddCardInstance("Debug_Dark_Deck_B", ETCGCardElement::Dark, 2, 1, ETCGCardLocation::Deck);
+	AddCardInstance("Debug_Light_Deck_A", ETCGCardElement::Light, 4, 1, ETCGCardLocation::Deck);
+
+	const int32 Player0Drawn = DrawCards(0, 2);
+	const int32 Player1Drawn = DrawCards(1, 2);
+
+	TArray<FTCGCardInstance> Player0Hand;
+	GetCardsInHand(0, Player0Hand);
+
+	TArray<FTCGCardInstance> Player1Hand;
+	GetCardsInHand(1, Player1Hand);
+
+	TArray<FTCGCardInstance> Player0Deck;
+	GetCardsInDeck(0, Player0Deck);
+
+	TArray<FTCGCardInstance> Player1Deck;
+	GetCardsInDeck(1, Player1Deck);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P0 drawn: %d"), Player0Drawn);
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P1 drawn: %d"), Player1Drawn);
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P0 hand: %d deck: %d"), Player0Hand.Num(), Player0Deck.Num());
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P1 hand: %d deck: %d"), Player1Hand.Num(), Player1Deck.Num());
+}
+
 void ATCG_GameState::CreateDebugTestCards()
 {
 	MatchCards.Empty();
