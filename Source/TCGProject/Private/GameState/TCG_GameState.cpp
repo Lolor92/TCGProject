@@ -435,28 +435,24 @@ bool ATCG_GameState::ResolveBattlePhase()
 
 ETCGMatchResult ATCG_GameState::CheckLoseConditionAfterBattle() const
 {
-	const bool bPlayer0HasBoardCard = DoesPlayerHaveAnyCardOnBoard(0);
-	const bool bPlayer1HasBoardCard = DoesPlayerHaveAnyCardOnBoard(1);
+	const bool bPlayer0HasCardOnBoard = DoesPlayerHaveAnyCardOnBoard(0);
+	const bool bPlayer1HasCardOnBoard = DoesPlayerHaveAnyCardOnBoard(1);
 
-	if (!bPlayer0HasBoardCard && !bPlayer1HasBoardCard)
+	if (!bPlayer0HasCardOnBoard && !bPlayer1HasCardOnBoard)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: draw, both players have no board cards"));
 		return ETCGMatchResult::Draw;
 	}
 
-	if (!bPlayer0HasBoardCard)
+	if (!bPlayer0HasCardOnBoard)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: Player 0 loses"));
 		return ETCGMatchResult::Player1Wins;
 	}
 
-	if (!bPlayer1HasBoardCard)
+	if (!bPlayer1HasCardOnBoard)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: Player 1 loses"));
 		return ETCGMatchResult::Player0Wins;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: no player loses"));
 	return ETCGMatchResult::None;
 }
 
