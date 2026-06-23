@@ -360,10 +360,12 @@ int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId
 		}
 	}
 
-	if (TopCard->CardDefinitionId == "Debug_Fire_Deck_A" && OutChain.Num() >= 2)
+	// Debug fizzle test only.
+	// Re-enable when testing source-presence fizzles.
+	/*if (TopCard->CardDefinitionId == "Debug_Fire_Deck_A" && OutChain.Num() >= 2)
 	{
 		AddCardTriggerToChain(OutChain, TopCard->CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnBecomingTopCard, "Debug_RemoveBottomOverlay");
-	}
+	}*/
 
 	return OutChain.Num();
 }
