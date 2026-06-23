@@ -122,6 +122,8 @@ public:
 	
 	bool ResolveBattleBetweenZones(FName Player0ZoneId, FName Player1ZoneId);
 	
+	void CheckLoseConditionAfterBattle();
+	
 	// Gets all cards owned by a player in a specific location.
 	void GetCardsInLocation(int32 PlayerIndex, ETCGCardLocation Location, TArray<FTCGCardInstance>& OutCards) const;
 
