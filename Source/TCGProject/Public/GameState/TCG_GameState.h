@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Cards/TCG_CardTypes.h"
 #include "GameFramework/GameState.h"
+#include "Cards/TCG_CardDefinition.h"
 #include "TCG_GameState.generated.h"
 
 UENUM(BlueprintType)
@@ -105,6 +106,9 @@ public:
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Cards")
 	TArray<FTCGCardInstance> MatchCards;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Debug")
+	TArray<TObjectPtr<UTCG_CardDefinition>> DebugCardDefinitions;
+	
 	static constexpr int32 FieldZoneCount = 3;
 
 	static FName GetFieldZoneId(int32 PlayerIndex, int32 FieldIndex);
@@ -122,6 +126,9 @@ public:
 	// For now this is useful for test cards later.
 	FTCGCardInstance& AddCardInstance(FName CardDefinitionId, ETCGCardElement Element, int32 BaseAttack,
 		int32 OwnerPlayerIndex, ETCGCardLocation StartingLocation);
+	
+	FTCGCardInstance* AddCardInstanceFromDefinition(const UTCG_CardDefinition* CardDefinition, int32 OwnerPlayerIndex,
+		ETCGCardLocation StartingLocation);
 
 	// Finds a card by its unique instance id.
 	FTCGCardInstance* FindCardInstance(const FGuid& CardInstanceId);
@@ -150,6 +157,7 @@ public:
 	
 	bool ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectTrigger Trigger);
 	bool DoesCardEffectMatchTrigger(const FTCGCardEffectRef& EffectRef, ETCGEffectTrigger Trigger) const;
+	const UTCG_CardDefinition* FindDebugCardDefinitionById(FName CardDefinitionId) const;
 	int32 GetPrintedEffectRefsForCard(const FTCGCardInstance& Card, TArray<FTCGCardEffectRef>& OutEffectRefs) const;
 	int32 GetPrintedEffectsForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, TArray<FName>& OutEffectIds) const;
 	bool AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId,

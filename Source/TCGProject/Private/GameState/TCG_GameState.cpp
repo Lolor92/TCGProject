@@ -101,6 +101,14 @@ FTCGCardInstance& ATCG_GameState::AddCardInstance(FName CardDefinitionId, ETCGCa
 	return MatchCards.Add_GetRef(NewCard);
 }
 
+FTCGCardInstance* ATCG_GameState::AddCardInstanceFromDefinition(const UTCG_CardDefinition* CardDefinition, int32 OwnerPlayerIndex, ETCGCardLocation StartingLocation)
+{
+	if (!CardDefinition) return nullptr;
+
+	return &AddCardInstance(CardDefinition->CardDefinitionId, CardDefinition->Element, CardDefinition->BaseAttack,
+		OwnerPlayerIndex, StartingLocation);
+}
+
 FTCGCardInstance* ATCG_GameState::FindCardInstance(const FGuid& CardInstanceId)
 {
 	for (FTCGCardInstance& Card : MatchCards)
@@ -245,9 +253,28 @@ bool ATCG_GameState::DoesCardEffectMatchTrigger(const FTCGCardEffectRef& EffectR
 	return Trigger != ETCGEffectTrigger::None && EffectRef.Trigger == Trigger && !EffectRef.EffectId.IsNone();
 }
 
+const UTCG_CardDefinition* ATCG_GameState::FindDebugCardDefinitionById(FName CardDefinitionId) const
+{
+	if (CardDefinitionId.IsNone()) return nullptr;
+
+	for (const TObjectPtr<UTCG_CardDefinition>& CardDefinition : DebugCardDefinitions)
+	{
+		if (!CardDefinition) continue;
+		if (CardDefinition->CardDefinitionId == CardDefinitionId) return CardDefinition.Get();
+	}
+
+	return nullptr;
+}
+
 int32 ATCG_GameState::GetPrintedEffectRefsForCard(const FTCGCardInstance& Card, TArray<FTCGCardEffectRef>& OutEffectRefs) const
 {
 	OutEffectRefs.Reset();
+
+	if (const UTCG_CardDefinition* CardDefinition = FindDebugCardDefinitionById(Card.CardDefinitionId))
+	{
+		OutEffectRefs = CardDefinition->Effects;
+		return OutEffectRefs.Num();
+	}
 
 	// Temporary fallback until card definition assets/registry exist.
 	if (Card.CardDefinitionId == DebugCard_FireDeckB)
