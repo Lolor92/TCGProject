@@ -5,6 +5,9 @@ namespace
 {
 	constexpr bool bEnableDebugOverlayRemovalFizzleTest = false;
 
+	const FName DebugCard_FireDeckA = "Debug_Fire_Deck_A";
+	const FName DebugCard_FireDeckB = "Debug_Fire_Deck_B";
+
 	const FName DebugEffect_Draw1 = "Debug_Draw1";
 	const FName DebugEffect_GainAttackForCardsUnderneath = "Debug_GainAttackForCardsUnderneath";
 	const FName DebugEffect_RemoveBottomOverlay = "Debug_RemoveBottomOverlay";
@@ -369,19 +372,19 @@ int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId
 
 		ExecuteCardTrigger(StackCard.CardInstanceId, ETCGEffectTrigger::OnPlay);
 
-		if (StackCard.CardDefinitionId == "Debug_Fire_Deck_B")
+		if (StackCard.CardDefinitionId == DebugCard_FireDeckB)
 		{
 			AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId,
 				ETCGEffectTrigger::OnPlay, DebugEffect_Draw1);
 		}
-		else if (StackCard.CardDefinitionId == "Debug_Fire_Deck_A")
+		else if (StackCard.CardDefinitionId == DebugCard_FireDeckA)
 		{
 			AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId,
 				ETCGEffectTrigger::OnPlay, DebugEffect_GainAttackForCardsUnderneath);
 		}
 	}
 
-	if (bEnableDebugOverlayRemovalFizzleTest && TopCard->CardDefinitionId == "Debug_Fire_Deck_A" && OutChain.Num() >= 2)
+	if (bEnableDebugOverlayRemovalFizzleTest && TopCard->CardDefinitionId == DebugCard_FireDeckA && OutChain.Num() >= 2)
 	{
 		AddCardTriggerToChain(OutChain, TopCard->CardInstanceId, TopCardInstanceId,
 			ETCGEffectTrigger::OnBecomingTopCard, DebugEffect_RemoveBottomOverlay);
