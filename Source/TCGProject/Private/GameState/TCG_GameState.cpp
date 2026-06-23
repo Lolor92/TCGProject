@@ -289,6 +289,76 @@ const UTCG_CardDefinition* ATCG_GameState::FindDebugCardDefinitionById(FName Car
 	return nullptr;
 }
 
+bool ATCG_GameState::HasDebugCardDefinition(FName CardDefinitionId) const
+{
+	return FindDebugCardDefinitionById(CardDefinitionId) != nullptr;
+}
+
+bool ATCG_GameState::ValidateDebugCardDefinitions() const
+{
+	bool bValid = true;
+
+	TSet<FName> SeenIds;
+	for (const TObjectPtr<UTCG_CardDefinition>& CardDefinition : DebugCardDefinitions)
+	{
+		if (!CardDefinition)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: DebugCardDefinitions contains null asset"));
+			bValid = false;
+			continue;
+		}
+
+		if (CardDefinition->CardDefinitionId.IsNone())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Debug card definition asset has None CardDefinitionId"));
+			bValid = false;
+			continue;
+		}
+
+		if (SeenIds.Contains(CardDefinition->CardDefinitionId))
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Debug: Duplicate debug card definition asset id %s"),
+				*CardDefinition->CardDefinitionId.ToString());
+
+			bValid = false;
+			continue;
+		}
+
+		SeenIds.Add(CardDefinition->CardDefinitionId);
+	}
+
+	const FName RequiredDebugCards[] =
+	{
+		"Debug_Earth_Deck_A",
+		"Debug_Earth_Deck_B",
+		DebugCard_FireDeckA,
+		DebugCard_FireDeckB,
+		"Debug_Dark_Deck_A",
+		"Debug_Dark_Deck_B",
+		"Debug_Light_Deck_A"
+	};
+
+	for (const FName& RequiredDebugCard : RequiredDebugCards)
+	{
+		if (!HasDebugCardDefinition(RequiredDebugCard))
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Debug: Missing debug card definition asset %s"),
+				*RequiredDebugCard.ToString());
+
+			bValid = false;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("TCG Debug: Debug card definition validation: %s assigned: %d"),
+		bValid ? TEXT("valid") : TEXT("invalid"),
+		DebugCardDefinitions.Num());
+
+	return bValid;
+}
+
 int32 ATCG_GameState::GetPrintedEffectRefsForCard(const FTCGCardInstance& Card, TArray<FTCGCardEffectRef>& OutEffectRefs) const
 {
 	OutEffectRefs.Reset();
@@ -948,6 +1018,8 @@ bool ATCG_GameState::PlayFirstCardFromHandToZone(int32 PlayerIndex, FName ZoneId
 void ATCG_GameState::SetupDebugMatch()
 {
 	MatchCards.Empty();
+	
+	ValidateDebugCardDefinitions();
 
 	AddDebugCardInstance("Debug_Earth_Deck_A", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
 	AddDebugCardInstance("Debug_Earth_Deck_B", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
