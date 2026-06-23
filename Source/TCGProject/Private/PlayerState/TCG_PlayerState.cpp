@@ -11,8 +11,7 @@ void ATCG_PlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ATCG_PlayerState, PlayerIndex);
-	DOREPLIFETIME(ATCG_PlayerState, Life);
-	DOREPLIFETIME(ATCG_PlayerState, MaxLife);
+	DOREPLIFETIME(ATCG_PlayerState, bHasLost);
 }
 
 void ATCG_PlayerState::SetPlayerIndex(int32 NewPlayerIndex)
@@ -20,8 +19,7 @@ void ATCG_PlayerState::SetPlayerIndex(int32 NewPlayerIndex)
 	PlayerIndex = NewPlayerIndex;
 }
 
-void ATCG_PlayerState::SetLife(int32 NewLife)
+void ATCG_PlayerState::SetHasLost(bool bNewHasLost)
 {
-	// Keep life inside a valid range.
-	Life = FMath::Clamp(NewLife, 0, MaxLife);
+	bHasLost = bNewHasLost;
 }

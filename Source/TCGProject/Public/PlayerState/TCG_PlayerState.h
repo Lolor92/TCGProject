@@ -6,7 +6,10 @@
 
 /**
  * PlayerState exists on the server and all clients.
- * We use it for player-specific match data: life, player index, resources later.
+ * 
+ * This should store player-owned match info.
+ * Important: this game has no life points.
+ * A player loses if they have no cards on their board after the battle phase.
  */
 UCLASS()
 class TCGPROJECT_API ATCG_PlayerState : public APlayerState
@@ -24,18 +27,14 @@ public:
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Player")
 	int32 PlayerIndex = INDEX_NONE;
 
-	// Current life/health of this player.
+	// True once this player has lost the match.
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Player")
-	int32 Life = 30;
-
-	// Max life, useful for UI later.
-	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Player")
-	int32 MaxLife = 30;
+	bool bHasLost = false;
 
 public:
 	// Server should call this when the player joins.
 	void SetPlayerIndex(int32 NewPlayerIndex);
 
-	// Server should call this when life changes.
-	void SetLife(int32 NewLife);
+	// Server will call this later when checking the lose condition.
+	void SetHasLost(bool bNewHasLost);
 };
