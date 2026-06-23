@@ -274,18 +274,28 @@ bool ATCG_GameState::CanResolveEffectChainEntry(const FTCGEffectChainEntry& Chai
 		return false;
 	}
 
-	if (ChainEntry.Trigger == ETCGEffectTrigger::OnPlay)
+	if (ChainEntry.bRequiresSourceOnBoard && SourceCard->Location != ETCGCardLocation::Board)
 	{
-		if (SourceCard->Location != ETCGCardLocation::Board || TargetCard->Location != ETCGCardLocation::Board)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=SourceOrTargetNotOnBoard"),
-				ChainEntry.ChainIndex,
-				*ChainEntry.SourceCardDefinitionId.ToString(),
-				*ChainEntry.EffectId.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=SourceNotOnBoard"),
+			ChainEntry.ChainIndex,
+			*ChainEntry.SourceCardDefinitionId.ToString(),
+			*ChainEntry.EffectId.ToString());
 
-			return false;
-		}
+		return false;
+	}
 
+	if (ChainEntry.bRequiresTargetOnBoard && TargetCard->Location != ETCGCardLocation::Board)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=TargetNotOnBoard"),
+			ChainEntry.ChainIndex,
+			*ChainEntry.SourceCardDefinitionId.ToString(),
+			*ChainEntry.EffectId.ToString());
+
+		return false;
+	}
+
+	if (ChainEntry.bRequiresSourceInTargetStack)
+	{
 		if (!SourceCard->StackId.IsValid() || SourceCard->StackId != TargetCard->StackId)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=SourceNotInTargetStack"),
@@ -295,8 +305,11 @@ bool ATCG_GameState::CanResolveEffectChainEntry(const FTCGEffectChainEntry& Chai
 
 			return false;
 		}
+	}
 
-		if (SourceCard->CardInstanceId != TargetCard->CardInstanceId && SourceCard->StackIndex >= TargetCard->StackIndex)
+	if (ChainEntry.bRequiresSourceUnderTarget)
+	{
+		if (SourceCard->CardInstanceId == TargetCard->CardInstanceId || SourceCard->StackIndex >= TargetCard->StackIndex)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=SourceNotUnderTarget"),
 				ChainEntry.ChainIndex,
@@ -330,7 +343,16 @@ int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId
 		// Later this should read UTCG_CardDefinition::Effects.
 		if (StackCard.CardDefinitionId == "Debug_Fire_Deck_B")
 		{
-			AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnPlay, "Debug_Draw1");
+			if (AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnPlay, "Debug_Draw1"))
+			{
+				FTCGEffectChainEntry& Entry = OutChain.Last();
+
+				if (StackCard.CardInstanceId != TopCardInstanceId)
+				{
+					Entry.bRequiresSourceInTargetStack = true;
+					Entry.bRequiresSourceUnderTarget = true;
+				}
+			}
 		}
 		else if (StackCard.CardDefinitionId == "Debug_Fire_Deck_A")
 		{

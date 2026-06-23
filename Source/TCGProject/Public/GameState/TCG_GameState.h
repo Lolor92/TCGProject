@@ -51,6 +51,18 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
 	int32 ControllerPlayerIndex = INDEX_NONE;
+	
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	bool bRequiresSourceOnBoard = true;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	bool bRequiresTargetOnBoard = true;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	bool bRequiresSourceInTargetStack = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	bool bRequiresSourceUnderTarget = false;
 };
 
 /**
