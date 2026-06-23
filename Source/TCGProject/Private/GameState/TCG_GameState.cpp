@@ -192,29 +192,30 @@ bool ATCG_GameState::PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId)
 	FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
 	if (!Card || Card->Location != ETCGCardLocation::Hand) return false;
 
+	bool bPlayed = false;
 	FGuid ExistingStackId;
 	if (!FindStackIdInZone(ZoneId, ExistingStackId))
 	{
-		const bool bPlaced = PlaceCardAsNewStack(CardInstanceId, ZoneId);
-		if (bPlaced)
-		{
-			ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnPlay);
-			ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnBecomingTopCard);
-		}
-
-		return bPlaced;
+		bPlayed = PlaceCardAsNewStack(CardInstanceId, ZoneId);
 	}
-
-	const bool bStacked = PlaceCardOnStack(CardInstanceId, ExistingStackId);
-	if (bStacked)
+	else
 	{
-		ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnPlay);
-		ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnStackAdded);
-		ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnBecomingTopCard);
-		ExecuteInheritedStackTriggers(CardInstanceId, ETCGEffectTrigger::OnPlay);
+		bPlayed = PlaceCardOnStack(CardInstanceId, ExistingStackId);
+		if (bPlayed)
+		{
+			ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnStackAdded);
+		}
 	}
 
-	return bStacked;
+	if (!bPlayed) return false;
+
+	ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnBecomingTopCard);
+
+	TArray<FTCGEffectChainEntry> Chain;
+	BuildStackOnPlayEffectChain(CardInstanceId, Chain);
+	ResolveEffectChain(Chain);
+
+	return true;
 }
 
 bool ATCG_GameState::ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectTrigger Trigger)
@@ -227,33 +228,97 @@ bool ATCG_GameState::ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectT
 	return true;
 }
 
-bool ATCG_GameState::ExecuteInheritedStackTriggers(const FGuid& TopCardInstanceId, ETCGEffectTrigger Trigger)
+bool ATCG_GameState::AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId, ETCGEffectTrigger Trigger, FName EffectId)
 {
+	const FTCGCardInstance* SourceCard = FindCardInstance(SourceCardInstanceId);
+	if (!SourceCard || Trigger == ETCGEffectTrigger::None || EffectId.IsNone()) return false;
+
+	FTCGEffectChainEntry NewEntry;
+	NewEntry.ChainIndex = Chain.Num() + 1;
+	NewEntry.SourceCardInstanceId = SourceCardInstanceId;
+	NewEntry.TargetCardInstanceId = TargetCardInstanceId;
+	NewEntry.SourceCardDefinitionId = SourceCard->CardDefinitionId;
+	NewEntry.Trigger = Trigger;
+	NewEntry.EffectId = EffectId;
+	NewEntry.ControllerPlayerIndex = SourceCard->OwnerPlayerIndex;
+
+	Chain.Add(NewEntry);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain add %d Source=%s Trigger=%s Effect=%s"), NewEntry.ChainIndex, *NewEntry.SourceCardDefinitionId.ToString(), GetTCGEffectTriggerDebugName(NewEntry.Trigger), *NewEntry.EffectId.ToString());
+
+	return true;
+}
+
+int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId, TArray<FTCGEffectChainEntry>& OutChain)
+{
+	OutChain.Reset();
+
 	const FTCGCardInstance* TopCard = FindCardInstance(TopCardInstanceId);
-	if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid()) return false;
+	if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid()) return 0;
 
 	TArray<FTCGCardInstance> StackCards;
 	GetCardsInStack(TopCard->StackId, StackCards);
 
-	bool bExecutedAny = false;
 	for (const FTCGCardInstance& StackCard : StackCards)
 	{
-		if (StackCard.CardInstanceId == TopCardInstanceId) continue;
-		if (StackCard.StackIndex >= TopCard->StackIndex) continue;
+		if (StackCard.StackIndex > TopCard->StackIndex) continue;
 
-		ExecuteCardTrigger(StackCard.CardInstanceId, Trigger);
-		bExecutedAny = true;
+		ExecuteCardTrigger(StackCard.CardInstanceId, ETCGEffectTrigger::OnPlay);
 
-		// Temporary hardcoded debug effect only.
+		// Temporary hardcoded debug effects only.
 		// Later this should read UTCG_CardDefinition::Effects.
-		if (Trigger == ETCGEffectTrigger::OnPlay && StackCard.CardDefinitionId == "Debug_Fire_Deck_B")
+		if (StackCard.CardDefinitionId == "Debug_Fire_Deck_B")
 		{
-			const bool bDrewCard = DrawCard(TopCard->OwnerPlayerIndex);
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Inherited effect Draw 1 from %s success: %s"), *StackCard.CardDefinitionId.ToString(), bDrewCard ? TEXT("true") : TEXT("false"));
+			AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnPlay, "Debug_Draw1");
+		}
+		else if (StackCard.CardDefinitionId == "Debug_Fire_Deck_A")
+		{
+			AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnPlay, "Debug_GainAttackForCardsUnderneath");
 		}
 	}
 
-	return bExecutedAny;
+	return OutChain.Num();
+}
+
+bool ATCG_GameState::ResolveEffectChain(const TArray<FTCGEffectChainEntry>& Chain)
+{
+	if (Chain.Num() <= 0) return false;
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain resolving count: %d"), Chain.Num());
+
+	bool bResolvedAny = false;
+	for (int32 ChainIndex = Chain.Num() - 1; ChainIndex >= 0; --ChainIndex)
+	{
+		const FTCGEffectChainEntry& Entry = Chain[ChainIndex];
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain resolve %d Source=%s Effect=%s"), Entry.ChainIndex, *Entry.SourceCardDefinitionId.ToString(), *Entry.EffectId.ToString());
+
+		bResolvedAny |= ResolveDebugEffectChainEntry(Entry);
+	}
+
+	return bResolvedAny;
+}
+
+bool ATCG_GameState::ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& ChainEntry)
+{
+	const FTCGCardInstance* SourceCard = FindCardInstance(ChainEntry.SourceCardInstanceId);
+	const FTCGCardInstance* TargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
+	if (!SourceCard || !TargetCard) return false;
+
+	if (ChainEntry.EffectId == "Debug_Draw1")
+	{
+		const bool bDrewCard = DrawCard(ChainEntry.ControllerPlayerIndex);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect Draw 1 from %s success: %s"), *SourceCard->CardDefinitionId.ToString(), bDrewCard ? TEXT("true") : TEXT("false"));
+		return bDrewCard;
+	}
+
+	if (ChainEntry.EffectId == "Debug_GainAttackForCardsUnderneath")
+	{
+		const int32 CardsUnderneath = GetCardsUnderneathCount(ChainEntry.TargetCardInstanceId);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect %s would gain ATK from cards underneath: %d"), *TargetCard->CardDefinitionId.ToString(), CardsUnderneath);
+		return true;
+	}
+
+	return false;
 }
 
 bool ATCG_GameState::MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLocation NewLocation)
@@ -627,6 +692,7 @@ void ATCG_GameState::SetupDebugMatch()
 	MatchCards.Empty();
 
 	AddCardInstance("Debug_Earth_Deck_A", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
+	AddCardInstance("Debug_Earth_Deck_B", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
 	AddCardInstance("Debug_Fire_Deck_A", ETCGCardElement::Fire, 2, 0, ETCGCardLocation::Deck);
 	AddCardInstance("Debug_Fire_Deck_B", ETCGCardElement::Fire, 3, 0, ETCGCardLocation::Deck);
 

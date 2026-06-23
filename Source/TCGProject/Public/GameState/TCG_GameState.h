@@ -25,6 +25,34 @@ enum class ETCGMatchResult : uint8
 	Draw UMETA(DisplayName = "Draw")
 };
 
+USTRUCT(BlueprintType)
+struct FTCGEffectChainEntry
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	int32 ChainIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	FGuid SourceCardInstanceId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	FGuid TargetCardInstanceId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	FName SourceCardDefinitionId = NAME_None;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	ETCGEffectTrigger Trigger = ETCGEffectTrigger::None;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	FName EffectId = NAME_None;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	int32 ControllerPlayerIndex = INDEX_NONE;
+};
+
 /**
  * GameState exists on the server and all clients.
  *
@@ -109,7 +137,10 @@ public:
 	bool PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId);
 	
 	bool ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectTrigger Trigger);
-	bool ExecuteInheritedStackTriggers(const FGuid& TopCardInstanceId, ETCGEffectTrigger Trigger);
+	bool AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId, ETCGEffectTrigger Trigger, FName EffectId);
+	int32 BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId, TArray<FTCGEffectChainEntry>& OutChain);
+	bool ResolveEffectChain(const TArray<FTCGEffectChainEntry>& Chain);
+	bool ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);
 
 	// Moves a card to a new location.
 	// Later this will trigger effects like OnSentToGraveyard or OnBanished.

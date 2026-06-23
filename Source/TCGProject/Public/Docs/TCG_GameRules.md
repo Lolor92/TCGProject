@@ -144,3 +144,70 @@ Cards may have effects triggered by events such as:
 These are design notes for now.
 
 Full effect logic will be implemented later.
+
+## Effect Chains
+
+Effects do not always resolve immediately.
+
+When a gameplay event happens, such as playing a Unit, the game collects all valid effects that trigger from that event and builds an effect chain.
+
+The chain is built in trigger order, then resolves backward from the newest chain entry to the oldest chain entry.
+
+### Stack Chain Order
+
+When a Unit is played on top of an existing stack, valid On Play effects from the stack are added to the chain from bottom card to top card.
+
+Example:
+
+* Bottom card has On Play: Draw 1 card.
+* Middle card has On Play: Add 1 card from Graveyard to hand.
+* Top card has On Play: Gain Attack equal to the number of cards underneath it.
+
+When the top card is played, the chain is built like this:
+
+* Chain 1: Bottom card Draw 1.
+* Chain 2: Middle card add 1 card from Graveyard to hand.
+* Chain 3: Top card gain Attack.
+
+The chain then resolves backward:
+
+* Chain 3 resolves first.
+* Chain 2 resolves second.
+* Chain 1 resolves last.
+
+### Opponent Responses
+
+Opponent effects can also be added to the chain if their conditions are met.
+
+Example:
+
+* Turn player plays a Unit onto a stack.
+* The stack creates Chain 1, Chain 2, and Chain 3.
+* Opponent has an effect: When your opponent plays a Unit, reduce that Unit's Attack by 2.
+* Opponent adds that effect as Chain 4.
+
+If no more effects are added, the chain resolves backward:
+
+* Chain 4 resolves first.
+* Chain 3 resolves second.
+* Chain 2 resolves third.
+* Chain 1 resolves last.
+
+### Priority
+
+The turn player has priority when adding effects to the chain.
+
+There is no fixed chain limit. The chain can keep growing as long as valid effects meet their trigger and condition requirements.
+
+### Replay Note
+
+Effect chains should be represented as recorded match actions later.
+
+A replay system must be able to recreate:
+
+* which effects were added to the chain
+* the order they were added
+* the order they resolved
+* the result of each resolved effect
+
+For this reason, effect collection, chain building, and chain resolution should stay centralized instead of being hidden inside unrelated helper functions.
