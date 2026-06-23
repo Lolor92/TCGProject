@@ -369,6 +369,24 @@ int32 ATCG_GameState::DrawCards(int32 PlayerIndex, int32 Count)
 	return DrawnCount;
 }
 
+bool ATCG_GameState::PlayFirstCardFromHandToZone(int32 PlayerIndex, FName ZoneId)
+{
+	TArray<FTCGCardInstance> HandCards;
+	GetCardsInHand(PlayerIndex, HandCards);
+
+	if (HandCards.Num() <= 0)
+	{
+		return false;
+	}
+
+	HandCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
+	{
+		return A.LocationIndex < B.LocationIndex;
+	});
+
+	return PlayCardToZone(HandCards[0].CardInstanceId, ZoneId);
+}
+
 void ATCG_GameState::SetupDebugMatch()
 {
 	MatchCards.Empty();
@@ -400,6 +418,19 @@ void ATCG_GameState::SetupDebugMatch()
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P1 drawn: %d"), Player1Drawn);
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P0 hand: %d deck: %d"), Player0Hand.Num(), Player0Deck.Num());
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P1 hand: %d deck: %d"), Player1Hand.Num(), Player1Deck.Num());
+	
+	const bool bPlayer0Played = PlayFirstCardFromHandToZone(0, "Player0_Field_0");
+	const bool bPlayer1Played = PlayFirstCardFromHandToZone(1, "Player1_Field_0");
+
+	TArray<FTCGCardInstance> Player0HandAfterPlay;
+	TArray<FTCGCardInstance> Player1HandAfterPlay;
+	GetCardsInHand(0, Player0HandAfterPlay);
+	GetCardsInHand(1, Player1HandAfterPlay);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: P0 play first hand card to Player0_Field_0: %s"), bPlayer0Played ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: P1 play first hand card to Player1_Field_0: %s"), bPlayer1Played ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: P0 hand after play: %d board has card: %s"), Player0HandAfterPlay.Num(), DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: P1 hand after play: %d board has card: %s"), Player1HandAfterPlay.Num(), DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
 }
 
 void ATCG_GameState::CreateDebugTestCards()

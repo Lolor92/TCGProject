@@ -135,6 +135,8 @@ public:
 	// Draws multiple cards for a player.
 	int32 DrawCards(int32 PlayerIndex, int32 Count);
 	
+	bool PlayFirstCardFromHandToZone(int32 PlayerIndex, FName ZoneId);
+	
 	// Temporary setup until real deck data exists.
 	void SetupDebugMatch();
 	
