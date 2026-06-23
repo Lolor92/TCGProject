@@ -212,6 +212,71 @@ int32 ATCG_GameState::GetFinalAttack(const FGuid& CardInstanceId) const
 	return Card->BaseAttack + GetCardsUnderneathCount(CardInstanceId);
 }
 
+bool ATCG_GameState::FindStackIdInZone(FName ZoneId, FGuid& OutStackId) const
+{
+	OutStackId.Invalidate();
+
+	for (const FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.Location != ETCGCardLocation::Board || Card.ZoneId != ZoneId) continue;
+		if (!Card.StackId.IsValid()) continue;
+
+		OutStackId = Card.StackId;
+		return true;
+	}
+
+	return false;
+}
+
+void ATCG_GameState::GetCardsInStack(const FGuid& StackId, TArray<FTCGCardInstance>& OutCards) const
+{
+	OutCards.Reset();
+
+	for (const FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.Location == ETCGCardLocation::Board && Card.StackId == StackId)
+		{
+			OutCards.Add(Card);
+		}
+	}
+
+	OutCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
+	{
+		return A.StackIndex < B.StackIndex;
+	});
+}
+
+void ATCG_GameState::GetCardsInZone(FName ZoneId, TArray<FTCGCardInstance>& OutCards) const
+{
+	OutCards.Reset();
+
+	for (const FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.Location == ETCGCardLocation::Board && Card.ZoneId == ZoneId)
+		{
+			OutCards.Add(Card);
+		}
+	}
+
+	OutCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
+	{
+		return A.StackIndex < B.StackIndex;
+	});
+}
+
+const FTCGCardInstance* ATCG_GameState::FindTopCardInZone(FName ZoneId) const
+{
+	const FTCGCardInstance* TopCard = nullptr;
+
+	for (const FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.Location != ETCGCardLocation::Board || Card.ZoneId != ZoneId) continue;
+		if (!TopCard || Card.StackIndex > TopCard->StackIndex) TopCard = &Card;
+	}
+
+	return TopCard;
+}
+
 void ATCG_GameState::CreateDebugTestCards()
 {
 	MatchCards.Empty();
@@ -241,4 +306,16 @@ void ATCG_GameState::CreateDebugTestCards()
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 0 has board card: %s"), DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 1 has board card: %s"), DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: FireB final attack: %d"), GetFinalAttack(FireBId));
+	
+	FGuid StackInZone;
+	const bool bFoundStack = FindStackIdInZone("Player0_Field_0", StackInZone);
+
+	TArray<FTCGCardInstance> CardsInZone;
+	GetCardsInZone("Player0_Field_0", CardsInZone);
+
+	const FTCGCardInstance* TopCard = FindTopCardInZone("Player0_Field_0");
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Found stack in Player0_Field_0: %s"), bFoundStack ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Cards in Player0_Field_0: %d"), CardsInZone.Num());
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Top card in Player0_Field_0: %s"), TopCard ? *TopCard->CardDefinitionId.ToString() : TEXT("None"));
 }

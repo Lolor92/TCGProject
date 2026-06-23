@@ -103,6 +103,18 @@ public:
 	// Base attack + 1 for each card underneath it.
 	int32 GetFinalAttack(const FGuid& CardInstanceId) const;
 	
+	// Finds the first stack currently placed in a board zone.
+	bool FindStackIdInZone(FName ZoneId, FGuid& OutStackId) const;
+
+	// Gets all cards in a stack, sorted from bottom to top.
+	void GetCardsInStack(const FGuid& StackId, TArray<FTCGCardInstance>& OutCards) const;
+
+	// Gets all cards currently placed in a board zone.
+	void GetCardsInZone(FName ZoneId, TArray<FTCGCardInstance>& OutCards) const;
+
+	// Finds the top card in a board zone.
+	const FTCGCardInstance* FindTopCardInZone(FName ZoneId) const;
+	
 	// Temporary debug setup so we can test match cards and stack rules.
 	void CreateDebugTestCards();
 };
