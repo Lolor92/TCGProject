@@ -137,9 +137,11 @@ public:
 	
 	bool PlayFirstCardFromHandToZone(int32 PlayerIndex, FName ZoneId);
 	
+	// Temporary debug setup so we can test match cards and stack rules.
+	void CreateDebugTestCards();
+	
 	// Temporary setup until real deck data exists.
 	void SetupDebugMatch();
 	
-	// Temporary debug setup so we can test match cards and stack rules.
-	void CreateDebugTestCards();
+	void RunDebugTurnFlow();
 };

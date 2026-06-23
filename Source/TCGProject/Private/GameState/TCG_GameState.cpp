@@ -399,38 +399,60 @@ void ATCG_GameState::SetupDebugMatch()
 	AddCardInstance("Debug_Dark_Deck_B", ETCGCardElement::Dark, 2, 1, ETCGCardLocation::Deck);
 	AddCardInstance("Debug_Light_Deck_A", ETCGCardElement::Light, 4, 1, ETCGCardLocation::Deck);
 
+	TArray<FTCGCardInstance> Player0Deck;
+	TArray<FTCGCardInstance> Player1Deck;
+	GetCardsInDeck(0, Player0Deck);
+	GetCardsInDeck(1, Player1Deck);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P0 deck: %d"), Player0Deck.Num());
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P1 deck: %d"), Player1Deck.Num());
+}
+
+void ATCG_GameState::RunDebugTurnFlow()
+{
+	SetPhase(ETCGMatchPhase::Draw);
+
 	const int32 Player0Drawn = DrawCards(0, 2);
 	const int32 Player1Drawn = DrawCards(1, 2);
 
 	TArray<FTCGCardInstance> Player0Hand;
-	GetCardsInHand(0, Player0Hand);
-
 	TArray<FTCGCardInstance> Player1Hand;
-	GetCardsInHand(1, Player1Hand);
-
 	TArray<FTCGCardInstance> Player0Deck;
-	GetCardsInDeck(0, Player0Deck);
-
 	TArray<FTCGCardInstance> Player1Deck;
+
+	GetCardsInHand(0, Player0Hand);
+	GetCardsInHand(1, Player1Hand);
+	GetCardsInDeck(0, Player0Deck);
 	GetCardsInDeck(1, Player1Deck);
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P0 drawn: %d"), Player0Drawn);
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P1 drawn: %d"), Player1Drawn);
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P0 hand: %d deck: %d"), Player0Hand.Num(), Player0Deck.Num());
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match P1 hand: %d deck: %d"), Player1Hand.Num(), Player1Deck.Num());
-	
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P0 drawn: %d"), Player0Drawn);
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P1 drawn: %d"), Player1Drawn);
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P0 hand: %d deck: %d"), Player0Hand.Num(), Player0Deck.Num());
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P1 hand: %d deck: %d"), Player1Hand.Num(), Player1Deck.Num());
+
+	SetPhase(ETCGMatchPhase::Main);
+
 	const bool bPlayer0Played = PlayFirstCardFromHandToZone(0, "Player0_Field_0");
 	const bool bPlayer1Played = PlayFirstCardFromHandToZone(1, "Player1_Field_0");
 
-	TArray<FTCGCardInstance> Player0HandAfterPlay;
-	TArray<FTCGCardInstance> Player1HandAfterPlay;
-	GetCardsInHand(0, Player0HandAfterPlay);
-	GetCardsInHand(1, Player1HandAfterPlay);
+	Player0Hand.Reset();
+	Player1Hand.Reset();
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: P0 play first hand card to Player0_Field_0: %s"), bPlayer0Played ? TEXT("true") : TEXT("false"));
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: P1 play first hand card to Player1_Field_0: %s"), bPlayer1Played ? TEXT("true") : TEXT("false"));
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: P0 hand after play: %d board has card: %s"), Player0HandAfterPlay.Num(), DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: P1 hand after play: %d board has card: %s"), Player1HandAfterPlay.Num(), DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
+	GetCardsInHand(0, Player0Hand);
+	GetCardsInHand(1, Player1Hand);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 play first hand card to Player0_Field_0: %s"), bPlayer0Played ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P1 play first hand card to Player1_Field_0: %s"), bPlayer1Played ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 hand after play: %d board has card: %s"), Player0Hand.Num(), DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P1 hand after play: %d board has card: %s"), Player1Hand.Num(), DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
+
+	SetPhase(ETCGMatchPhase::Battle);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase started"));
+
+	SetPhase(ETCGMatchPhase::End);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: End phase started"));
 }
 
 void ATCG_GameState::CreateDebugTestCards()
