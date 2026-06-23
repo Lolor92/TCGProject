@@ -415,11 +415,16 @@ bool ATCG_GameState::ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& Ch
 
 	if (ChainEntry.EffectId == "Debug_GainAttackForCardsUnderneath")
 	{
-		const int32 CardsUnderneath = GetCardsUnderneathCount(ChainEntry.TargetCardInstanceId);
+		FTCGCardInstance* MutableTargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
+		if (!MutableTargetCard) return false;
 
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect %s would gain ATK from cards underneath: %d"),
-			*TargetCard->CardDefinitionId.ToString(),
-			CardsUnderneath);
+		const int32 CardsUnderneath = GetCardsUnderneathCount(ChainEntry.TargetCardInstanceId);
+		MutableTargetCard->AttackModifier += CardsUnderneath;
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect %s gained ATK from cards underneath: %d modifier now: %d"),
+			*MutableTargetCard->CardDefinitionId.ToString(),
+			CardsUnderneath,
+			MutableTargetCard->AttackModifier);
 
 		return true;
 	}
@@ -559,7 +564,7 @@ int32 ATCG_GameState::GetFinalAttack(const FGuid& CardInstanceId) const
 	const FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
 	if (!Card) return 0;
 
-	return Card->BaseAttack + GetCardsUnderneathCount(CardInstanceId);
+	return Card->BaseAttack + Card->AttackModifier + GetCardsUnderneathCount(CardInstanceId);
 }
 
 bool ATCG_GameState::FindStackIdInZone(FName ZoneId, FGuid& OutStackId) const

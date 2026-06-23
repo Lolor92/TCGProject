@@ -139,6 +139,11 @@ public:
 	// Runtime snapshot of printed attack.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
 	int32 BaseAttack = 0;
+	
+	// Temporary runtime attack modifier.
+	// Later this should become a proper modifier/effect system.
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
+	int32 AttackModifier = 0;
 
 public:
 	FTCGCardInstance()
