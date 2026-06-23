@@ -120,6 +120,12 @@ public:
 	// Finds the top card in a board zone.
 	const FTCGCardInstance* FindTopCardInZone(FName ZoneId) const;
 	
+	// Gets all cards owned by a player in a specific location.
+	void GetCardsInLocation(int32 PlayerIndex, ETCGCardLocation Location, TArray<FTCGCardInstance>& OutCards) const;
+
+	// Shortcut for cards currently in a player's hand.
+	void GetCardsInHand(int32 PlayerIndex, TArray<FTCGCardInstance>& OutCards) const;
+	
 	// Temporary debug setup so we can test match cards and stack rules.
 	void CreateDebugTestCards();
 };

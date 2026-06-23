@@ -291,6 +291,24 @@ const FTCGCardInstance* ATCG_GameState::FindTopCardInZone(FName ZoneId) const
 	return TopCard;
 }
 
+void ATCG_GameState::GetCardsInLocation(int32 PlayerIndex, ETCGCardLocation Location, TArray<FTCGCardInstance>& OutCards) const
+{
+	OutCards.Reset();
+
+	for (const FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == Location)
+		{
+			OutCards.Add(Card);
+		}
+	}
+}
+
+void ATCG_GameState::GetCardsInHand(int32 PlayerIndex, TArray<FTCGCardInstance>& OutCards) const
+{
+	GetCardsInLocation(PlayerIndex, ETCGCardLocation::Hand, OutCards);
+}
+
 void ATCG_GameState::CreateDebugTestCards()
 {
 	MatchCards.Empty();
@@ -330,4 +348,13 @@ void ATCG_GameState::CreateDebugTestCards()
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Found stack in Player0_Field_0: %s"), bFoundStack ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Cards in Player0_Field_0: %d"), CardsInZone.Num());
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Top card in Player0_Field_0: %s"), TopCard ? *TopCard->CardDefinitionId.ToString() : TEXT("None"));
+	
+	TArray<FTCGCardInstance> Player0Hand;
+	GetCardsInHand(0, Player0Hand);
+
+	TArray<FTCGCardInstance> Player1Hand;
+	GetCardsInHand(1, Player1Hand);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 0 hand cards: %d"), Player0Hand.Num());
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 1 hand cards: %d"), Player1Hand.Num());
 }
