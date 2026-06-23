@@ -149,7 +149,9 @@ public:
 	bool PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId);
 	
 	bool ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectTrigger Trigger);
-	bool AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId, ETCGEffectTrigger Trigger, FName EffectId);
+	bool GetDebugEffectForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, FName& OutEffectId) const;
+	bool AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId,
+		const FGuid& TargetCardInstanceId, ETCGEffectTrigger Trigger, FName EffectId);
 	void ApplyDebugEffectChainEntryRequirements(FTCGEffectChainEntry& ChainEntry) const;
 	bool CanResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEntry) const;
 	int32 BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId, TArray<FTCGEffectChainEntry>& OutChain);
