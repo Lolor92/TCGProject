@@ -109,18 +109,29 @@ FTCGCardInstance* ATCG_GameState::AddCardInstanceFromDefinition(const UTCG_CardD
 		OwnerPlayerIndex, StartingLocation);
 }
 
-FTCGCardInstance& ATCG_GameState::AddDebugCardInstance(FName CardDefinitionId, ETCGCardElement FallbackElement,
-	int32 FallbackBaseAttack, int32 OwnerPlayerIndex, ETCGCardLocation StartingLocation)
+FTCGCardInstance& ATCG_GameState::AddDebugCardInstance(FName CardDefinitionId, ETCGCardElement FallbackElement, int32 FallbackBaseAttack, int32 OwnerPlayerIndex, ETCGCardLocation StartingLocation)
 {
 	if (const UTCG_CardDefinition* CardDefinition = FindDebugCardDefinitionById(CardDefinitionId))
 	{
 		if (FTCGCardInstance* CardInstance = AddCardInstanceFromDefinition(CardDefinition, OwnerPlayerIndex, StartingLocation))
 		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Debug: Added card from definition asset %s ATK %d"),
+				*CardInstance->CardDefinitionId.ToString(),
+				CardInstance->BaseAttack);
+
 			return *CardInstance;
 		}
 	}
 
-	return AddCardInstance(CardDefinitionId, FallbackElement, FallbackBaseAttack, OwnerPlayerIndex, StartingLocation);
+	FTCGCardInstance& CardInstance = AddCardInstance(CardDefinitionId, FallbackElement, FallbackBaseAttack, OwnerPlayerIndex, StartingLocation);
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("TCG Debug: Added card from fallback %s ATK %d"),
+		*CardInstance.CardDefinitionId.ToString(),
+		CardInstance.BaseAttack);
+
+	return CardInstance;
 }
 
 FTCGCardInstance* ATCG_GameState::FindCardInstance(const FGuid& CardInstanceId)
