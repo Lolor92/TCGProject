@@ -32,6 +32,7 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		{
 			TCGGameState->StartMatch();
 			TCGGameState->SetupDebugMatch();
+			TCGGameState->RunDebugTurnFlow();
 		}
 	}
 }
