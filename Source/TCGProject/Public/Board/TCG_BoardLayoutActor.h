@@ -2,18 +2,18 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "Board/TCGCardPlacementTypes.h"
-#include "TCGBoardLayoutActor.generated.h"
+#include "Board/TCG_CardPlacementTypes.h"
+#include "TCG_BoardLayoutActor.generated.h"
 
-class ATCGCardZoneActor;
+class ATCG_CardZoneActor;
 
 UCLASS(Blueprintable)
-class TCGPROJECT_API ATCGBoardLayoutActor : public AActor
+class TCGPROJECT_API ATCG_BoardLayoutActor : public AActor
 {
 	GENERATED_BODY()
 
 public:
-	ATCGBoardLayoutActor();
+	ATCG_BoardLayoutActor();
 
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -40,11 +40,11 @@ public:
 
 	/** Returns the cached zones that belong to this board layout. */
 	UFUNCTION(BlueprintPure, Category = "TCG|Board")
-	TArray<ATCGCardZoneActor*> GetRegisteredZones() const;
+	TArray<ATCG_CardZoneActor*> GetRegisteredZones() const;
 
 	/** Finds the first registered zone whose board/player/type/index/name matches the requested id. */
 	UFUNCTION(BlueprintPure, Category = "TCG|Board")
-	ATCGCardZoneActor* FindZone(const FTCGCardZoneId& ZoneId) const;
+	ATCG_CardZoneActor* FindZone(const FTCGCardZoneId& ZoneId) const;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
@@ -104,13 +104,13 @@ protected:
 
 	/** Cached list of level-placed zones. This is editor-visible for debugging but rebuilt at runtime. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "TCG|Board")
-	TArray<TObjectPtr<ATCGCardZoneActor>> RegisteredZones;
+	TArray<TObjectPtr<ATCG_CardZoneActor>> RegisteredZones;
 
 private:
 	void RemoveLegacyPresetHandPreviewSlots();
-	void RemoveDuplicateZonesForId(const FTCGCardZoneId& ZoneId, ATCGCardZoneActor* ZoneToKeep);
-	ATCGCardZoneActor* FindExactRegisteredZone(const FTCGCardZoneId& ZoneId) const;
-	ATCGCardZoneActor* CreateOrUpdatePresetZone(
+	void RemoveDuplicateZonesForId(const FTCGCardZoneId& ZoneId, ATCG_CardZoneActor* ZoneToKeep);
+	ATCG_CardZoneActor* FindExactRegisteredZone(const FTCGCardZoneId& ZoneId) const;
+	ATCG_CardZoneActor* CreateOrUpdatePresetZone(
 		const FTCGCardZoneId& ZoneId,
 		const FText& Label,
 		const FTransform& AnchorRelativeTransform,

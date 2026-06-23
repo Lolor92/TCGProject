@@ -1,6 +1,6 @@
-#include "Board/TCGBoardLayoutActor.h"
+#include "Board/TCG_BoardLayoutActor.h"
 
-#include "Board/TCGCardZoneActor.h"
+#include "Board/TCG_CardZoneActor.h"
 #include "EngineUtils.h"
 #include "Net/UnrealNetwork.h"
 
@@ -29,7 +29,7 @@ FTCGCardZoneId MakePresetZoneId(
 }
 }
 
-ATCGBoardLayoutActor::ATCGBoardLayoutActor()
+ATCG_BoardLayoutActor::ATCG_BoardLayoutActor()
 {
 	bReplicates = true;
 	bAlwaysRelevant = true;
@@ -39,7 +39,7 @@ ATCGBoardLayoutActor::ATCGBoardLayoutActor()
 	SetRootComponent(SceneRoot);
 }
 
-void ATCGBoardLayoutActor::BeginPlay()
+void ATCG_BoardLayoutActor::BeginPlay()
 {
 	Super::BeginPlay();
 
@@ -49,14 +49,14 @@ void ATCGBoardLayoutActor::BeginPlay()
 	}
 }
 
-void ATCGBoardLayoutActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+void ATCG_BoardLayoutActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(ATCGBoardLayoutActor, BoardId);
+	DOREPLIFETIME(ATCG_BoardLayoutActor, BoardId);
 }
 
-void ATCGBoardLayoutActor::RefreshZoneRegistry()
+void ATCG_BoardLayoutActor::RefreshZoneRegistry()
 {
 	RegisteredZones.Reset();
 
@@ -66,9 +66,9 @@ void ATCGBoardLayoutActor::RefreshZoneRegistry()
 		return;
 	}
 
-	for (TActorIterator<ATCGCardZoneActor> It(World); It; ++It)
+	for (TActorIterator<ATCG_CardZoneActor> It(World); It; ++It)
 	{
-		ATCGCardZoneActor* Zone = *It;
+		ATCG_CardZoneActor* Zone = *It;
 		if (Zone && Zone->GetZoneId().BoardId == BoardId)
 		{
 			RegisteredZones.Add(Zone);
@@ -76,7 +76,7 @@ void ATCGBoardLayoutActor::RefreshZoneRegistry()
 	}
 }
 
-void ATCGBoardLayoutActor::CreateOrUpdateTwoPlayerReferencePreset()
+void ATCG_BoardLayoutActor::CreateOrUpdateTwoPlayerReferencePreset()
 {
 	if (HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject))
 	{
@@ -172,11 +172,11 @@ void ATCGBoardLayoutActor::CreateOrUpdateTwoPlayerReferencePreset()
 	CaptureAllZonePlacements();
 }
 
-void ATCGBoardLayoutActor::AssignThisAsAnchorForZones()
+void ATCG_BoardLayoutActor::AssignThisAsAnchorForZones()
 {
 	RefreshZoneRegistry();
 
-	for (ATCGCardZoneActor* Zone : RegisteredZones)
+	for (ATCG_CardZoneActor* Zone : RegisteredZones)
 	{
 		if (Zone)
 		{
@@ -185,11 +185,11 @@ void ATCGBoardLayoutActor::AssignThisAsAnchorForZones()
 	}
 }
 
-void ATCGBoardLayoutActor::CaptureAllZonePlacements()
+void ATCG_BoardLayoutActor::CaptureAllZonePlacements()
 {
 	AssignThisAsAnchorForZones();
 
-	for (ATCGCardZoneActor* Zone : RegisteredZones)
+	for (ATCG_CardZoneActor* Zone : RegisteredZones)
 	{
 		if (Zone)
 		{
@@ -198,11 +198,11 @@ void ATCGBoardLayoutActor::CaptureAllZonePlacements()
 	}
 }
 
-void ATCGBoardLayoutActor::RestoreAllZonePlacements()
+void ATCG_BoardLayoutActor::RestoreAllZonePlacements()
 {
 	AssignThisAsAnchorForZones();
 
-	for (ATCGCardZoneActor* Zone : RegisteredZones)
+	for (ATCG_CardZoneActor* Zone : RegisteredZones)
 	{
 		if (Zone)
 		{
@@ -211,12 +211,12 @@ void ATCGBoardLayoutActor::RestoreAllZonePlacements()
 	}
 }
 
-TArray<ATCGCardZoneActor*> ATCGBoardLayoutActor::GetRegisteredZones() const
+TArray<ATCG_CardZoneActor*> ATCG_BoardLayoutActor::GetRegisteredZones() const
 {
-	TArray<ATCGCardZoneActor*> Zones;
+	TArray<ATCG_CardZoneActor*> Zones;
 	Zones.Reserve(RegisteredZones.Num());
 
-	for (ATCGCardZoneActor* Zone : RegisteredZones)
+	for (ATCG_CardZoneActor* Zone : RegisteredZones)
 	{
 		if (Zone)
 		{
@@ -227,9 +227,9 @@ TArray<ATCGCardZoneActor*> ATCGBoardLayoutActor::GetRegisteredZones() const
 	return Zones;
 }
 
-ATCGCardZoneActor* ATCGBoardLayoutActor::FindZone(const FTCGCardZoneId& ZoneId) const
+ATCG_CardZoneActor* ATCG_BoardLayoutActor::FindZone(const FTCGCardZoneId& ZoneId) const
 {
-	for (ATCGCardZoneActor* Zone : RegisteredZones)
+	for (ATCG_CardZoneActor* Zone : RegisteredZones)
 	{
 		if (Zone && Zone->GetZoneId().Matches(ZoneId))
 		{
@@ -240,12 +240,12 @@ ATCGCardZoneActor* ATCGBoardLayoutActor::FindZone(const FTCGCardZoneId& ZoneId) 
 	return nullptr;
 }
 
-void ATCGBoardLayoutActor::RemoveLegacyPresetHandPreviewSlots()
+void ATCG_BoardLayoutActor::RemoveLegacyPresetHandPreviewSlots()
 {
-	TArray<TObjectPtr<ATCGCardZoneActor>> ZonesToKeep;
+	TArray<TObjectPtr<ATCG_CardZoneActor>> ZonesToKeep;
 	ZonesToKeep.Reserve(RegisteredZones.Num());
 
-	for (ATCGCardZoneActor* Zone : RegisteredZones)
+	for (ATCG_CardZoneActor* Zone : RegisteredZones)
 	{
 		if (!Zone)
 		{
@@ -273,12 +273,12 @@ void ATCGBoardLayoutActor::RemoveLegacyPresetHandPreviewSlots()
 	RegisteredZones = ZonesToKeep;
 }
 
-void ATCGBoardLayoutActor::RemoveDuplicateZonesForId(const FTCGCardZoneId& ZoneId, ATCGCardZoneActor* ZoneToKeep)
+void ATCG_BoardLayoutActor::RemoveDuplicateZonesForId(const FTCGCardZoneId& ZoneId, ATCG_CardZoneActor* ZoneToKeep)
 {
-	TArray<TObjectPtr<ATCGCardZoneActor>> ZonesToKeep;
+	TArray<TObjectPtr<ATCG_CardZoneActor>> ZonesToKeep;
 	ZonesToKeep.Reserve(RegisteredZones.Num());
 
-	for (ATCGCardZoneActor* Zone : RegisteredZones)
+	for (ATCG_CardZoneActor* Zone : RegisteredZones)
 	{
 		if (!Zone)
 		{
@@ -306,9 +306,9 @@ void ATCGBoardLayoutActor::RemoveDuplicateZonesForId(const FTCGCardZoneId& ZoneI
 	RegisteredZones = ZonesToKeep;
 }
 
-ATCGCardZoneActor* ATCGBoardLayoutActor::FindExactRegisteredZone(const FTCGCardZoneId& ZoneId) const
+ATCG_CardZoneActor* ATCG_BoardLayoutActor::FindExactRegisteredZone(const FTCGCardZoneId& ZoneId) const
 {
-	for (ATCGCardZoneActor* Zone : RegisteredZones)
+	for (ATCG_CardZoneActor* Zone : RegisteredZones)
 	{
 		if (!Zone)
 		{
@@ -329,7 +329,7 @@ ATCGCardZoneActor* ATCGBoardLayoutActor::FindExactRegisteredZone(const FTCGCardZ
 	return nullptr;
 }
 
-ATCGCardZoneActor* ATCGBoardLayoutActor::CreateOrUpdatePresetZone(
+ATCG_CardZoneActor* ATCG_BoardLayoutActor::CreateOrUpdatePresetZone(
 	const FTCGCardZoneId& ZoneId,
 	const FText& Label,
 	const FTransform& AnchorRelativeTransform,
@@ -342,21 +342,21 @@ ATCGCardZoneActor* ATCGBoardLayoutActor::CreateOrUpdatePresetZone(
 		return nullptr;
 	}
 
-	ATCGCardZoneActor* Zone = FindExactRegisteredZone(ZoneId);
+	ATCG_CardZoneActor* Zone = FindExactRegisteredZone(ZoneId);
 	if (!Zone)
 	{
 		const FString ActorName = FString::Printf(TEXT("%s_%s"), *BoardId.ToString(), *ZoneId.ZoneName.ToString());
 
 		FActorSpawnParameters SpawnParameters;
-		SpawnParameters.Name = MakeUniqueObjectName(World, ATCGCardZoneActor::StaticClass(), FName(*ActorName));
+		SpawnParameters.Name = MakeUniqueObjectName(World, ATCG_CardZoneActor::StaticClass(), FName(*ActorName));
 		// Presets are often re-run while iterating in the editor. Requested avoids an editor fatal if an older actor already owns the name.
 		SpawnParameters.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
 		SpawnParameters.Owner = this;
 		SpawnParameters.OverrideLevel = GetLevel();
 		SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-		Zone = World->SpawnActor<ATCGCardZoneActor>(
-			ATCGCardZoneActor::StaticClass(),
+		Zone = World->SpawnActor<ATCG_CardZoneActor>(
+			ATCG_CardZoneActor::StaticClass(),
 			AnchorRelativeTransform * GetActorTransform(),
 			SpawnParameters);
 

@@ -2,21 +2,21 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "Board/TCGCardPlacementTypes.h"
-#include "TCGCardActor.generated.h"
+#include "Board/TCG_CardPlacementTypes.h"
+#include "TCG_CardActor.generated.h"
 
-class ATCGBoardLayoutActor;
-class ATCGCardZoneActor;
+class ATCG_BoardLayoutActor;
+class ATCG_CardZoneActor;
 class UBoxComponent;
 class UTextRenderComponent;
 
 UCLASS(Blueprintable)
-class TCGPROJECT_API ATCGCardActor : public AActor
+class TCGPROJECT_API ATCG_CardActor : public AActor
 {
 	GENERATED_BODY()
 
 public:
-	ATCGCardActor();
+	ATCG_CardActor();
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -35,7 +35,7 @@ public:
 
 	/** Sets the board actor used as this placeholder card's placement anchor. */
 	UFUNCTION(BlueprintCallable, Category = "TCG|Placement")
-	void SetPlacementAnchor(ATCGBoardLayoutActor* NewPlacementAnchor);
+	void SetPlacementAnchor(ATCG_BoardLayoutActor* NewPlacementAnchor);
 
 	/** Saves this card's current actor transform relative to its placement anchor, or as world space if no anchor is set. */
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "TCG|Placement")
@@ -65,11 +65,11 @@ protected:
 
 	/** Optional design-time zone reference used by SnapToAssignedZone while arranging test cards. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TCG|Card")
-	TObjectPtr<ATCGCardZoneActor> AssignedZone;
+	TObjectPtr<ATCG_CardZoneActor> AssignedZone;
 
 	/** Board actor this placeholder card is positioned relative to. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "TCG|Placement")
-	TObjectPtr<ATCGBoardLayoutActor> PlacementAnchor;
+	TObjectPtr<ATCG_BoardLayoutActor> PlacementAnchor;
 
 	/** Saved transform relative to PlacementAnchor. If no anchor is set, this is treated as a saved world transform. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TCG|Placement")

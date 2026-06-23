@@ -1,6 +1,6 @@
-#include "Board/TCGCardZoneActor.h"
+#include "Board/TCG_CardZoneActor.h"
 
-#include "Board/TCGBoardLayoutActor.h"
+#include "Board/TCG_BoardLayoutActor.h"
 #include "Components/BoxComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Net/UnrealNetwork.h"
@@ -29,7 +29,7 @@ FString ZoneTypeToString(const ETCGCardZoneType ZoneType)
 }
 }
 
-ATCGCardZoneActor::ATCGCardZoneActor()
+ATCG_CardZoneActor::ATCG_CardZoneActor()
 {
 	bReplicates = true;
 	bAlwaysRelevant = true;
@@ -54,22 +54,22 @@ ATCGCardZoneActor::ATCGCardZoneActor()
 	ZoneLabel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
-void ATCGCardZoneActor::OnConstruction(const FTransform& Transform)
+void ATCG_CardZoneActor::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	ApplyPlacementAnchorAttachment();
 	UpdateVisuals();
 }
 
-void ATCGCardZoneActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+void ATCG_CardZoneActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(ATCGCardZoneActor, ZoneId);
-	DOREPLIFETIME(ATCGCardZoneActor, CustomLabel);
+	DOREPLIFETIME(ATCG_CardZoneActor, ZoneId);
+	DOREPLIFETIME(ATCG_CardZoneActor, CustomLabel);
 }
 
-FText ATCGCardZoneActor::GetResolvedLabel() const
+FText ATCG_CardZoneActor::GetResolvedLabel() const
 {
 	if (!CustomLabel.IsEmpty())
 	{
@@ -90,7 +90,7 @@ FText ATCGCardZoneActor::GetResolvedLabel() const
 	return FText::FromString(ZoneText);
 }
 
-void ATCGCardZoneActor::ConfigureZone(
+void ATCG_CardZoneActor::ConfigureZone(
 	const FTCGCardZoneId& NewZoneId,
 	const FText& NewCustomLabel,
 	const FVector& NewDebugBoxExtent,
@@ -108,13 +108,13 @@ void ATCGCardZoneActor::ConfigureZone(
 	UpdateVisuals();
 }
 
-void ATCGCardZoneActor::SetPlacementAnchor(ATCGBoardLayoutActor* NewPlacementAnchor)
+void ATCG_CardZoneActor::SetPlacementAnchor(ATCG_BoardLayoutActor* NewPlacementAnchor)
 {
 	PlacementAnchor = NewPlacementAnchor;
 	ApplyPlacementAnchorAttachment();
 }
 
-void ATCGCardZoneActor::CapturePlacementFromCurrentTransform()
+void ATCG_CardZoneActor::CapturePlacementFromCurrentTransform()
 {
 	ApplyPlacementAnchorAttachment();
 
@@ -125,7 +125,7 @@ void ATCGCardZoneActor::CapturePlacementFromCurrentTransform()
 	SavedAnchorRelativeTransform = GetActorTransform().GetRelativeTransform(AnchorTransform);
 }
 
-void ATCGCardZoneActor::RestorePlacementToSavedTransform()
+void ATCG_CardZoneActor::RestorePlacementToSavedTransform()
 {
 	ApplyPlacementAnchorAttachment();
 
@@ -142,7 +142,7 @@ void ATCGCardZoneActor::RestorePlacementToSavedTransform()
 	SetActorTransform(SavedAnchorRelativeTransform * AnchorTransform);
 }
 
-void ATCGCardZoneActor::ApplyPlacementAnchorAttachment()
+void ATCG_CardZoneActor::ApplyPlacementAnchorAttachment()
 {
 	if (PlacementAnchor)
 	{
@@ -160,7 +160,7 @@ void ATCGCardZoneActor::ApplyPlacementAnchorAttachment()
 	}
 }
 
-void ATCGCardZoneActor::UpdateVisuals()
+void ATCG_CardZoneActor::UpdateVisuals()
 {
 	DebugBounds->SetBoxExtent(DebugBoxExtent);
 	DebugBounds->SetRelativeRotation(DebugVisualRotation);

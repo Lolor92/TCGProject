@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "TCGCardPlacementTypes.generated.h"
+#include "TCG_CardPlacementTypes.generated.h"
 
 UENUM(BlueprintType)
 enum class ETCGCardZoneType : uint8

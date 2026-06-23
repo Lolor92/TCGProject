@@ -2,20 +2,20 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "Board/TCGCardPlacementTypes.h"
-#include "TCGCardZoneActor.generated.h"
+#include "Board/TCG_CardPlacementTypes.h"
+#include "TCG_CardZoneActor.generated.h"
 
-class ATCGBoardLayoutActor;
+class ATCG_BoardLayoutActor;
 class UBoxComponent;
 class UTextRenderComponent;
 
 UCLASS(Blueprintable)
-class TCGPROJECT_API ATCGCardZoneActor : public AActor
+class TCGPROJECT_API ATCG_CardZoneActor : public AActor
 {
 	GENERATED_BODY()
 
 public:
-	ATCGCardZoneActor();
+	ATCG_CardZoneActor();
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -40,7 +40,7 @@ public:
 
 	/** Sets the board actor used as this zone's placement anchor. */
 	UFUNCTION(BlueprintCallable, Category = "TCG|Placement")
-	void SetPlacementAnchor(ATCGBoardLayoutActor* NewPlacementAnchor);
+	void SetPlacementAnchor(ATCG_BoardLayoutActor* NewPlacementAnchor);
 
 	/** Saves this zone's current actor transform relative to its placement anchor, or as world space if no anchor is set. */
 	UFUNCTION(CallInEditor, BlueprintCallable, Category = "TCG|Placement")
@@ -70,7 +70,7 @@ protected:
 
 	/** Board actor this zone is positioned relative to. Move the board actor to move the whole layout reference. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "TCG|Placement")
-	TObjectPtr<ATCGBoardLayoutActor> PlacementAnchor;
+	TObjectPtr<ATCG_BoardLayoutActor> PlacementAnchor;
 
 	/** Saved transform relative to PlacementAnchor. If no anchor is set, this is treated as a saved world transform. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TCG|Placement")
