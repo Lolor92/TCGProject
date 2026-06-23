@@ -4,6 +4,10 @@
 namespace
 {
 	constexpr bool bEnableDebugOverlayRemovalFizzleTest = false;
+
+	const FName DebugEffect_Draw1 = "Debug_Draw1";
+	const FName DebugEffect_GainAttackForCardsUnderneath = "Debug_GainAttackForCardsUnderneath";
+	const FName DebugEffect_RemoveBottomOverlay = "Debug_RemoveBottomOverlay";
 }
 
 static const TCHAR* GetTCGEffectTriggerDebugName(ETCGEffectTrigger Trigger)
@@ -268,7 +272,7 @@ void ATCG_GameState::ApplyDebugEffectChainEntryRequirements(FTCGEffectChainEntry
 	ChainEntry.bRequiresSourceInTargetStack = false;
 	ChainEntry.bRequiresSourceUnderTarget = false;
 
-	if (ChainEntry.EffectId == "Debug_Draw1" && SourceCard->CardInstanceId != TargetCard->CardInstanceId)
+	if (ChainEntry.EffectId == DebugEffect_Draw1 && SourceCard->CardInstanceId != TargetCard->CardInstanceId)
 	{
 		ChainEntry.bRequiresSourceInTargetStack = true;
 		ChainEntry.bRequiresSourceUnderTarget = true;
@@ -367,17 +371,20 @@ int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId
 
 		if (StackCard.CardDefinitionId == "Debug_Fire_Deck_B")
 		{
-			AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnPlay, "Debug_Draw1");
+			AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId,
+				ETCGEffectTrigger::OnPlay, DebugEffect_Draw1);
 		}
 		else if (StackCard.CardDefinitionId == "Debug_Fire_Deck_A")
 		{
-			AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnPlay, "Debug_GainAttackForCardsUnderneath");
+			AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId,
+				ETCGEffectTrigger::OnPlay, DebugEffect_GainAttackForCardsUnderneath);
 		}
 	}
 
 	if (bEnableDebugOverlayRemovalFizzleTest && TopCard->CardDefinitionId == "Debug_Fire_Deck_A" && OutChain.Num() >= 2)
 	{
-		AddCardTriggerToChain(OutChain, TopCard->CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnBecomingTopCard, "Debug_RemoveBottomOverlay");
+		AddCardTriggerToChain(OutChain, TopCard->CardInstanceId, TopCardInstanceId,
+			ETCGEffectTrigger::OnBecomingTopCard, DebugEffect_RemoveBottomOverlay);
 	}
 
 	return OutChain.Num();
@@ -417,7 +424,7 @@ bool ATCG_GameState::ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& Ch
 	const FTCGCardInstance* TargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
 	if (!SourceCard || !TargetCard) return false;
 
-	if (ChainEntry.EffectId == "Debug_Draw1")
+	if (ChainEntry.EffectId == DebugEffect_Draw1)
 	{
 		const bool bDrewCard = DrawCard(ChainEntry.ControllerPlayerIndex);
 
@@ -428,7 +435,7 @@ bool ATCG_GameState::ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& Ch
 		return bDrewCard;
 	}
 
-	if (ChainEntry.EffectId == "Debug_GainAttackForCardsUnderneath")
+	if (ChainEntry.EffectId == DebugEffect_GainAttackForCardsUnderneath)
 	{
 		FTCGCardInstance* MutableTargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
 		if (!MutableTargetCard) return false;
@@ -444,7 +451,7 @@ bool ATCG_GameState::ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& Ch
 		return true;
 	}
 
-	if (ChainEntry.EffectId == "Debug_RemoveBottomOverlay")
+	if (ChainEntry.EffectId == DebugEffect_RemoveBottomOverlay)
 	{
 		FTCGCardInstance* MutableTargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
 		if (!MutableTargetCard || !MutableTargetCard->StackId.IsValid()) return false;
