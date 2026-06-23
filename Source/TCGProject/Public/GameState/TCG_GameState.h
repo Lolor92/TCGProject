@@ -64,6 +64,10 @@ public:
 	// This is gameplay state, not visual actors.
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Cards")
 	TArray<FTCGCardInstance> MatchCards;
+	
+	static constexpr int32 FieldZoneCount = 3;
+
+	static FName GetFieldZoneId(int32 PlayerIndex, int32 FieldIndex);
 
 public:
 	void StartMatch();

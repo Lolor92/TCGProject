@@ -17,6 +17,11 @@ void ATCG_GameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ATCG_GameState, MatchCards);
 }
 
+FName ATCG_GameState::GetFieldZoneId(int32 PlayerIndex, int32 FieldIndex)
+{
+	return FName(*FString::Printf(TEXT("Player%d_Field_%d"), PlayerIndex, FieldIndex));
+}
+
 void ATCG_GameState::StartMatch()
 {
 	TurnNumber = 1;
@@ -366,25 +371,15 @@ bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player
 
 bool ATCG_GameState::ResolveBattlePhase()
 {
-	struct FTCGBattleZonePair
-	{
-		FName Player0ZoneId;
-		FName Player1ZoneId;
-	};
-
-	const FTCGBattleZonePair BattleZonePairs[] =
-	{
-		{ "Player0_Field_0", "Player1_Field_0" },
-		{ "Player0_Field_1", "Player1_Field_1" },
-		{ "Player0_Field_2", "Player1_Field_2" }
-	};
-
 	bool bResolvedAnyBattle = false;
 
-	for (const FTCGBattleZonePair& ZonePair : BattleZonePairs)
+	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
 	{
-		const FTCGCardInstance* Player0Card = FindTopCardInZone(ZonePair.Player0ZoneId);
-		const FTCGCardInstance* Player1Card = FindTopCardInZone(ZonePair.Player1ZoneId);
+		const FName Player0ZoneId = GetFieldZoneId(0, FieldIndex);
+		const FName Player1ZoneId = GetFieldZoneId(1, FieldIndex);
+
+		const FTCGCardInstance* Player0Card = FindTopCardInZone(Player0ZoneId);
+		const FTCGCardInstance* Player1Card = FindTopCardInZone(Player1ZoneId);
 
 		if (!Player0Card && !Player1Card)
 		{
@@ -395,15 +390,15 @@ bool ATCG_GameState::ResolveBattlePhase()
 		{
 			UE_LOG(LogTemp, Warning,
 				TEXT("TCG Debug: Battle skipped %s vs %s P0Card=%s P1Card=%s"),
-				*ZonePair.Player0ZoneId.ToString(),
-				*ZonePair.Player1ZoneId.ToString(),
+				*Player0ZoneId.ToString(),
+				*Player1ZoneId.ToString(),
 				Player0Card ? *Player0Card->CardDefinitionId.ToString() : TEXT("None"),
 				Player1Card ? *Player1Card->CardDefinitionId.ToString() : TEXT("None"));
 
 			continue;
 		}
 
-		if (ResolveBattleBetweenZones(ZonePair.Player0ZoneId, ZonePair.Player1ZoneId))
+		if (ResolveBattleBetweenZones(Player0ZoneId, Player1ZoneId))
 		{
 			bResolvedAnyBattle = true;
 		}
@@ -579,8 +574,8 @@ void ATCG_GameState::RunDebugTurnFlow()
 
 	SetPhase(ETCGMatchPhase::Main);
 
-	const bool bPlayer0Played = PlayFirstCardFromHandToZone(0, "Player0_Field_0");
-	const bool bPlayer1Played = PlayFirstCardFromHandToZone(1, "Player1_Field_0");
+	PlayFirstCardFromHandToZone(0, GetFieldZoneId(0, 0));
+	PlayFirstCardFromHandToZone(1, GetFieldZoneId(1, 0));
 
 	Player0Hand.Reset();
 	Player1Hand.Reset();
