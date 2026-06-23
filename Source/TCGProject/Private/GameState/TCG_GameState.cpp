@@ -557,36 +557,68 @@ void ATCG_GameState::RunDebugTurnFlow()
 	const int32 Player0Drawn = DrawCards(0, 2);
 	const int32 Player1Drawn = DrawCards(1, 2);
 
-	TArray<FTCGCardInstance> Player0Hand;
-	TArray<FTCGCardInstance> Player1Hand;
-	TArray<FTCGCardInstance> Player0Deck;
-	TArray<FTCGCardInstance> Player1Deck;
-
-	GetCardsInHand(0, Player0Hand);
-	GetCardsInHand(1, Player1Hand);
-	GetCardsInDeck(0, Player0Deck);
-	GetCardsInDeck(1, Player1Deck);
-
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P0 drawn: %d"), Player0Drawn);
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P1 drawn: %d"), Player1Drawn);
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P0 hand: %d deck: %d"), Player0Hand.Num(), Player0Deck.Num());
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P1 hand: %d deck: %d"), Player1Hand.Num(), Player1Deck.Num());
+	
+	TArray<FTCGCardInstance> Player0HandAfterDraw;
+	TArray<FTCGCardInstance> Player1HandAfterDraw;
+	TArray<FTCGCardInstance> Player0DeckAfterDraw;
+	TArray<FTCGCardInstance> Player1DeckAfterDraw;
+
+	GetCardsInHand(0, Player0HandAfterDraw);
+	GetCardsInHand(1, Player1HandAfterDraw);
+	GetCardsInDeck(0, Player0DeckAfterDraw);
+	GetCardsInDeck(1, Player1DeckAfterDraw);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P0 hand: %d deck: %d"), Player0HandAfterDraw.Num(), Player0DeckAfterDraw.Num());
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P1 hand: %d deck: %d"), Player1HandAfterDraw.Num(), Player1DeckAfterDraw.Num());
 
 	SetPhase(ETCGMatchPhase::Main);
 
-	PlayFirstCardFromHandToZone(0, GetFieldZoneId(0, 0));
-	PlayFirstCardFromHandToZone(1, GetFieldZoneId(1, 0));
+	const FName Player0Field0 = GetFieldZoneId(0, 0);
+	const FName Player1Field0 = GetFieldZoneId(1, 0);
 
-	Player0Hand.Reset();
-	Player1Hand.Reset();
+	const bool bPlayer0PlayedFirstCard = PlayFirstCardFromHandToZone(0, Player0Field0);
+	const bool bPlayer0PlayedSecondCard = PlayFirstCardFromHandToZone(0, Player0Field0);
+	const bool bPlayer1PlayedFirstCard = PlayFirstCardFromHandToZone(1, Player1Field0);
 
-	GetCardsInHand(0, Player0Hand);
-	GetCardsInHand(1, Player1Hand);
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 play first hand card to %s: %s"),
+		*Player0Field0.ToString(),
+		bPlayer0PlayedFirstCard ? TEXT("true") : TEXT("false"));
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 play first hand card to Player0_Field_0: %s"), bPlayer0Played ? TEXT("true") : TEXT("false"));
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P1 play first hand card to Player1_Field_0: %s"), bPlayer1Played ? TEXT("true") : TEXT("false"));
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 hand after play: %d board has card: %s"), Player0Hand.Num(), DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P1 hand after play: %d board has card: %s"), Player1Hand.Num(), DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 play second hand card to %s: %s"),
+		*Player0Field0.ToString(),
+		bPlayer0PlayedSecondCard ? TEXT("true") : TEXT("false"));
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P1 play first hand card to %s: %s"),
+		*Player1Field0.ToString(),
+		bPlayer1PlayedFirstCard ? TEXT("true") : TEXT("false"));
+
+	const FTCGCardInstance* Player0TopCard = FindTopCardInZone(Player0Field0);
+	const FTCGCardInstance* Player1TopCard = FindTopCardInZone(Player1Field0);
+
+	TArray<FTCGCardInstance> Player0HandAfterPlay;
+	TArray<FTCGCardInstance> Player1HandAfterPlay;
+	GetCardsInHand(0, Player0HandAfterPlay);
+	GetCardsInHand(1, Player1HandAfterPlay);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 hand after play: %d board has card: %s"),
+		Player0HandAfterPlay.Num(),
+		DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P1 hand after play: %d board has card: %s"),
+		Player1HandAfterPlay.Num(),
+		DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 top card: %s stack underneath: %d final ATK: %d"),
+		Player0TopCard ? *Player0TopCard->CardDefinitionId.ToString() : TEXT("None"),
+		Player0TopCard ? GetCardsUnderneathCount(Player0TopCard->CardInstanceId) : 0,
+		Player0TopCard ? GetFinalAttack(Player0TopCard->CardInstanceId) : 0);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P1 top card: %s stack underneath: %d final ATK: %d"),
+		Player1TopCard ? *Player1TopCard->CardDefinitionId.ToString() : TEXT("None"),
+		Player1TopCard ? GetCardsUnderneathCount(Player1TopCard->CardInstanceId) : 0,
+		Player1TopCard ? GetFinalAttack(Player1TopCard->CardInstanceId) : 0);
 
 	SetPhase(ETCGMatchPhase::Battle);
 
@@ -594,9 +626,22 @@ void ATCG_GameState::RunDebugTurnFlow()
 
 	const bool bBattleResolved = ResolveBattlePhase();
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase resolved: %s"), bBattleResolved ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle after resolve P0 board has card: %s"),
+		DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle after resolve P1 board has card: %s"),
+		DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase resolved: %s"),
+		bBattleResolved ? TEXT("true") : TEXT("false"));
 
 	const ETCGMatchResult BattleMatchResult = CheckLoseConditionAfterBattle();
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: %s"),
+		BattleMatchResult == ETCGMatchResult::Player0Wins ? TEXT("Player 0 wins") :
+		BattleMatchResult == ETCGMatchResult::Player1Wins ? TEXT("Player 1 wins") :
+		BattleMatchResult == ETCGMatchResult::Draw ? TEXT("Draw") :
+		TEXT("None"));
 
 	if (BattleMatchResult != ETCGMatchResult::None)
 	{
@@ -607,7 +652,7 @@ void ATCG_GameState::RunDebugTurnFlow()
 
 	SetPhase(ETCGMatchPhase::End);
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: End phase started"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: End phase reached"));
 }
 
 void ATCG_GameState::CreateDebugTestCards()
