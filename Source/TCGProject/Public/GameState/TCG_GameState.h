@@ -133,6 +133,8 @@ public:
 	
 	bool ResolveBattleBetweenZones(FName Player0ZoneId, FName Player1ZoneId);
 	
+	bool ResolveBattlePhase();
+	
 	ETCGMatchResult CheckLoseConditionAfterBattle() const;
 	
 	// Gets all cards owned by a player in a specific location.

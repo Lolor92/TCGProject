@@ -364,6 +364,54 @@ bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player
 	return true;
 }
 
+bool ATCG_GameState::ResolveBattlePhase()
+{
+	struct FTCGBattleZonePair
+	{
+		FName Player0ZoneId;
+		FName Player1ZoneId;
+	};
+
+	const FTCGBattleZonePair BattleZonePairs[] =
+	{
+		{ "Player0_Field_0", "Player1_Field_0" },
+		{ "Player0_Field_1", "Player1_Field_1" },
+		{ "Player0_Field_2", "Player1_Field_2" }
+	};
+
+	bool bResolvedAnyBattle = false;
+
+	for (const FTCGBattleZonePair& ZonePair : BattleZonePairs)
+	{
+		const FTCGCardInstance* Player0Card = FindTopCardInZone(ZonePair.Player0ZoneId);
+		const FTCGCardInstance* Player1Card = FindTopCardInZone(ZonePair.Player1ZoneId);
+
+		if (!Player0Card && !Player1Card)
+		{
+			continue;
+		}
+
+		if (!Player0Card || !Player1Card)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Debug: Battle skipped %s vs %s P0Card=%s P1Card=%s"),
+				*ZonePair.Player0ZoneId.ToString(),
+				*ZonePair.Player1ZoneId.ToString(),
+				Player0Card ? *Player0Card->CardDefinitionId.ToString() : TEXT("None"),
+				Player1Card ? *Player1Card->CardDefinitionId.ToString() : TEXT("None"));
+
+			continue;
+		}
+
+		if (ResolveBattleBetweenZones(ZonePair.Player0ZoneId, ZonePair.Player1ZoneId))
+		{
+			bResolvedAnyBattle = true;
+		}
+	}
+
+	return bResolvedAnyBattle;
+}
+
 ETCGMatchResult ATCG_GameState::CheckLoseConditionAfterBattle() const
 {
 	const bool bPlayer0HasBoardCard = DoesPlayerHaveAnyCardOnBoard(0);
@@ -549,7 +597,7 @@ void ATCG_GameState::RunDebugTurnFlow()
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase started"));
 
-	const bool bBattleResolved = ResolveBattleBetweenZones("Player0_Field_0", "Player1_Field_0");
+	const bool bBattleResolved = ResolveBattlePhase();
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase resolved: %s"), bBattleResolved ? TEXT("true") : TEXT("false"));
 
