@@ -42,9 +42,10 @@ FTCGCardInstance& ATCG_GameState::AddCardInstance(FName CardDefinitionId, ETCGCa
 	NewCard.BaseAttack = BaseAttack;
 	NewCard.OwnerPlayerIndex = OwnerPlayerIndex;
 	NewCard.Location = StartingLocation;
+	NewCard.LocationIndex = GetNextLocationIndex(OwnerPlayerIndex, StartingLocation);
+	NewCard.ZoneId = NAME_None;
 	NewCard.StackId.Invalidate();
 	NewCard.StackIndex = INDEX_NONE;
-	NewCard.ZoneId = NAME_None;
 
 	return MatchCards.Add_GetRef(NewCard);
 }
@@ -309,9 +310,74 @@ void ATCG_GameState::GetCardsInHand(int32 PlayerIndex, TArray<FTCGCardInstance>&
 	GetCardsInLocation(PlayerIndex, ETCGCardLocation::Hand, OutCards);
 }
 
+void ATCG_GameState::GetCardsInDeck(int32 PlayerIndex, TArray<FTCGCardInstance>& OutCards) const
+{
+	GetCardsInLocation(PlayerIndex, ETCGCardLocation::Deck, OutCards);
+
+	OutCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
+	{
+		return A.LocationIndex > B.LocationIndex;
+	});
+}
+
+int32 ATCG_GameState::GetNextLocationIndex(int32 PlayerIndex, ETCGCardLocation Location) const
+{
+	int32 HighestIndex = INDEX_NONE;
+
+	for (const FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == Location)
+		{
+			HighestIndex = FMath::Max(HighestIndex, Card.LocationIndex);
+		}
+	}
+
+	return HighestIndex + 1;
+}
+
+bool ATCG_GameState::DrawCard(int32 PlayerIndex)
+{
+	FTCGCardInstance* TopDeckCard = nullptr;
+
+	for (FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.OwnerPlayerIndex != PlayerIndex || Card.Location != ETCGCardLocation::Deck) continue;
+		if (!TopDeckCard || Card.LocationIndex > TopDeckCard->LocationIndex) TopDeckCard = &Card;
+	}
+
+	if (!TopDeckCard) return false;
+
+	TopDeckCard->Location = ETCGCardLocation::Hand;
+	TopDeckCard->LocationIndex = GetNextLocationIndex(PlayerIndex, ETCGCardLocation::Hand);
+	TopDeckCard->ZoneId = NAME_None;
+	TopDeckCard->StackId.Invalidate();
+	TopDeckCard->StackIndex = INDEX_NONE;
+
+	return true;
+}
+
 void ATCG_GameState::CreateDebugTestCards()
 {
 	MatchCards.Empty();
+	
+	AddCardInstance("Debug_Fire_Deck_A", ETCGCardElement::Fire, 1, 0, ETCGCardLocation::Deck);
+	AddCardInstance("Debug_Water_Deck_A", ETCGCardElement::Water, 2, 0, ETCGCardLocation::Deck);
+
+	TArray<FTCGCardInstance> Player0DeckBeforeDraw;
+	GetCardsInDeck(0, Player0DeckBeforeDraw);
+
+	const bool bDrawCard = DrawCard(0);
+
+	TArray<FTCGCardInstance> Player0DeckAfterDraw;
+	GetCardsInDeck(0, Player0DeckAfterDraw);
+
+	TArray<FTCGCardInstance> Player0HandAfterDraw;
+	GetCardsInHand(0, Player0HandAfterDraw);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 0 deck before draw: %d"), Player0DeckBeforeDraw.Num());
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw card success: %s"), bDrawCard ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 0 deck after draw: %d"), Player0DeckAfterDraw.Num());
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 0 hand after draw: %d"), Player0HandAfterDraw.Num());
 
 	FTCGCardInstance& Player0FireA = AddCardInstance("Debug_Fire_A", ETCGCardElement::Fire, 2, 0, ETCGCardLocation::Hand);
 	FTCGCardInstance& Player0FireB = AddCardInstance("Debug_Fire_B", ETCGCardElement::Fire, 3, 0, ETCGCardLocation::Hand);

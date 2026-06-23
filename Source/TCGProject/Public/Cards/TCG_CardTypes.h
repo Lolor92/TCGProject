@@ -109,6 +109,11 @@ public:
 	// Current gameplay location.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
 	ETCGCardLocation Location = ETCGCardLocation::None;
+	
+	// Order inside Deck/Hand/Graveyard/Banish.
+	// For deck, higher index means closer to the top for now.
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
+	int32 LocationIndex = INDEX_NONE;
 
 	// Board zone/slot name later.
 	// Example: "Player0_Field_0".

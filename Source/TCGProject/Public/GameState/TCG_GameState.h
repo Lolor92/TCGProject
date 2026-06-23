@@ -126,6 +126,12 @@ public:
 	// Shortcut for cards currently in a player's hand.
 	void GetCardsInHand(int32 PlayerIndex, TArray<FTCGCardInstance>& OutCards) const;
 	
+	void GetCardsInDeck(int32 PlayerIndex, TArray<FTCGCardInstance>& OutCards) const;
+
+	int32 GetNextLocationIndex(int32 PlayerIndex, ETCGCardLocation Location) const;
+	
+	bool DrawCard(int32 PlayerIndex);
+	
 	// Temporary debug setup so we can test match cards and stack rules.
 	void CreateDebugTestCards();
 };
