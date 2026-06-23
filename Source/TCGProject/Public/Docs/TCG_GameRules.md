@@ -45,7 +45,9 @@ A stack of cards on the board also counts as one Unit.
 
 Only the top card of a stack is treated as the active Unit on the board.
 
-Cards underneath the top card are overlay cards/materials. They contribute to the top card, but they do not count as separate Units on the board.
+Cards underneath the top card are overlay cards/materials.
+
+They contribute to the top card, but they do not count as separate Units on the board.
 
 ## Card Stacking / Overlay Rules
 
@@ -149,13 +151,83 @@ Full effect logic will be implemented later.
 
 Effects do not always resolve immediately.
 
-When a gameplay event happens, such as playing a Unit, the game collects all valid effects that trigger from that event and builds an effect chain.
+When a gameplay event happens, such as playing a Unit, the game collects valid effects that trigger from that event and builds an effect chain.
 
 The chain is built in trigger order, then resolves backward from the newest chain entry to the oldest chain entry.
 
-### Stack Chain Order
+Example:
 
-When a Unit is played on top of an existing stack, valid On Play effects from the stack are added to the chain from bottom card to top card.
+* Chain 1 is added first.
+* Chain 2 is added second.
+* Chain 3 is added third.
+
+The chain resolves backward:
+
+* Chain 3 resolves first.
+* Chain 2 resolves second.
+* Chain 1 resolves last.
+
+## Mandatory and Optional Effects
+
+Some effects are mandatory.
+
+Some effects are optional.
+
+If a mandatory effect meets its trigger and condition requirements, it must be added to the chain.
+
+If an optional effect meets its trigger and condition requirements, the controller of that effect chooses whether to add it to the chain.
+
+Optional effects are usually written with language such as:
+
+* You can...
+* You may...
+* You can choose to...
+
+Example:
+
+* A player controls 2 Units.
+* Both Units have effects that say: When your opponent plays a Unit, you can activate this effect.
+* The opponent plays a Unit.
+* Both effects meet their trigger requirements.
+* The player can choose to activate neither effect, only one effect, or both effects.
+
+If the player chooses to activate both effects, that player chooses the order those effects are added to the chain.
+
+## Player Choice for Chain Order
+
+When a player has multiple valid effects that can be added to the chain at the same timing, that player chooses the order they are added.
+
+Example:
+
+* Player controls Dark Monster 1.
+* Player controls Fire Monster 1.
+* Both have effects that can trigger when the opponent plays a Unit.
+
+The player may choose:
+
+* Chain 1: Dark Monster 1.
+* Chain 2: Fire Monster 1.
+
+If no more effects are added, the chain resolves backward:
+
+* Chain 2 resolves first.
+* Chain 1 resolves second.
+
+The player could also choose the opposite order:
+
+* Chain 1: Fire Monster 1.
+* Chain 2: Dark Monster 1.
+
+Then the chain would resolve backward:
+
+* Chain 2 resolves first.
+* Chain 1 resolves second.
+
+This means the order chosen during chain building affects the order effects resolve.
+
+## Stack Chain Order
+
+When a Unit is played on top of an existing stack, valid On Play effects from the stack are added to the chain from bottom card to top card by default.
 
 Example:
 
@@ -175,9 +247,13 @@ The chain then resolves backward:
 * Chain 2 resolves second.
 * Chain 1 resolves last.
 
-### Opponent Responses
+This bottom-to-top order is the default stack order for inherited stack effects.
 
-Opponent effects can also be added to the chain if their conditions are met.
+If optional effects are involved, the controller still chooses whether to add them when allowed by the rules.
+
+## Opponent Responses
+
+Opponent effects can also be added to the chain if their trigger and condition requirements are met.
 
 Example:
 
@@ -193,21 +269,168 @@ If no more effects are added, the chain resolves backward:
 * Chain 2 resolves third.
 * Chain 1 resolves last.
 
-### Priority
+## Priority
 
 The turn player has priority when adding effects to the chain.
 
-There is no fixed chain limit. The chain can keep growing as long as valid effects meet their trigger and condition requirements.
+When a gameplay event happens, the turn player gets the first chance to add valid mandatory and optional effects to the chain.
 
-### Replay Note
+After the turn player adds their effects, the opponent gets a chance to add valid mandatory and optional effects to the chain.
+
+This can continue as long as players have valid effects to add.
+
+When a player has multiple optional effects that meet their trigger and condition requirements, that player chooses:
+
+* whether to activate each optional effect
+* which optional effects to activate
+* the order those effects are added to the chain
+
+## Priority Example
+
+Player 0 is the turn player.
+
+Player 0 plays a Unit with this effect:
+
+* On Play: Draw 1 card.
+
+Player 1 controls 2 Units:
+
+* Dark Monster 1: When your opponent plays a Unit, you can reduce that Unit's Attack by 1.
+* Fire Monster 1: When your opponent plays a Unit, you can reduce that Unit's Attack by 2.
+
+Because Player 0 is the turn player, Player 0 has priority.
+
+The chain starts:
+
+* Chain 1: Player 0's played Unit draws 1 card.
+
+Player 1 then chooses whether to add their optional response effects.
+
+Player 1 can choose to add both effects and choose their order:
+
+* Chain 2: Dark Monster 1 reduces Attack by 1.
+* Chain 3: Fire Monster 1 reduces Attack by 2.
+
+If no more effects are added, the chain resolves backward:
+
+* Chain 3 resolves first.
+* Chain 2 resolves second.
+* Chain 1 resolves last.
+
+Player 1 could also choose the opposite order:
+
+* Chain 2: Fire Monster 1 reduces Attack by 2.
+* Chain 3: Dark Monster 1 reduces Attack by 1.
+
+Then Dark Monster 1 resolves first because it was added last.
+
+## Chain Resolution Validity
+
+A chain entry must still be valid when it resolves.
+
+Adding an effect to the chain does not guarantee that the effect will resolve successfully.
+
+When a chain entry tries to resolve, the game should re-check important requirements such as:
+
+* the source card still exists
+* the source card is still in the required location
+* the source card is still in the required stack, if the effect came from an overlay card
+* the target still exists
+* the target is still a legal target
+* any other required condition is still true
+
+If the chain entry no longer meets its resolution requirements, the effect fizzles.
+
+A fizzled effect does not apply its result.
+
+## Fizzle Example: Removing an Overlay Before Its Effect Resolves
+
+Player 0 plays a Unit on top of another Unit.
+
+The bottom Unit has this inherited effect:
+
+* On Play: Draw 1 card.
+
+That effect is added to the chain:
+
+* Chain 1: Bottom overlay card Draw 1.
+
+Player 1 controls a Unit with this response effect:
+
+* When your opponent plays a Unit, you can remove 1 card underneath that Unit.
+
+Player 1 adds the response:
+
+* Chain 2: Remove 1 overlay card from underneath the played Unit.
+
+The chain resolves backward.
+
+Chain 2 resolves first:
+
+* Player 1 removes the bottom overlay card from underneath Player 0's Unit.
+* That removed card was the source of Chain 1's Draw 1 effect.
+
+Then Chain 1 tries to resolve:
+
+* The source card of Chain 1 is no longer underneath the Unit.
+* The source card no longer meets the required state for the inherited effect.
+* Chain 1 fizzles.
+* Player 0 does not draw 1 card.
+
+This means inherited overlay effects can be interrupted before they resolve.
+
+## Chain Limit
+
+There is no fixed chain limit.
+
+The chain can keep growing as long as valid effects meet their trigger and condition requirements.
+
+A chain only starts resolving after both players have finished adding effects.
+
+## Replay Note
 
 Effect chains should be represented as recorded match actions later.
 
 A replay system must be able to recreate:
 
+* which effects were eligible
+* which optional effects were chosen
+* which optional effects were skipped
+* which player made each choice
 * which effects were added to the chain
-* the order they were added
-* the order they resolved
+* the order effects were added
+* the order effects resolved
+* which effects fizzled
+* why each effect fizzled
 * the result of each resolved effect
 
-For this reason, effect collection, chain building, and chain resolution should stay centralized instead of being hidden inside unrelated helper functions.
+For this reason, effect collection, chain building, player choices, chain resolution, and resolution validity checks should stay centralized instead of being hidden inside unrelated helper functions.
+
+## Implementation Notes
+
+The current implementation is still a debug skeleton.
+
+The current goal is to prove:
+
+* trigger timing
+* stack chain build order
+* reverse chain resolution order
+* replay-friendly action chokepoints
+
+The full effect engine will be implemented later.
+
+Printed/static effect data should eventually come from `UTCG_CardDefinition::Effects`.
+
+Runtime chain entries should eventually represent selected effects from that static data.
+
+Effect execution should eventually be separated into these steps:
+
+* detect gameplay event
+* collect valid effects
+* ask/resolve player choices for optional effects
+* add chosen effects to the chain
+* allow response effects
+* resolve the chain backward
+* re-check resolution validity for each chain entry
+* fizzle invalid chain entries
+* record all meaningful actions for replay
