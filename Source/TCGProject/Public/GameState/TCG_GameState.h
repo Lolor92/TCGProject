@@ -138,6 +138,7 @@ public:
 	
 	bool ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectTrigger Trigger);
 	bool AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId, ETCGEffectTrigger Trigger, FName EffectId);
+	bool CanResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEntry) const;
 	int32 BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId, TArray<FTCGEffectChainEntry>& OutChain);
 	bool ResolveEffectChain(const TArray<FTCGEffectChainEntry>& Chain);
 	bool ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);

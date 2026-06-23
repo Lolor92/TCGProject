@@ -249,6 +249,67 @@ bool ATCG_GameState::AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, 
 	return true;
 }
 
+bool ATCG_GameState::CanResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEntry) const
+{
+	const FTCGCardInstance* SourceCard = FindCardInstance(ChainEntry.SourceCardInstanceId);
+	const FTCGCardInstance* TargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
+
+	if (!SourceCard)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=MissingSource"),
+			ChainEntry.ChainIndex,
+			*ChainEntry.SourceCardDefinitionId.ToString(),
+			*ChainEntry.EffectId.ToString());
+
+		return false;
+	}
+
+	if (!TargetCard)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=MissingTarget"),
+			ChainEntry.ChainIndex,
+			*ChainEntry.SourceCardDefinitionId.ToString(),
+			*ChainEntry.EffectId.ToString());
+
+		return false;
+	}
+
+	if (ChainEntry.Trigger == ETCGEffectTrigger::OnPlay)
+	{
+		if (SourceCard->Location != ETCGCardLocation::Board || TargetCard->Location != ETCGCardLocation::Board)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=SourceOrTargetNotOnBoard"),
+				ChainEntry.ChainIndex,
+				*ChainEntry.SourceCardDefinitionId.ToString(),
+				*ChainEntry.EffectId.ToString());
+
+			return false;
+		}
+
+		if (!SourceCard->StackId.IsValid() || SourceCard->StackId != TargetCard->StackId)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=SourceNotInTargetStack"),
+				ChainEntry.ChainIndex,
+				*ChainEntry.SourceCardDefinitionId.ToString(),
+				*ChainEntry.EffectId.ToString());
+
+			return false;
+		}
+
+		if (SourceCard->CardInstanceId != TargetCard->CardInstanceId && SourceCard->StackIndex >= TargetCard->StackIndex)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=SourceNotUnderTarget"),
+				ChainEntry.ChainIndex,
+				*ChainEntry.SourceCardDefinitionId.ToString(),
+				*ChainEntry.EffectId.ToString());
+
+			return false;
+		}
+	}
+
+	return true;
+}
+
 int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId, TArray<FTCGEffectChainEntry>& OutChain)
 {
 	OutChain.Reset();
@@ -287,10 +348,20 @@ bool ATCG_GameState::ResolveEffectChain(const TArray<FTCGEffectChainEntry>& Chai
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain resolving count: %d"), Chain.Num());
 
 	bool bResolvedAny = false;
+
 	for (int32 ChainIndex = Chain.Num() - 1; ChainIndex >= 0; --ChainIndex)
 	{
 		const FTCGEffectChainEntry& Entry = Chain[ChainIndex];
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain resolve %d Source=%s Effect=%s"), Entry.ChainIndex, *Entry.SourceCardDefinitionId.ToString(), *Entry.EffectId.ToString());
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain resolve %d Source=%s Effect=%s"),
+			Entry.ChainIndex,
+			*Entry.SourceCardDefinitionId.ToString(),
+			*Entry.EffectId.ToString());
+
+		if (!CanResolveEffectChainEntry(Entry))
+		{
+			continue;
+		}
 
 		bResolvedAny |= ResolveDebugEffectChainEntry(Entry);
 	}
