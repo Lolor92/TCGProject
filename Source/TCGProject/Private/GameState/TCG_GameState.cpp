@@ -301,6 +301,17 @@ int32 ATCG_GameState::GetPrintedEffectRefsForCard(const FTCGCardInstance& Card, 
 		return OutEffectRefs.Num();
 	}
 
+	const bool bHasKnownFallbackEffects =
+		Card.CardDefinitionId == DebugCard_FireDeckB ||
+		Card.CardDefinitionId == DebugCard_FireDeckA;
+
+	if (bHasKnownFallbackEffects)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: Using fallback printed effects for %s"),
+			*Card.CardDefinitionId.ToString());
+	}
+
 	// Temporary fallback until card definition assets/registry exist.
 	if (Card.CardDefinitionId == DebugCard_FireDeckB)
 	{
