@@ -245,10 +245,11 @@ bool ATCG_GameState::DoesCardEffectMatchTrigger(const FTCGCardEffectRef& EffectR
 	return Trigger != ETCGEffectTrigger::None && EffectRef.Trigger == Trigger && !EffectRef.EffectId.IsNone();
 }
 
-int32 ATCG_GameState::GetDebugEffectRefsForCard(const FTCGCardInstance& Card, TArray<FTCGCardEffectRef>& OutEffectRefs) const
+int32 ATCG_GameState::GetPrintedEffectRefsForCard(const FTCGCardInstance& Card, TArray<FTCGCardEffectRef>& OutEffectRefs) const
 {
 	OutEffectRefs.Reset();
 
+	// Temporary fallback until card definition assets/registry exist.
 	if (Card.CardDefinitionId == DebugCard_FireDeckB)
 	{
 		FTCGCardEffectRef EffectRef;
@@ -268,12 +269,12 @@ int32 ATCG_GameState::GetDebugEffectRefsForCard(const FTCGCardInstance& Card, TA
 	return OutEffectRefs.Num();
 }
 
-int32 ATCG_GameState::GetDebugEffectsForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, TArray<FName>& OutEffectIds) const
+int32 ATCG_GameState::GetPrintedEffectsForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, TArray<FName>& OutEffectIds) const
 {
 	OutEffectIds.Reset();
 
 	TArray<FTCGCardEffectRef> EffectRefs;
-	GetDebugEffectRefsForCard(Card, EffectRefs);
+	GetPrintedEffectRefsForCard(Card, EffectRefs);
 
 	for (const FTCGCardEffectRef& EffectRef : EffectRefs)
 	{
@@ -419,7 +420,7 @@ int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId
 		ExecuteCardTrigger(StackCard.CardInstanceId, ETCGEffectTrigger::OnPlay);
 
 		TArray<FName> EffectIds;
-		GetDebugEffectsForCardTrigger(StackCard, ETCGEffectTrigger::OnPlay, EffectIds);
+		GetPrintedEffectsForCardTrigger(StackCard, ETCGEffectTrigger::OnPlay, EffectIds);
 
 		for (const FName& EffectId : EffectIds)
 		{
