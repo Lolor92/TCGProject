@@ -15,6 +15,15 @@ enum class ETCGMatchPhase : uint8
 	End               UMETA(DisplayName = "End")
 };
 
+UENUM(BlueprintType)
+enum class ETCGMatchResult : uint8
+{
+	None UMETA(DisplayName = "None"),
+	Player0Wins UMETA(DisplayName = "Player 0 Wins"),
+	Player1Wins UMETA(DisplayName = "Player 1 Wins"),
+	Draw UMETA(DisplayName = "Draw")
+};
+
 /**
  * GameState exists on the server and all clients.
  *
@@ -46,6 +55,9 @@ public:
 	// Current phase of the match.
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
 	ETCGMatchPhase CurrentPhase = ETCGMatchPhase::WaitingForPlayers;
+	
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
+	ETCGMatchResult MatchResult = ETCGMatchResult::None;
 
 	// All card copies currently known by the match.
 	// This is gameplay state, not visual actors.
@@ -58,6 +70,8 @@ public:
 
 	// Server should call this when moving to another phase.
 	void SetPhase(ETCGMatchPhase NewPhase);
+	
+	void SetMatchResult(ETCGMatchResult NewMatchResult);
 
 	// Server should call this when changing active player.
 	void SetCurrentTurnPlayer(int32 NewPlayerIndex);

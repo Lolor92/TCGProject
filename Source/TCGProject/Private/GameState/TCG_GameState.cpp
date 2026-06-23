@@ -13,6 +13,7 @@ void ATCG_GameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ATCG_GameState, TurnNumber);
 	DOREPLIFETIME(ATCG_GameState, CurrentTurnPlayerIndex);
 	DOREPLIFETIME(ATCG_GameState, CurrentPhase);
+	DOREPLIFETIME(ATCG_GameState, MatchResult);
 	DOREPLIFETIME(ATCG_GameState, MatchCards);
 }
 
@@ -21,11 +22,17 @@ void ATCG_GameState::StartMatch()
 	TurnNumber = 1;
 	CurrentTurnPlayerIndex = 0;
 	CurrentPhase = ETCGMatchPhase::Draw;
+	MatchResult = ETCGMatchResult::None;
 }
 
 void ATCG_GameState::SetPhase(ETCGMatchPhase NewPhase)
 {
 	CurrentPhase = NewPhase;
+}
+
+void ATCG_GameState::SetMatchResult(ETCGMatchResult NewMatchResult)
+{
+	MatchResult = NewMatchResult;
 }
 
 void ATCG_GameState::SetCurrentTurnPlayer(int32 NewPlayerIndex)
@@ -353,22 +360,26 @@ void ATCG_GameState::CheckLoseConditionAfterBattle()
 
 	if (!bPlayer0HasBoardCard && !bPlayer1HasBoardCard)
 	{
+		SetMatchResult(ETCGMatchResult::Draw);
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: draw, both players have no board cards"));
 		return;
 	}
 
 	if (!bPlayer0HasBoardCard)
 	{
+		SetMatchResult(ETCGMatchResult::Player1Wins);
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: Player 0 loses"));
 		return;
 	}
 
 	if (!bPlayer1HasBoardCard)
 	{
+		SetMatchResult(ETCGMatchResult::Player0Wins);
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: Player 1 loses"));
 		return;
 	}
 
+	SetMatchResult(ETCGMatchResult::None);
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: no player loses"));
 }
 
