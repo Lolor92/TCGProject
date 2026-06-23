@@ -147,6 +147,20 @@ bool ATCG_GameState::PlaceCardOnStack(const FGuid& CardInstanceId, const FGuid& 
 	return true;
 }
 
+bool ATCG_GameState::PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId)
+{
+	FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
+	if (!Card || Card->Location != ETCGCardLocation::Hand) return false;
+
+	FGuid ExistingStackId;
+	if (!FindStackIdInZone(ZoneId, ExistingStackId))
+	{
+		return PlaceCardAsNewStack(CardInstanceId, ZoneId);
+	}
+
+	return PlaceCardOnStack(CardInstanceId, ExistingStackId);
+}
+
 bool ATCG_GameState::MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLocation NewLocation)
 {
 	FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
@@ -291,15 +305,13 @@ void ATCG_GameState::CreateDebugTestCards()
 	const FGuid WaterId = Player0Water.CardInstanceId;
 	const FGuid DarkId = Player1Dark.CardInstanceId;
 
-	PlaceCardAsNewStack(FireAId, "Player0_Field_0");
-
-	const FTCGCardInstance* FireAOnBoard = FindCardInstance(FireAId);
-	if (!FireAOnBoard) return;
-
-	const bool bFireOnFire = PlaceCardOnStack(FireBId, FireAOnBoard->StackId);
-	const bool bWaterOnFire = PlaceCardOnStack(WaterId, FireAOnBoard->StackId);
-
-	PlaceCardAsNewStack(DarkId, "Player1_Field_0");
+	const bool bFireNewStack = PlayCardToZone(FireAId, "Player0_Field_0");
+	const bool bFireOnFire = PlayCardToZone(FireBId, "Player0_Field_0");
+	const bool bWaterOnFire = PlayCardToZone(WaterId, "Player0_Field_0");
+	const bool bDarkNewStack = PlayCardToZone(DarkId, "Player1_Field_0");
+	
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Fire new stack success: %s"), bFireNewStack ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Dark new stack success: %s"), bDarkNewStack ? TEXT("true") : TEXT("false"));
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Fire on Fire success: %s"), bFireOnFire ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Water on Fire success: %s"), bWaterOnFire ? TEXT("true") : TEXT("false"));

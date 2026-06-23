@@ -87,6 +87,11 @@ public:
 
 	// Places a card on top of an existing stack.
 	bool PlaceCardOnStack(const FGuid& CardInstanceId, const FGuid& TargetStackId);
+	
+	// Main rule entry for playing a card from hand to a board zone.
+	// If the zone is empty, this creates a new stack.
+	// If the zone has a stack, this tries to stack on top.
+	bool PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId);
 
 	// Moves a card to a new location.
 	// Later this will trigger effects like OnSentToGraveyard or OnBanished.
