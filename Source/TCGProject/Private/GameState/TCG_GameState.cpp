@@ -1,6 +1,22 @@
 ﻿#include "GameState/TCG_GameState.h"
 #include "Net/UnrealNetwork.h"
 
+static const TCHAR* GetTCGEffectTriggerDebugName(ETCGEffectTrigger Trigger)
+{
+	switch (Trigger)
+	{
+	case ETCGEffectTrigger::OnPlay: return TEXT("OnPlay");
+	case ETCGEffectTrigger::OnDestroyed: return TEXT("OnDestroyed");
+	case ETCGEffectTrigger::OnSentToGraveyard: return TEXT("OnSentToGraveyard");
+	case ETCGEffectTrigger::OnBanished: return TEXT("OnBanished");
+	case ETCGEffectTrigger::OnBattleStart: return TEXT("OnBattleStart");
+	case ETCGEffectTrigger::OnBattleEnd: return TEXT("OnBattleEnd");
+	case ETCGEffectTrigger::OnStackAdded: return TEXT("OnStackAdded");
+	case ETCGEffectTrigger::OnBecomingTopCard: return TEXT("OnBecomingTopCard");
+	default: return TEXT("None");
+	}
+}
+
 ATCG_GameState::ATCG_GameState()
 {
 	bReplicates = true;
@@ -179,10 +195,65 @@ bool ATCG_GameState::PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId)
 	FGuid ExistingStackId;
 	if (!FindStackIdInZone(ZoneId, ExistingStackId))
 	{
-		return PlaceCardAsNewStack(CardInstanceId, ZoneId);
+		const bool bPlaced = PlaceCardAsNewStack(CardInstanceId, ZoneId);
+		if (bPlaced)
+		{
+			ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnPlay);
+			ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnBecomingTopCard);
+		}
+
+		return bPlaced;
 	}
 
-	return PlaceCardOnStack(CardInstanceId, ExistingStackId);
+	const bool bStacked = PlaceCardOnStack(CardInstanceId, ExistingStackId);
+	if (bStacked)
+	{
+		ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnPlay);
+		ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnStackAdded);
+		ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnBecomingTopCard);
+		ExecuteInheritedStackTriggers(CardInstanceId, ETCGEffectTrigger::OnPlay);
+	}
+
+	return bStacked;
+}
+
+bool ATCG_GameState::ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectTrigger Trigger)
+{
+	const FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
+	if (!Card || Trigger == ETCGEffectTrigger::None) return false;
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Trigger %s on %s"), GetTCGEffectTriggerDebugName(Trigger), *Card->CardDefinitionId.ToString());
+
+	return true;
+}
+
+bool ATCG_GameState::ExecuteInheritedStackTriggers(const FGuid& TopCardInstanceId, ETCGEffectTrigger Trigger)
+{
+	const FTCGCardInstance* TopCard = FindCardInstance(TopCardInstanceId);
+	if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid()) return false;
+
+	TArray<FTCGCardInstance> StackCards;
+	GetCardsInStack(TopCard->StackId, StackCards);
+
+	bool bExecutedAny = false;
+	for (const FTCGCardInstance& StackCard : StackCards)
+	{
+		if (StackCard.CardInstanceId == TopCardInstanceId) continue;
+		if (StackCard.StackIndex >= TopCard->StackIndex) continue;
+
+		ExecuteCardTrigger(StackCard.CardInstanceId, Trigger);
+		bExecutedAny = true;
+
+		// Temporary hardcoded debug effect only.
+		// Later this should read UTCG_CardDefinition::Effects.
+		if (Trigger == ETCGEffectTrigger::OnPlay && StackCard.CardDefinitionId == "Debug_Fire_Deck_B")
+		{
+			const bool bDrewCard = DrawCard(TopCard->OwnerPlayerIndex);
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Inherited effect Draw 1 from %s success: %s"), *StackCard.CardDefinitionId.ToString(), bDrewCard ? TEXT("true") : TEXT("false"));
+		}
+	}
+
+	return bExecutedAny;
 }
 
 bool ATCG_GameState::MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLocation NewLocation)
@@ -623,14 +694,16 @@ void ATCG_GameState::RunDebugTurnFlow()
 	TArray<FTCGCardInstance> Player1HandAfterPlay;
 	GetCardsInHand(0, Player0HandAfterPlay);
 	GetCardsInHand(1, Player1HandAfterPlay);
+	
+	TArray<FTCGCardInstance> Player0DeckAfterPlay;
+	TArray<FTCGCardInstance> Player1DeckAfterPlay;
+	GetCardsInDeck(0, Player0DeckAfterPlay);
+	GetCardsInDeck(1, Player1DeckAfterPlay);
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 hand after play: %d board has card: %s"),
-		Player0HandAfterPlay.Num(),
-		DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P1 hand after play: %d board has card: %s"),
-		Player1HandAfterPlay.Num(),
-		DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 hand after play: %d deck: %d board has card: %s"),
+		Player0HandAfterPlay.Num(), Player0DeckAfterPlay.Num(), DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P1 hand after play: %d deck: %d board has card: %s"),
+		Player1HandAfterPlay.Num(), Player1DeckAfterPlay.Num(), DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 top card: %s stack underneath: %d final ATK: %d"),
 		Player0TopCard ? *Player0TopCard->CardDefinitionId.ToString() : TEXT("None"),

@@ -107,6 +107,9 @@ public:
 	// If the zone is empty, this creates a new stack.
 	// If the zone has a stack, this tries to stack on top.
 	bool PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId);
+	
+	bool ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectTrigger Trigger);
+	bool ExecuteInheritedStackTriggers(const FGuid& TopCardInstanceId, ETCGEffectTrigger Trigger);
 
 	// Moves a card to a new location.
 	// Later this will trigger effects like OnSentToGraveyard or OnBanished.
