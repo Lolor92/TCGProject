@@ -240,25 +240,50 @@ bool ATCG_GameState::ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectT
 	return true;
 }
 
-int32 ATCG_GameState::GetDebugEffectsForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, TArray<FName>& OutEffectIds) const
+bool ATCG_GameState::DoesCardEffectMatchTrigger(const FTCGCardEffectRef& EffectRef, ETCGEffectTrigger Trigger) const
 {
-	OutEffectIds.Reset();
+	return Trigger != ETCGEffectTrigger::None && EffectRef.Trigger == Trigger && !EffectRef.EffectId.IsNone();
+}
 
-	if (Trigger != ETCGEffectTrigger::OnPlay) return 0;
+int32 ATCG_GameState::GetDebugEffectRefsForCard(const FTCGCardInstance& Card, TArray<FTCGCardEffectRef>& OutEffectRefs) const
+{
+	OutEffectRefs.Reset();
 
 	if (Card.CardDefinitionId == DebugCard_FireDeckB)
 	{
-		OutEffectIds.Add(DebugEffect_Draw1);
-		return OutEffectIds.Num();
+		FTCGCardEffectRef EffectRef;
+		EffectRef.Trigger = ETCGEffectTrigger::OnPlay;
+		EffectRef.EffectId = DebugEffect_Draw1;
+		OutEffectRefs.Add(EffectRef);
 	}
 
 	if (Card.CardDefinitionId == DebugCard_FireDeckA)
 	{
-		OutEffectIds.Add(DebugEffect_GainAttackForCardsUnderneath);
-		return OutEffectIds.Num();
+		FTCGCardEffectRef EffectRef;
+		EffectRef.Trigger = ETCGEffectTrigger::OnPlay;
+		EffectRef.EffectId = DebugEffect_GainAttackForCardsUnderneath;
+		OutEffectRefs.Add(EffectRef);
 	}
 
-	return 0;
+	return OutEffectRefs.Num();
+}
+
+int32 ATCG_GameState::GetDebugEffectsForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, TArray<FName>& OutEffectIds) const
+{
+	OutEffectIds.Reset();
+
+	TArray<FTCGCardEffectRef> EffectRefs;
+	GetDebugEffectRefsForCard(Card, EffectRefs);
+
+	for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+	{
+		if (DoesCardEffectMatchTrigger(EffectRef, Trigger))
+		{
+			OutEffectIds.Add(EffectRef.EffectId);
+		}
+	}
+
+	return OutEffectIds.Num();
 }
 
 bool ATCG_GameState::AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId, ETCGEffectTrigger Trigger, FName EffectId)
