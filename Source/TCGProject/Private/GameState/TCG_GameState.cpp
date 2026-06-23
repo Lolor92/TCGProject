@@ -292,6 +292,60 @@ const FTCGCardInstance* ATCG_GameState::FindTopCardInZone(FName ZoneId) const
 	return TopCard;
 }
 
+bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player1ZoneId)
+{
+	const FTCGCardInstance* Player0Card = FindTopCardInZone(Player0ZoneId);
+	const FTCGCardInstance* Player1Card = FindTopCardInZone(Player1ZoneId);
+
+	if (!Player0Card || !Player1Card)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle failed P0Card=%s P1Card=%s"),
+			Player0Card ? *Player0Card->CardDefinitionId.ToString() : TEXT("None"),
+			Player1Card ? *Player1Card->CardDefinitionId.ToString() : TEXT("None"));
+
+		return false;
+	}
+
+	const FGuid Player0CardId = Player0Card->CardInstanceId;
+	const FGuid Player1CardId = Player1Card->CardInstanceId;
+	const int32 Player0Attack = GetFinalAttack(Player0CardId);
+	const int32 Player1Attack = GetFinalAttack(Player1CardId);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle %s ATK %d vs %s ATK %d"),
+		*Player0Card->CardDefinitionId.ToString(),
+		Player0Attack,
+		*Player1Card->CardDefinitionId.ToString(),
+		Player1Attack);
+
+	if (Player0Attack > Player1Attack)
+	{
+		MoveCardToLocation(Player1CardId, ETCGCardLocation::Graveyard);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle result P1 card sent to Graveyard"));
+	}
+	else if (Player1Attack > Player0Attack)
+	{
+		MoveCardToLocation(Player0CardId, ETCGCardLocation::Graveyard);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle result P0 card sent to Graveyard"));
+	}
+	else
+	{
+		MoveCardToLocation(Player0CardId, ETCGCardLocation::Graveyard);
+		MoveCardToLocation(Player1CardId, ETCGCardLocation::Graveyard);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle result tie, both cards sent to Graveyard"));
+	}
+
+	const bool bPlayer0HasBoardCard = DoesPlayerHaveAnyCardOnBoard(0);
+	const bool bPlayer1HasBoardCard = DoesPlayerHaveAnyCardOnBoard(1);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle after resolve P0 board has card: %s"),
+		bPlayer0HasBoardCard ? TEXT("true") : TEXT("false"));
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle after resolve P1 board has card: %s"),
+		bPlayer1HasBoardCard ? TEXT("true") : TEXT("false"));
+
+	return true;
+}
+
 void ATCG_GameState::GetCardsInLocation(int32 PlayerIndex, ETCGCardLocation Location, TArray<FTCGCardInstance>& OutCards) const
 {
 	OutCards.Reset();
@@ -449,6 +503,10 @@ void ATCG_GameState::RunDebugTurnFlow()
 	SetPhase(ETCGMatchPhase::Battle);
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase started"));
+
+	const bool bBattleResolved = ResolveBattleBetweenZones("Player0_Field_0", "Player1_Field_0");
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase resolved: %s"), bBattleResolved ? TEXT("true") : TEXT("false"));
 
 	SetPhase(ETCGMatchPhase::End);
 

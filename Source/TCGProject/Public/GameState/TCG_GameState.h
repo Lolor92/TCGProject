@@ -120,6 +120,8 @@ public:
 	// Finds the top card in a board zone.
 	const FTCGCardInstance* FindTopCardInZone(FName ZoneId) const;
 	
+	bool ResolveBattleBetweenZones(FName Player0ZoneId, FName Player1ZoneId);
+	
 	// Gets all cards owned by a player in a specific location.
 	void GetCardsInLocation(int32 PlayerIndex, ETCGCardLocation Location, TArray<FTCGCardInstance>& OutCards) const;
 
