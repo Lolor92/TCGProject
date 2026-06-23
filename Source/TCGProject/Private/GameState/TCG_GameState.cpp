@@ -240,25 +240,25 @@ bool ATCG_GameState::ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectT
 	return true;
 }
 
-bool ATCG_GameState::GetDebugEffectForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, FName& OutEffectId) const
+int32 ATCG_GameState::GetDebugEffectsForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, TArray<FName>& OutEffectIds) const
 {
-	OutEffectId = NAME_None;
+	OutEffectIds.Reset();
 
-	if (Trigger != ETCGEffectTrigger::OnPlay) return false;
+	if (Trigger != ETCGEffectTrigger::OnPlay) return 0;
 
 	if (Card.CardDefinitionId == DebugCard_FireDeckB)
 	{
-		OutEffectId = DebugEffect_Draw1;
-		return true;
+		OutEffectIds.Add(DebugEffect_Draw1);
+		return OutEffectIds.Num();
 	}
 
 	if (Card.CardDefinitionId == DebugCard_FireDeckA)
 	{
-		OutEffectId = DebugEffect_GainAttackForCardsUnderneath;
-		return true;
+		OutEffectIds.Add(DebugEffect_GainAttackForCardsUnderneath);
+		return OutEffectIds.Num();
 	}
 
-	return false;
+	return 0;
 }
 
 bool ATCG_GameState::AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId, ETCGEffectTrigger Trigger, FName EffectId)
@@ -393,8 +393,10 @@ int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId
 
 		ExecuteCardTrigger(StackCard.CardInstanceId, ETCGEffectTrigger::OnPlay);
 
-		FName EffectId = NAME_None;
-		if (GetDebugEffectForCardTrigger(StackCard, ETCGEffectTrigger::OnPlay, EffectId))
+		TArray<FName> EffectIds;
+		GetDebugEffectsForCardTrigger(StackCard, ETCGEffectTrigger::OnPlay, EffectIds);
+
+		for (const FName& EffectId : EffectIds)
 		{
 			AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnPlay, EffectId);
 		}
