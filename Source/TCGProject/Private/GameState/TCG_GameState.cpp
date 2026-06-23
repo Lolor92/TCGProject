@@ -338,6 +338,11 @@ int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId
 		}
 	}
 
+	if (TopCard->CardDefinitionId == "Debug_Fire_Deck_A" && OutChain.Num() >= 2)
+	{
+		AddCardTriggerToChain(OutChain, TopCard->CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnBecomingTopCard, "Debug_RemoveBottomOverlay");
+	}
+
 	return OutChain.Num();
 }
 
@@ -378,15 +383,61 @@ bool ATCG_GameState::ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& Ch
 	if (ChainEntry.EffectId == "Debug_Draw1")
 	{
 		const bool bDrewCard = DrawCard(ChainEntry.ControllerPlayerIndex);
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect Draw 1 from %s success: %s"), *SourceCard->CardDefinitionId.ToString(), bDrewCard ? TEXT("true") : TEXT("false"));
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect Draw 1 from %s success: %s"),
+			*SourceCard->CardDefinitionId.ToString(),
+			bDrewCard ? TEXT("true") : TEXT("false"));
+
 		return bDrewCard;
 	}
 
 	if (ChainEntry.EffectId == "Debug_GainAttackForCardsUnderneath")
 	{
 		const int32 CardsUnderneath = GetCardsUnderneathCount(ChainEntry.TargetCardInstanceId);
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect %s would gain ATK from cards underneath: %d"), *TargetCard->CardDefinitionId.ToString(), CardsUnderneath);
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect %s would gain ATK from cards underneath: %d"),
+			*TargetCard->CardDefinitionId.ToString(),
+			CardsUnderneath);
+
 		return true;
+	}
+
+	if (ChainEntry.EffectId == "Debug_RemoveBottomOverlay")
+	{
+		FTCGCardInstance* MutableTargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
+		if (!MutableTargetCard || !MutableTargetCard->StackId.IsValid()) return false;
+
+		FTCGCardInstance* BottomOverlayCard = nullptr;
+
+		for (FTCGCardInstance& Card : MatchCards)
+		{
+			if (Card.Location != ETCGCardLocation::Board) continue;
+			if (Card.StackId != MutableTargetCard->StackId) continue;
+			if (Card.CardInstanceId == MutableTargetCard->CardInstanceId) continue;
+			if (Card.StackIndex >= MutableTargetCard->StackIndex) continue;
+
+			if (!BottomOverlayCard || Card.StackIndex < BottomOverlayCard->StackIndex)
+			{
+				BottomOverlayCard = &Card;
+			}
+		}
+
+		if (!BottomOverlayCard)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect RemoveBottomOverlay found no overlay under %s"),
+				*MutableTargetCard->CardDefinitionId.ToString());
+
+			return false;
+		}
+
+		const FName RemovedCardDefinitionId = BottomOverlayCard->CardDefinitionId;
+		const bool bMoved = MoveCardToLocation(BottomOverlayCard->CardInstanceId, ETCGCardLocation::Graveyard);
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect RemoveBottomOverlay moved %s to Graveyard success: %s"),
+			*RemovedCardDefinitionId.ToString(),
+			bMoved ? TEXT("true") : TEXT("false"));
+
+		return bMoved;
 	}
 
 	return false;
