@@ -204,6 +204,38 @@ bool ATCG_GameState::MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLoc
 	return true;
 }
 
+bool ATCG_GameState::MoveStackToLocation(const FGuid& StackId, ETCGCardLocation NewLocation)
+{
+	if (!StackId.IsValid())
+	{
+		return false;
+	}
+
+	TArray<FGuid> CardIdsInStack;
+
+	for (const FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.StackId == StackId && Card.Location == ETCGCardLocation::Board)
+		{
+			CardIdsInStack.Add(Card.CardInstanceId);
+		}
+	}
+
+	if (CardIdsInStack.Num() <= 0)
+	{
+		return false;
+	}
+
+	bool bMovedAllCards = true;
+
+	for (const FGuid& CardId : CardIdsInStack)
+	{
+		bMovedAllCards &= MoveCardToLocation(CardId, NewLocation);
+	}
+
+	return bMovedAllCards;
+}
+
 bool ATCG_GameState::DoesPlayerHaveAnyCardOnBoard(int32 PlayerIndex) const
 {
 	for (const FTCGCardInstance& Card : MatchCards)
@@ -331,6 +363,9 @@ bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player
 
 	const FGuid Player0CardId = Player0Card->CardInstanceId;
 	const FGuid Player1CardId = Player1Card->CardInstanceId;
+	const FGuid Player0StackId = Player0Card->StackId;
+	const FGuid Player1StackId = Player1Card->StackId;
+
 	const int32 Player0Attack = GetFinalAttack(Player0CardId);
 	const int32 Player1Attack = GetFinalAttack(Player1CardId);
 
@@ -342,29 +377,20 @@ bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player
 
 	if (Player0Attack > Player1Attack)
 	{
-		MoveCardToLocation(Player1CardId, ETCGCardLocation::Graveyard);
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle result P1 card sent to Graveyard"));
+		MoveStackToLocation(Player1StackId, ETCGCardLocation::Graveyard);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle result P1 stack sent to Graveyard"));
 	}
 	else if (Player1Attack > Player0Attack)
 	{
-		MoveCardToLocation(Player0CardId, ETCGCardLocation::Graveyard);
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle result P0 card sent to Graveyard"));
+		MoveStackToLocation(Player0StackId, ETCGCardLocation::Graveyard);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle result P0 stack sent to Graveyard"));
 	}
 	else
 	{
-		MoveCardToLocation(Player0CardId, ETCGCardLocation::Graveyard);
-		MoveCardToLocation(Player1CardId, ETCGCardLocation::Graveyard);
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle result tie, both cards sent to Graveyard"));
+		MoveStackToLocation(Player0StackId, ETCGCardLocation::Graveyard);
+		MoveStackToLocation(Player1StackId, ETCGCardLocation::Graveyard);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle result tie, both stacks sent to Graveyard"));
 	}
-
-	const bool bPlayer0HasBoardCard = DoesPlayerHaveAnyCardOnBoard(0);
-	const bool bPlayer1HasBoardCard = DoesPlayerHaveAnyCardOnBoard(1);
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle after resolve P0 board has card: %s"),
-		bPlayer0HasBoardCard ? TEXT("true") : TEXT("false"));
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle after resolve P1 board has card: %s"),
-		bPlayer1HasBoardCard ? TEXT("true") : TEXT("false"));
 
 	return true;
 }

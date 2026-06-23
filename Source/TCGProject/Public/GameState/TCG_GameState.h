@@ -111,6 +111,8 @@ public:
 	// Moves a card to a new location.
 	// Later this will trigger effects like OnSentToGraveyard or OnBanished.
 	bool MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLocation NewLocation);
+	
+	bool MoveStackToLocation(const FGuid& StackId, ETCGCardLocation NewLocation);
 
 	// Returns true if the player has at least one card on the board.
 	// This prepares your lose condition, but does not enforce it yet.
