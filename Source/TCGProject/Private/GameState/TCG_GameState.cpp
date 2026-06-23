@@ -261,6 +261,78 @@ bool ATCG_GameState::PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId)
 	return true;
 }
 
+bool ATCG_GameState::IsValidPlayerIndex(int32 PlayerIndex) const
+{
+	return PlayerIndex == 0 || PlayerIndex == 1;
+}
+
+bool ATCG_GameState::IsCurrentTurnPlayer(int32 PlayerIndex) const
+{
+	return IsValidPlayerIndex(PlayerIndex) && CurrentTurnPlayerIndex == PlayerIndex;
+}
+
+bool ATCG_GameState::CanPlayerActInCurrentPhase(int32 PlayerIndex) const
+{
+	if (IsMatchOver()) return false;
+	if (!IsCurrentTurnPlayer(PlayerIndex)) return false;
+
+	return CurrentPhase == ETCGMatchPhase::Main;
+}
+
+bool ATCG_GameState::IsFieldZoneForPlayer(FName ZoneId, int32 PlayerIndex) const
+{
+	if (!IsValidPlayerIndex(PlayerIndex) || ZoneId.IsNone()) return false;
+
+	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
+	{
+		if (ZoneId == GetFieldZoneId(PlayerIndex, FieldIndex))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool ATCG_GameState::CanPlayerPlayCardToZone(int32 PlayerIndex, const FGuid& CardInstanceId, FName ZoneId) const
+{
+	if (!CanPlayerActInCurrentPhase(PlayerIndex)) return false;
+	if (!IsFieldZoneForPlayer(ZoneId, PlayerIndex)) return false;
+
+	const FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
+	if (!Card) return false;
+	if (Card->OwnerPlayerIndex != PlayerIndex) return false;
+	if (Card->Location != ETCGCardLocation::Hand) return false;
+
+	FGuid ExistingStackId;
+	if (FindStackIdInZone(ZoneId, ExistingStackId))
+	{
+		return CanPlaceCardOnStack(CardInstanceId, ExistingStackId);
+	}
+
+	return true;
+}
+
+bool ATCG_GameState::PlayerPlayCardToZone(int32 PlayerIndex, const FGuid& CardInstanceId, FName ZoneId)
+{
+	if (!CanPlayerPlayCardToZone(PlayerIndex, CardInstanceId, ZoneId))
+	{
+		const FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: PlayerPlayCardToZone rejected Player=%d Card=%s Zone=%s Phase=%d CurrentPlayer=%d"),
+			PlayerIndex,
+			Card ? *Card->CardDefinitionId.ToString() : TEXT("None"),
+			*ZoneId.ToString(),
+			static_cast<int32>(CurrentPhase),
+			CurrentTurnPlayerIndex);
+
+		return false;
+	}
+
+	return PlayCardToZone(CardInstanceId, ZoneId);
+}
+
 bool ATCG_GameState::ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectTrigger Trigger)
 {
 	const FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
@@ -1007,12 +1079,7 @@ bool ATCG_GameState::PlayFirstCardFromHandToZone(int32 PlayerIndex, FName ZoneId
 		return false;
 	}
 
-	HandCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
-	{
-		return A.LocationIndex < B.LocationIndex;
-	});
-
-	return PlayCardToZone(HandCards[0].CardInstanceId, ZoneId);
+	return PlayerPlayCardToZone(PlayerIndex, HandCards[0].CardInstanceId, ZoneId);
 }
 
 void ATCG_GameState::SetupDebugMatch()
@@ -1062,6 +1129,33 @@ void ATCG_GameState::RunDebugTurnFlow()
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P1 hand: %d deck: %d"), Player1HandAfterDraw.Num(), Player1DeckAfterDraw.Num());
 
 	SetPhase(ETCGMatchPhase::Main);
+
+	const FName Player0FieldZone = GetFieldZoneId(0, 0);
+	const FName Player1FieldZone = GetFieldZoneId(1, 0);
+
+	SetCurrentTurnPlayer(0);
+	const bool bP0PlayedFirstCard = PlayFirstCardFromHandToZone(0, Player0FieldZone);
+	const bool bP0PlayedSecondCard = PlayFirstCardFromHandToZone(0, Player0FieldZone);
+
+	SetCurrentTurnPlayer(1);
+	const bool bP1PlayedFirstCard = PlayFirstCardFromHandToZone(1, Player1FieldZone);
+
+	SetCurrentTurnPlayer(0);
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("TCG Debug: Main phase P0 play first hand card to %s: %s"),
+		*Player0FieldZone.ToString(),
+		bP0PlayedFirstCard ? TEXT("true") : TEXT("false"));
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("TCG Debug: Main phase P0 play second hand card to %s: %s"),
+		*Player0FieldZone.ToString(),
+		bP0PlayedSecondCard ? TEXT("true") : TEXT("false"));
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("TCG Debug: Main phase P1 play first hand card to %s: %s"),
+		*Player1FieldZone.ToString(),
+		bP1PlayedFirstCard ? TEXT("true") : TEXT("false"));
 
 	const FName Player0Field0 = GetFieldZoneId(0, 0);
 	const FName Player1Field0 = GetFieldZoneId(1, 0);

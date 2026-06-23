@@ -158,6 +158,13 @@ public:
 	// If the zone has a stack, this tries to stack on top.
 	bool PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId);
 	
+	bool IsValidPlayerIndex(int32 PlayerIndex) const;
+	bool IsCurrentTurnPlayer(int32 PlayerIndex) const;
+	bool CanPlayerActInCurrentPhase(int32 PlayerIndex) const;
+	bool IsFieldZoneForPlayer(FName ZoneId, int32 PlayerIndex) const;
+	bool CanPlayerPlayCardToZone(int32 PlayerIndex, const FGuid& CardInstanceId, FName ZoneId) const;
+	bool PlayerPlayCardToZone(int32 PlayerIndex, const FGuid& CardInstanceId, FName ZoneId);
+	
 	bool ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectTrigger Trigger);
 	bool DoesCardEffectMatchTrigger(const FTCGCardEffectRef& EffectRef, ETCGEffectTrigger Trigger) const;
 	const UTCG_CardDefinition* FindDebugCardDefinitionById(FName CardDefinitionId) const;
