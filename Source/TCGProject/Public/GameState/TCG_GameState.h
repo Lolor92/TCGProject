@@ -129,6 +129,9 @@ public:
 	
 	FTCGCardInstance* AddCardInstanceFromDefinition(const UTCG_CardDefinition* CardDefinition, int32 OwnerPlayerIndex,
 		ETCGCardLocation StartingLocation);
+	
+	FTCGCardInstance& AddDebugCardInstance(FName CardDefinitionId, ETCGCardElement FallbackElement,
+		int32 FallbackBaseAttack, int32 OwnerPlayerIndex, ETCGCardLocation StartingLocation);
 
 	// Finds a card by its unique instance id.
 	FTCGCardInstance* FindCardInstance(const FGuid& CardInstanceId);
