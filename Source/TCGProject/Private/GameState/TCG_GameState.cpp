@@ -1,6 +1,11 @@
 ﻿#include "GameState/TCG_GameState.h"
 #include "Net/UnrealNetwork.h"
 
+namespace
+{
+	constexpr bool bEnableDebugOverlayRemovalFizzleTest = false;
+}
+
 static const TCHAR* GetTCGEffectTriggerDebugName(ETCGEffectTrigger Trigger)
 {
 	switch (Trigger)
@@ -242,11 +247,32 @@ bool ATCG_GameState::AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, 
 	NewEntry.EffectId = EffectId;
 	NewEntry.ControllerPlayerIndex = SourceCard->OwnerPlayerIndex;
 
+	ApplyDebugEffectChainEntryRequirements(NewEntry);
+
 	Chain.Add(NewEntry);
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain add %d Source=%s Trigger=%s Effect=%s"), NewEntry.ChainIndex, *NewEntry.SourceCardDefinitionId.ToString(), GetTCGEffectTriggerDebugName(NewEntry.Trigger), *NewEntry.EffectId.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain add %d Source=%s Trigger=%s Effect=%s"),
+		NewEntry.ChainIndex, *NewEntry.SourceCardDefinitionId.ToString(), GetTCGEffectTriggerDebugName(NewEntry.Trigger), *NewEntry.EffectId.ToString());
 
 	return true;
+}
+
+void ATCG_GameState::ApplyDebugEffectChainEntryRequirements(FTCGEffectChainEntry& ChainEntry) const
+{
+	const FTCGCardInstance* SourceCard = FindCardInstance(ChainEntry.SourceCardInstanceId);
+	const FTCGCardInstance* TargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
+	if (!SourceCard || !TargetCard) return;
+
+	ChainEntry.bRequiresSourceOnBoard = true;
+	ChainEntry.bRequiresTargetOnBoard = true;
+	ChainEntry.bRequiresSourceInTargetStack = false;
+	ChainEntry.bRequiresSourceUnderTarget = false;
+
+	if (ChainEntry.EffectId == "Debug_Draw1" && SourceCard->CardInstanceId != TargetCard->CardInstanceId)
+	{
+		ChainEntry.bRequiresSourceInTargetStack = true;
+		ChainEntry.bRequiresSourceUnderTarget = true;
+	}
 }
 
 bool ATCG_GameState::CanResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEntry) const
@@ -339,20 +365,9 @@ int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId
 
 		ExecuteCardTrigger(StackCard.CardInstanceId, ETCGEffectTrigger::OnPlay);
 
-		// Temporary hardcoded debug effects only.
-		// Later this should read UTCG_CardDefinition::Effects.
 		if (StackCard.CardDefinitionId == "Debug_Fire_Deck_B")
 		{
-			if (AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnPlay, "Debug_Draw1"))
-			{
-				FTCGEffectChainEntry& Entry = OutChain.Last();
-
-				if (StackCard.CardInstanceId != TopCardInstanceId)
-				{
-					Entry.bRequiresSourceInTargetStack = true;
-					Entry.bRequiresSourceUnderTarget = true;
-				}
-			}
+			AddCardTriggerToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnPlay, "Debug_Draw1");
 		}
 		else if (StackCard.CardDefinitionId == "Debug_Fire_Deck_A")
 		{
@@ -360,12 +375,10 @@ int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId
 		}
 	}
 
-	// Debug fizzle test only.
-	// Re-enable when testing source-presence fizzles.
-	/*if (TopCard->CardDefinitionId == "Debug_Fire_Deck_A" && OutChain.Num() >= 2)
+	if (bEnableDebugOverlayRemovalFizzleTest && TopCard->CardDefinitionId == "Debug_Fire_Deck_A" && OutChain.Num() >= 2)
 	{
 		AddCardTriggerToChain(OutChain, TopCard->CardInstanceId, TopCardInstanceId, ETCGEffectTrigger::OnBecomingTopCard, "Debug_RemoveBottomOverlay");
-	}*/
+	}
 
 	return OutChain.Num();
 }
