@@ -30,61 +30,75 @@ namespace
 		return RevealedCardIds;
 	}
 
-	bool RevealTopDeckCardsAddWaterToHand(ATCG_GameState* GameState, int32 PlayerIndex, int32 Count)
+	int32 CountPlayerCardsInLocation(ATCG_GameState* GameState, int32 PlayerIndex, ETCGCardLocation Location)
 	{
-		if (!GameState || !GameState->IsValidPlayerIndex(PlayerIndex) || Count <= 0) return false;
-
-		const TArray<FGuid> RevealedCardIds = GetTopDeckCardIds(GameState, PlayerIndex, Count);
-		if (RevealedCardIds.Num() <= 0) return false;
-
-		FGuid ChosenWaterCardId;
-		for (const FGuid& RevealedCardId : RevealedCardIds)
+		int32 Count = 0;
+		for (const FTCGCardInstance& Card : GameState->MatchCards)
 		{
-			const FTCGCardInstance* RevealedCard = GameState->FindCardInstance(RevealedCardId);
-			if (!RevealedCard) continue;
-
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Revealed top deck card Player=%d Card=%s Element=%d"),
-				PlayerIndex,
-				*RevealedCard->CardDefinitionId.ToString(),
-				static_cast<int32>(RevealedCard->Element));
-
-			if (!ChosenWaterCardId.IsValid() && RevealedCard->Element == ETCGCardElement::Water)
-			{
-				ChosenWaterCardId = RevealedCardId;
-			}
+			if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == Location) Count++;
 		}
+		return Count;
+	}
+}
 
-		if (!ChosenWaterCardId.IsValid())
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal found no Water card, cards stay on top deck in same order Player=%d Revealed=%d"), PlayerIndex, RevealedCardIds.Num());
-			return false;
-		}
+bool ATCG_GameState::RevealTopDeckCardsAddWaterToHand(int32 PlayerIndex, int32 Count, const FTCGEffectTargetFilter& TargetFilter)
+{
+	if (!IsValidPlayerIndex(PlayerIndex) || Count <= 0) return false;
 
-		const FTCGCardInstance* ChosenWaterCardBeforeMove = GameState->FindCardInstance(ChosenWaterCardId);
-		const FName ChosenWaterCardDefinitionId = ChosenWaterCardBeforeMove ? ChosenWaterCardBeforeMove->CardDefinitionId : NAME_None;
-		GameState->MoveCardToLocation(ChosenWaterCardId, ETCGCardLocation::Hand);
+	const TArray<FGuid> RevealedCardIds = GetTopDeckCardIds(this, PlayerIndex, Count);
+	if (RevealedCardIds.Num() <= 0) return false;
 
-		int32 SentOtherCount = 0;
-		for (const FGuid& RevealedCardId : RevealedCardIds)
-		{
-			if (RevealedCardId == ChosenWaterCardId) continue;
-			const FTCGCardInstance* OtherCardBeforeMove = GameState->FindCardInstance(RevealedCardId);
-			const FName OtherCardDefinitionId = OtherCardBeforeMove ? OtherCardBeforeMove->CardDefinitionId : NAME_None;
-			if (GameState->MoveCardToLocation(RevealedCardId, ETCGCardLocation::Graveyard))
-			{
-				SentOtherCount++;
-				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal sent other card to graveyard Player=%d Card=%s"), PlayerIndex, *OtherCardDefinitionId.ToString());
-			}
-		}
+	FGuid ChosenCardId;
+	for (const FGuid& RevealedCardId : RevealedCardIds)
+	{
+		const FTCGCardInstance* RevealedCard = FindCardInstance(RevealedCardId);
+		if (!RevealedCard) continue;
 
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal added Water card to hand Player=%d Card=%s SentOther=%d"),
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Revealed top deck card Player=%d Card=%s Element=%d"),
 			PlayerIndex,
-			*ChosenWaterCardDefinitionId.ToString(),
-			SentOtherCount);
+			*RevealedCard->CardDefinitionId.ToString(),
+			static_cast<int32>(RevealedCard->Element));
 
-		return true;
+		const bool bMatchesElement = !TargetFilter.bRequireElement || RevealedCard->Element == TargetFilter.RequiredElement;
+		if (!ChosenCardId.IsValid() && bMatchesElement)
+		{
+			ChosenCardId = RevealedCardId;
+		}
 	}
 
+	if (!ChosenCardId.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal found no matching card, cards stay on top deck in same order Player=%d Revealed=%d"), PlayerIndex, RevealedCardIds.Num());
+		return false;
+	}
+
+	const FTCGCardInstance* ChosenCardBeforeMove = FindCardInstance(ChosenCardId);
+	const FName ChosenCardDefinitionId = ChosenCardBeforeMove ? ChosenCardBeforeMove->CardDefinitionId : NAME_None;
+	MoveCardToLocation(ChosenCardId, ETCGCardLocation::Hand);
+
+	int32 SentOtherCount = 0;
+	for (const FGuid& RevealedCardId : RevealedCardIds)
+	{
+		if (RevealedCardId == ChosenCardId) continue;
+		const FTCGCardInstance* OtherCardBeforeMove = FindCardInstance(RevealedCardId);
+		const FName OtherCardDefinitionId = OtherCardBeforeMove ? OtherCardBeforeMove->CardDefinitionId : NAME_None;
+		if (MoveCardToLocation(RevealedCardId, ETCGCardLocation::Graveyard))
+		{
+			SentOtherCount++;
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal sent other card to graveyard Player=%d Card=%s"), PlayerIndex, *OtherCardDefinitionId.ToString());
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal added card to hand Player=%d Card=%s SentOther=%d"),
+		PlayerIndex,
+		*ChosenCardDefinitionId.ToString(),
+		SentOtherCount);
+
+	return true;
+}
+
+namespace
+{
 	bool SendTopDeckCardToGraveyardAndResolveSelfMill(ATCG_GameState* GameState, int32 PlayerIndex)
 	{
 		FTCGCardInstance* TopDeckCard = FindTopDeckCard(GameState, PlayerIndex);
@@ -102,19 +116,12 @@ namespace
 
 		if (bWasBattleDestroyRevealCard)
 		{
-			RevealTopDeckCardsAddWaterToHand(GameState, PlayerIndex, 2);
+			FTCGEffectTargetFilter WaterFilter;
+			WaterFilter.bRequireElement = true;
+			WaterFilter.RequiredElement = ETCGCardElement::Water;
+			GameState->RevealTopDeckCardsAddWaterToHand(PlayerIndex, 2, WaterFilter);
 		}
 		return true;
-	}
-
-	int32 CountPlayerCardsInLocation(ATCG_GameState* GameState, int32 PlayerIndex, ETCGCardLocation Location)
-	{
-		int32 Count = 0;
-		for (const FTCGCardInstance& Card : GameState->MatchCards)
-		{
-			if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == Location) Count++;
-		}
-		return Count;
 	}
 }
 
