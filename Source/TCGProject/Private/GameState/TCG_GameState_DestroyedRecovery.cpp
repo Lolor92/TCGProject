@@ -146,26 +146,35 @@ void ATCG_GameState::RunDebugDestroyedRecoveryScenario()
 	SetPhase(ETCGMatchPhase::Battle);
 	SetMatchResult(ETCGMatchResult::None);
 
-	FTCGCardInstance& DestroyedSource = AddCardInstance("Debug_Water_DestroyedRecovery_Source", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
-	FTCGCardInstance& WaterToHand = AddCardInstance("Debug_Water_DestroyedRecovery_Hand", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
-	FTCGCardInstance& WaterToDeck = AddCardInstance("Debug_Water_DestroyedRecovery_Deck", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
-	FTCGCardInstance& EarthIgnored = AddCardInstance("Debug_Earth_DestroyedRecovery_Ignored", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Graveyard);
+	const FGuid DestroyedSourceId = AddCardInstance("Debug_Water_DestroyedRecovery_Source", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard).CardInstanceId;
+	const FGuid WaterToHandId = AddCardInstance("Debug_Water_DestroyedRecovery_Hand", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard).CardInstanceId;
+	const FGuid WaterToDeckId = AddCardInstance("Debug_Water_DestroyedRecovery_Deck", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard).CardInstanceId;
+	const FGuid EarthIgnoredId = AddCardInstance("Debug_Earth_DestroyedRecovery_Ignored", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Graveyard).CardInstanceId;
 
 	const FGuid DestroyerStackId = FGuid::NewGuid();
-	FTCGCardInstance& DestroyerMaterialA = AddCardInstance("Debug_Water_Destroyer_Material_A", ETCGCardElement::Water, 1, 1, ETCGCardLocation::Board);
-	DestroyerMaterialA.ZoneId = GetFieldZoneId(1, 0);
-	DestroyerMaterialA.StackId = DestroyerStackId;
-	DestroyerMaterialA.StackIndex = 0;
+	const FGuid DestroyerMaterialAId = AddCardInstance("Debug_Water_Destroyer_Material_A", ETCGCardElement::Water, 1, 1, ETCGCardLocation::Board).CardInstanceId;
+	if (FTCGCardInstance* DestroyerMaterialA = FindCardInstance(DestroyerMaterialAId))
+	{
+		DestroyerMaterialA->ZoneId = GetFieldZoneId(1, 0);
+		DestroyerMaterialA->StackId = DestroyerStackId;
+		DestroyerMaterialA->StackIndex = 0;
+	}
 
-	FTCGCardInstance& DestroyerMaterialB = AddCardInstance("Debug_Fire_Destroyer_Material_B", ETCGCardElement::Fire, 1, 1, ETCGCardLocation::Board);
-	DestroyerMaterialB.ZoneId = GetFieldZoneId(1, 0);
-	DestroyerMaterialB.StackId = DestroyerStackId;
-	DestroyerMaterialB.StackIndex = 1;
+	const FGuid DestroyerMaterialBId = AddCardInstance("Debug_Fire_Destroyer_Material_B", ETCGCardElement::Fire, 1, 1, ETCGCardLocation::Board).CardInstanceId;
+	if (FTCGCardInstance* DestroyerMaterialB = FindCardInstance(DestroyerMaterialBId))
+	{
+		DestroyerMaterialB->ZoneId = GetFieldZoneId(1, 0);
+		DestroyerMaterialB->StackId = DestroyerStackId;
+		DestroyerMaterialB->StackIndex = 1;
+	}
 
-	FTCGCardInstance& DestroyerTop = AddCardInstance("Debug_Dark_Destroyer_Top", ETCGCardElement::Dark, 5, 1, ETCGCardLocation::Board);
-	DestroyerTop.ZoneId = GetFieldZoneId(1, 0);
-	DestroyerTop.StackId = DestroyerStackId;
-	DestroyerTop.StackIndex = 2;
+	const FGuid DestroyerTopId = AddCardInstance("Debug_Dark_Destroyer_Top", ETCGCardElement::Dark, 5, 1, ETCGCardLocation::Board).CardInstanceId;
+	if (FTCGCardInstance* DestroyerTop = FindCardInstance(DestroyerTopId))
+	{
+		DestroyerTop->ZoneId = GetFieldZoneId(1, 0);
+		DestroyerTop->StackId = DestroyerStackId;
+		DestroyerTop->StackIndex = 2;
+	}
 
 	FTCGEffectTargetFilter GraveyardFilter;
 	GraveyardFilter.OwnerMode = ETCGEffectTargetMode::Controller;
@@ -176,9 +185,9 @@ void ATCG_GameState::RunDebugDestroyedRecoveryScenario()
 
 	FTCGEffectChainEntry ChainEntry;
 	ChainEntry.ChainIndex = 1;
-	ChainEntry.SourceCardInstanceId = DestroyedSource.CardInstanceId;
-	ChainEntry.TargetCardInstanceId = DestroyerTop.CardInstanceId;
-	ChainEntry.SourceCardDefinitionId = DestroyedSource.CardDefinitionId;
+	ChainEntry.SourceCardInstanceId = DestroyedSourceId;
+	ChainEntry.TargetCardInstanceId = DestroyerTopId;
+	ChainEntry.SourceCardDefinitionId = "Debug_Water_DestroyedRecovery_Source";
 	ChainEntry.Trigger = ETCGEffectTrigger::OnDestroyed;
 	ChainEntry.ControllerPlayerIndex = 0;
 	ChainEntry.bRequiresSourceOnBoard = false;
@@ -187,29 +196,29 @@ void ATCG_GameState::RunDebugDestroyedRecoveryScenario()
 	const bool bRecoveryChoiceStarted = BeginPendingGraveyardCardsToHandAndTopDeckChoice(0, GraveyardFilter, ChainEntry);
 	TArray<FGuid> RecoveryOptions;
 	GetPendingGraveyardCardsToHandAndTopDeckOptions(RecoveryOptions);
-	const bool bSourceExcluded = !RecoveryOptions.Contains(DestroyedSource.CardInstanceId);
-	const bool bEarthExcluded = !RecoveryOptions.Contains(EarthIgnored.CardInstanceId);
-	const bool bTwoWatersEligible = RecoveryOptions.Contains(WaterToHand.CardInstanceId) && RecoveryOptions.Contains(WaterToDeck.CardInstanceId);
-	const bool bRecoverySubmitted = SubmitPendingGraveyardCardsToHandAndTopDeckChoice(0, WaterToHand.CardInstanceId, WaterToDeck.CardInstanceId);
+	const bool bSourceExcluded = !RecoveryOptions.Contains(DestroyedSourceId);
+	const bool bEarthExcluded = !RecoveryOptions.Contains(EarthIgnoredId);
+	const bool bTwoWatersEligible = RecoveryOptions.Contains(WaterToHandId) && RecoveryOptions.Contains(WaterToDeckId);
+	const bool bRecoverySubmitted = SubmitPendingGraveyardCardsToHandAndTopDeckChoice(0, WaterToHandId, WaterToDeckId);
 
-	const bool bMaterialChoiceStarted = BeginPendingRemoveMaterialChoice(0, DestroyerTop.CardInstanceId, ChainEntry);
+	const bool bMaterialChoiceStarted = BeginPendingRemoveMaterialChoice(0, DestroyerTopId, ChainEntry);
 	TArray<FGuid> MaterialOptions;
 	GetPendingRemoveMaterialChoiceOptions(MaterialOptions);
-	const bool bMaterialsEligible = MaterialOptions.Contains(DestroyerMaterialA.CardInstanceId) && MaterialOptions.Contains(DestroyerMaterialB.CardInstanceId);
+	const bool bMaterialsEligible = MaterialOptions.Contains(DestroyerMaterialAId) && MaterialOptions.Contains(DestroyerMaterialBId);
 	const bool bMaterialRemoved = MaterialOptions.Num() > 0 && SubmitPendingRemoveMaterialChoice(0, MaterialOptions[0]);
 
-	const FTCGCardInstance* SourceAfter = FindCardInstance(DestroyedSource.CardInstanceId);
-	const FTCGCardInstance* HandAfter = FindCardInstance(WaterToHand.CardInstanceId);
-	const FTCGCardInstance* DeckAfter = FindCardInstance(WaterToDeck.CardInstanceId);
-	const FTCGCardInstance* EarthAfter = FindCardInstance(EarthIgnored.CardInstanceId);
-	const FTCGCardInstance* DestroyerAfter = FindCardInstance(DestroyerTop.CardInstanceId);
+	const FTCGCardInstance* SourceAfter = FindCardInstance(DestroyedSourceId);
+	const FTCGCardInstance* HandAfter = FindCardInstance(WaterToHandId);
+	const FTCGCardInstance* DeckAfter = FindCardInstance(WaterToDeckId);
+	const FTCGCardInstance* EarthAfter = FindCardInstance(EarthIgnoredId);
+	const FTCGCardInstance* DestroyerAfter = FindCardInstance(DestroyerTopId);
 
 	const bool bSourceStillGraveyard = SourceAfter && SourceAfter->Location == ETCGCardLocation::Graveyard;
 	const bool bChosenToHand = HandAfter && HandAfter->Location == ETCGCardLocation::Hand;
 	const bool bChosenToDeck = DeckAfter && DeckAfter->Location == ETCGCardLocation::Deck;
 	const bool bEarthStillGraveyard = EarthAfter && EarthAfter->Location == ETCGCardLocation::Graveyard;
 	const bool bDestroyerStillBoard = DestroyerAfter && DestroyerAfter->Location == ETCGCardLocation::Board;
-	const int32 RemainingMaterials = GetCardsUnderneathCount(DestroyerTop.CardInstanceId);
+	const int32 RemainingMaterials = GetCardsUnderneathCount(DestroyerTopId);
 
 	UE_LOG(LogTemp, Warning,
 		TEXT("TCG Debug: DestroyedRecovery summary RecoveryChoice=%s RecoverySubmitted=%s SourceExcluded=%s TwoWatersEligible=%s EarthExcluded=%s SourceStillGraveyard=%s ChosenToHand=%s ChosenToDeck=%s EarthStillGraveyard=%s MaterialChoice=%s MaterialsEligible=%s MaterialRemoved=%s DestroyerStillBoard=%s RemainingMaterials=%d"),
