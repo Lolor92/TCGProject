@@ -10,7 +10,7 @@ namespace
 		RoundLimitTiebreak
 	};
 
-	constexpr ETCGDebugScenario DebugScenario = ETCGDebugScenario::RoundLimitTiebreak;
+	constexpr ETCGDebugScenario DebugScenario = ETCGDebugScenario::NormalRoundFlow;
 	constexpr bool bEnableDebugOverlayRemovalFizzleTest = false;
 	constexpr bool bLogDebugSetup = true;
 	constexpr bool bLogRoundFlow = true;
@@ -934,14 +934,18 @@ void ATCG_GameState::SetupDebugMatch()
 {
 	MatchCards.Empty();
 	ValidateDebugCardDefinitions();
-	AddDebugCardInstance("Debug_Earth_Deck_A", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
-	AddDebugCardInstance("Debug_Earth_Deck_B", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
-	AddDebugCardInstance("Debug_Fire_Deck_A", ETCGCardElement::Fire, 2, 0, ETCGCardLocation::Deck);
-	AddDebugCardInstance("Debug_Fire_Deck_B", ETCGCardElement::Fire, 3, 0, ETCGCardLocation::Deck);
-	AddDebugCardInstance("Debug_Dark_Deck_A", ETCGCardElement::Dark, 5, 1, ETCGCardLocation::Deck);
-	AddDebugCardInstance("Debug_Dark_Deck_B", ETCGCardElement::Dark, 2, 1, ETCGCardLocation::Deck);
-	AddDebugCardInstance("Debug_Light_Deck_A", ETCGCardElement::Light, 4, 1, ETCGCardLocation::Deck);
-	AddDebugCardInstance("Debug_Light_Deck_A", ETCGCardElement::Light, 4, 1, ETCGCardLocation::Deck);
+
+	for (int32 CopyIndex = 0; CopyIndex < 2; ++CopyIndex)
+	{
+		AddDebugCardInstance("Debug_Earth_Deck_A", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
+		AddDebugCardInstance("Debug_Earth_Deck_B", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
+		AddDebugCardInstance("Debug_Fire_Deck_A", ETCGCardElement::Fire, 2, 0, ETCGCardLocation::Deck);
+		AddDebugCardInstance("Debug_Fire_Deck_B", ETCGCardElement::Fire, 3, 0, ETCGCardLocation::Deck);
+		AddDebugCardInstance("Debug_Dark_Deck_A", ETCGCardElement::Dark, 5, 1, ETCGCardLocation::Deck);
+		AddDebugCardInstance("Debug_Dark_Deck_B", ETCGCardElement::Dark, 2, 1, ETCGCardLocation::Deck);
+		AddDebugCardInstance("Debug_Light_Deck_A", ETCGCardElement::Light, 4, 1, ETCGCardLocation::Deck);
+		AddDebugCardInstance("Debug_Light_Deck_A", ETCGCardElement::Light, 4, 1, ETCGCardLocation::Deck);
+	}
 
 	TArray<FTCGCardInstance> Player0Deck;
 	TArray<FTCGCardInstance> Player1Deck;
@@ -966,10 +970,7 @@ void ATCG_GameState::RunDebugTurnFlow()
 		TSet<FGuid> StackIds;
 		for (const FTCGCardInstance& Card : MatchCards)
 		{
-			if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == ETCGCardLocation::Board && Card.StackId.IsValid())
-			{
-				StackIds.Add(Card.StackId);
-			}
+			if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == ETCGCardLocation::Board && Card.StackId.IsValid()) StackIds.Add(Card.StackId);
 		}
 		return StackIds.Num();
 	};
@@ -1018,27 +1019,19 @@ void ATCG_GameState::RunDebugTurnFlow()
 		SetPhase(ETCGMatchPhase::Battle);
 		RoundNumber = FMath::Max(1, MaxRoundNumber);
 		TurnNumber = RoundNumber;
-
 		AddDebugBoardUnit("Limit_P0_Field0", ETCGCardElement::Fire, 6, 0, 0);
 		AddDebugBoardUnit("Limit_P0_Field1", ETCGCardElement::Earth, 6, 0, 1);
 		AddDebugBoardUnit("Limit_P0_Field2", ETCGCardElement::Light, 6, 0, 2);
 		AddDebugBoardUnit("Limit_P1_Field0", ETCGCardElement::Dark, 1, 1, 0);
 		AddDebugBoardUnit("Limit_P1_Field1", ETCGCardElement::Water, 10, 1, 1);
 		AddDebugBoardUnit("Limit_P1_Field2", ETCGCardElement::Wind, 1, 1, 2);
-
 		const bool bResolved = ResolveBattlePhase();
 		ETCGMatchResult ScenarioResult = CheckLoseConditionAfterBattle();
 		if (ScenarioResult == ETCGMatchResult::None && RoundNumber >= FMath::Max(1, MaxRoundNumber))
 		{
 			ScenarioResult = GetRoundLimitResult();
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit reached R%d Max=%d P0Units=%d P1Units=%d Result=%s"),
-				RoundNumber,
-				MaxRoundNumber,
-				CountBoardUnits(0),
-				CountBoardUnits(1),
-				LogMatchResult(ScenarioResult));
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit reached R%d Max=%d P0Units=%d P1Units=%d Result=%s"), RoundNumber, MaxRoundNumber, CountBoardUnits(0), CountBoardUnits(1), LogMatchResult(ScenarioResult));
 		}
-
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit tiebreak scenario summary Resolved=%s P0Board=%s P1Board=%s Result=%s"),
 			bResolved ? TEXT("true") : TEXT("false"),
 			DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"),
@@ -1059,26 +1052,32 @@ void ATCG_GameState::RunDebugTurnFlow()
 		return;
 	}
 
+	const int32 Player0StartingHandDrawn = DrawCards(0, InitialHandSize);
+	const int32 Player1StartingHandDrawn = DrawCards(1, InitialHandSize);
+	if (bLogRoundFlow)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Starting hand draw P0=%d P1=%d Target=%d"), Player0StartingHandDrawn, Player1StartingHandDrawn, InitialHandSize);
+	}
+
 	while (!IsMatchOver())
 	{
 		SetPhase(ETCGMatchPhase::RoundStart);
 		PlacementStepIndex = 0;
 		SetCurrentTurnPlayer(0);
-		const int32 Player0OpeningDraw = DrawCards(0, 1);
-		if (bLogRoundFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round %d start P0 debug opening draw=%d"), RoundNumber, Player0OpeningDraw);
+		if (bLogRoundFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round %d start"), RoundNumber);
 
 		SetPhase(ETCGMatchPhase::Placement);
 		while (CurrentPhase == ETCGMatchPhase::Placement && !IsPlacementPhaseComplete())
 		{
 			const int32 ActivePlayer = GetPlacementStepPlayer();
 			SetCurrentTurnPlayer(ActivePlayer);
-			if (PlacementStepIndex > 0) DrawCard(ActivePlayer);
+			const int32 DrawnForStep = DrawCards(ActivePlayer, CardsDrawnPerPlacementStep);
 
 			const int32 FieldIndex = GetNextRequiredFieldZoneIndex(ActivePlayer);
 			const int32 LogStepNumber = PlacementStepIndex + 1;
 			if (FieldIndex == INDEX_NONE)
 			{
-				if (bLogPlacementFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement R%d Step=%d P%d skipped no empty field"), RoundNumber, LogStepNumber, ActivePlayer);
+				if (bLogPlacementFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement R%d Step=%d P%d Draw=%d skipped no empty field"), RoundNumber, LogStepNumber, ActivePlayer, DrawnForStep);
 				AdvancePlacementStep();
 				continue;
 			}
@@ -1087,7 +1086,7 @@ void ATCG_GameState::RunDebugTurnFlow()
 			const bool bPlayedCard = PlayFirstCardFromHandToZone(ActivePlayer, ZoneId);
 			if (bLogPlacementFlow)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement R%d Step=%d P%d Field=%d Success=%s"), RoundNumber, LogStepNumber, ActivePlayer, FieldIndex, bPlayedCard ? TEXT("true") : TEXT("false"));
+				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement R%d Step=%d P%d Draw=%d Field=%d Success=%s"), RoundNumber, LogStepNumber, ActivePlayer, DrawnForStep, FieldIndex, bPlayedCard ? TEXT("true") : TEXT("false"));
 			}
 			if (!bPlayedCard) AdvancePlacementStep();
 		}
@@ -1100,12 +1099,7 @@ void ATCG_GameState::RunDebugTurnFlow()
 		if (BattleMatchResult == ETCGMatchResult::None && RoundNumber >= FMath::Max(1, MaxRoundNumber))
 		{
 			BattleMatchResult = GetRoundLimitResult();
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit reached R%d Max=%d P0Units=%d P1Units=%d Result=%s"),
-				RoundNumber,
-				MaxRoundNumber,
-				CountBoardUnits(0),
-				CountBoardUnits(1),
-				LogMatchResult(BattleMatchResult));
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit reached R%d Max=%d P0Units=%d P1Units=%d Result=%s"), RoundNumber, MaxRoundNumber, CountBoardUnits(0), CountBoardUnits(1), LogMatchResult(BattleMatchResult));
 		}
 
 		if (bLogRoundFlow)
