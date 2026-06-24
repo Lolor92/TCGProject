@@ -7,10 +7,11 @@ namespace
 	{
 		NormalRoundFlow,
 		WraparoundBattle,
-		RoundLimitTiebreak
+		RoundLimitTiebreak,
+		OverlayPlacement
 	};
 
-	constexpr ETCGDebugScenario DebugScenario = ETCGDebugScenario::NormalRoundFlow;
+	constexpr ETCGDebugScenario DebugScenario = ETCGDebugScenario::OverlayPlacement;
 	constexpr bool bEnableDebugOverlayRemovalFizzleTest = false;
 	constexpr bool bLogDebugSetup = true;
 	constexpr bool bLogCardSetupDetails = false;
@@ -1063,6 +1064,47 @@ void ATCG_GameState::RunDebugTurnFlow()
 		EndMatch(ScenarioResult);
 	};
 
+	auto RunOverlayPlacementScenario = [this, &AddDebugBoardUnit]()
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Overlay placement scenario start"));
+		MatchCards.Empty();
+		SetMatchResult(ETCGMatchResult::None);
+		SetPhase(ETCGMatchPhase::Placement);
+		RoundNumber = 2;
+		TurnNumber = RoundNumber;
+		PlacementStepIndex = 0;
+		Player0PlacementFieldZonesUsedThisRound.Reset();
+		Player1PlacementFieldZonesUsedThisRound.Reset();
+		SetCurrentTurnPlayer(0);
+
+		AddDebugBoardUnit("Overlay_P0_Field0", ETCGCardElement::Fire, 1, 0, 0);
+		AddDebugBoardUnit("Overlay_P0_Field1", ETCGCardElement::Earth, 1, 0, 1);
+		AddDebugBoardUnit("Overlay_P0_Field2", ETCGCardElement::Fire, 1, 0, 2);
+		AddDebugBoardUnit("Overlay_P0_Field3", ETCGCardElement::Water, 1, 0, 3);
+
+		FTCGCardInstance& FirstOverlayCard = AddCardInstance("Overlay_P0_First_Fire", ETCGCardElement::Fire, 2, 0, ETCGCardLocation::Hand);
+		const FName OverlayZoneId = GetFieldZoneId(0, 2);
+		const bool bFirstOverlaySuccess = PlayerPlayCardToZone(0, FirstOverlayCard.CardInstanceId, OverlayZoneId);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Overlay placement first attempt Field=2 Type=Overlay Success=%s Expected=true UsedZones=%d"), bFirstOverlaySuccess ? TEXT("true") : TEXT("false"), Player0PlacementFieldZonesUsedThisRound.Num());
+
+		PlacementStepIndex = 2;
+		SetCurrentTurnPlayer(0);
+
+		FTCGCardInstance& SecondOverlayCard = AddCardInstance("Overlay_P0_Second_Fire", ETCGCardElement::Fire, 2, 0, ETCGCardLocation::Hand);
+		const bool bSecondOverlaySuccess = PlayerPlayCardToZone(0, SecondOverlayCard.CardInstanceId, OverlayZoneId);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Overlay placement same-zone retry Field=2 Type=Overlay Success=%s Expected=false UsedZones=%d"), bSecondOverlaySuccess ? TEXT("true") : TEXT("false"), Player0PlacementFieldZonesUsedThisRound.Num());
+
+		PlacementStepIndex = 2;
+		SetCurrentTurnPlayer(0);
+
+		FTCGCardInstance& ThirdOverlayCard = AddCardInstance("Overlay_P0_Third_Earth", ETCGCardElement::Earth, 2, 0, ETCGCardLocation::Hand);
+		const FName DifferentOverlayZoneId = GetFieldZoneId(0, 1);
+		const bool bDifferentZoneOverlaySuccess = PlayerPlayCardToZone(0, ThirdOverlayCard.CardInstanceId, DifferentOverlayZoneId);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Overlay placement different-zone attempt Field=1 Type=Overlay Success=%s Expected=true UsedZones=%d"), bDifferentZoneOverlaySuccess ? TEXT("true") : TEXT("false"), Player0PlacementFieldZonesUsedThisRound.Num());
+
+		EndMatch(ETCGMatchResult::Draw);
+	};
+
 	if (DebugScenario == ETCGDebugScenario::WraparoundBattle)
 	{
 		RunWraparoundBattleScenario();
@@ -1072,6 +1114,12 @@ void ATCG_GameState::RunDebugTurnFlow()
 	if (DebugScenario == ETCGDebugScenario::RoundLimitTiebreak)
 	{
 		RunRoundLimitTiebreakScenario();
+		return;
+	}
+
+	if (DebugScenario == ETCGDebugScenario::OverlayPlacement)
+	{
+		RunOverlayPlacementScenario();
 		return;
 	}
 
