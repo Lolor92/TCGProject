@@ -102,40 +102,72 @@ After Player 1 completes the 8th total placement turn of the round, the Placemen
 
 If a player cannot draw because their deck is empty, the placement turn still continues.
 
-If a player cannot place because they have no legal card or no legal empty field zone, that placement turn is skipped after the draw phase.
+If a player cannot place because they have no legal card or no legal field zone, that placement turn is skipped after the draw phase.
 
 The match still only checks win/loss conditions after the Battle Phase.
 
-## Field Zones and Placement Order
+## Field Zones and Placement Choice
 
 Each player has 4 field zones.
 
-By default, cards must be placed into field zones in order.
+During a placement turn, the active player may choose any legal field zone.
 
-The normal placement order is:
+Cards do not need to be placed in field-zone order.
 
-* Field Zone 1
-* Field Zone 2
-* Field Zone 3
-* Field Zone 4
+A player may place in Field Zone 3 before Field Zone 1.
 
-A player cannot normally place a card into Field Zone 2 while Field Zone 1 is empty.
+A player may place in Field Zone 4 before Field Zone 2.
 
-A player cannot normally place a card into Field Zone 3 while Field Zone 1 or Field Zone 2 is empty.
+The default rule is free zone choice, not ordered zone choice.
 
-A player cannot normally place a card into Field Zone 4 while Field Zone 1, Field Zone 2, or Field Zone 3 is empty.
+## One Placement Per Zone Per Round
 
-Default normal placement should be into the next empty field zone in order.
+During a single round, each player can use each of their field zones only once for placement.
 
-Stacking onto an already-filled earlier zone should not be allowed by normal placement once a later empty zone is next, unless a card effect or rule modifier allows it.
+This means a player cannot place into the same field zone twice during the same round.
 
-Some card effects may allow exceptions to the normal placement order.
+Example:
+
+* Player 0 places a card into Field Zone 1.
+* Later in the same round, Player 0 cannot place another card into Field Zone 1 again.
+* Player 0 may still place into Field Zone 2, Field Zone 3, or Field Zone 4 if those placements are legal.
+
+This rule applies both to placing into empty zones and overlaying onto existing Units.
+
+A future card effect may override this restriction.
 
 Examples of possible future exceptions:
 
-* Place a card into any empty field zone.
-* Skip the next required field zone.
+* You can place onto a zone already used this round.
+* You can place twice into the same zone this round.
+* You can ignore the once-per-zone placement restriction.
+
+These exceptions should be handled through card effects or explicit rule modifiers, not by changing the default placement rule.
+
+## Empty Zone Placement and Overlay Placement
+
+If the active player has at least one empty field zone, normal placement must be into an empty field zone.
+
+If the active player has no empty field zones, normal placement may be onto an existing Unit as an overlay, if the stack rule allows it.
+
+By default, overlay placement still follows the same-element stack rule.
+
+Example:
+
+* Player 0 has all 4 field zones occupied after battle.
+* On the next round, Player 0 has no empty field zones.
+* Player 0 may now place a card on top of an existing Unit as an overlay.
+* If Player 0 overlays onto Field Zone 2, Player 0 cannot use Field Zone 2 again later in that same round unless a card effect allows it.
+
+If the player has an empty field zone, they cannot normally overlay onto an existing Unit yet.
+
+A future card effect may allow overlay placement even while empty zones still exist.
+
+Examples of possible future exceptions:
+
 * Place a card directly on top of a specific Unit.
+* Overlay even if you still have empty zones.
+* Overlay onto a different element.
 * Move a Unit to another field zone.
 * Open an extra placement zone for this round.
 
@@ -585,8 +617,10 @@ The current goal is to prove:
 
 * starting hand draw
 * placement-turn draw flow
+* free field-zone placement
+* once-per-zone-per-round placement restriction
+* full-board overlay placement
 * round flow
-* ordered placement
 * battle declaration order
 * fallback battle target selection
 * round-limit Unit-count result
