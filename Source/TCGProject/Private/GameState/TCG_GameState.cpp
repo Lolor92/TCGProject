@@ -1,4 +1,5 @@
 #include "GameState/TCG_GameState.h"
+#include "GameState/TCG_BattleResolver.h"
 #include "Net/UnrealNetwork.h"
 
 namespace
@@ -932,175 +933,12 @@ const FTCGCardInstance* ATCG_GameState::FindTopCardInZone(FName ZoneId) const
 
 bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player1ZoneId)
 {
-	const FTCGCardInstance* Player0Card = FindTopCardInZone(Player0ZoneId);
-	const FTCGCardInstance* Player1Card = FindTopCardInZone(Player1ZoneId);
-	if (!Player0Card || !Player1Card) return false;
-
-	const FGuid Player0WinnerId = Player0Card->CardInstanceId;
-	const FGuid Player1WinnerId = Player1Card->CardInstanceId;
-	const FGuid Player0LoserStackId = Player0Card->StackId;
-	const FGuid Player1LoserStackId = Player1Card->StackId;
-
-	const int32 Player0Attack = GetFinalAttack(Player0Card->CardInstanceId);
-	const int32 Player1Attack = GetFinalAttack(Player1Card->CardInstanceId);
-
-	if (Player0Attack > Player1Attack)
-	{
-		MoveStackToLocation(Player1LoserStackId, ETCGCardLocation::Graveyard);
-
-		if (const FTCGCardInstance* WinnerCard = FindCardInstance(Player0WinnerId))
-		{
-			TArray<FTCGEffectChainEntry> Chain;
-			TArray<FTCGCardEffectRef> EffectRefs;
-			GetPrintedEffectRefsForCard(*WinnerCard, EffectRefs);
-
-			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
-			{
-				if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnDestroyedUnitByBattle))
-				{
-					AddCardEffectRefToChain(Chain, Player0WinnerId, Player0WinnerId, EffectRef);
-				}
-			}
-
-			ResolveEffectChain(Chain);
-		}
-	}
-	else if (Player1Attack > Player0Attack)
-	{
-		MoveStackToLocation(Player0LoserStackId, ETCGCardLocation::Graveyard);
-
-		if (const FTCGCardInstance* WinnerCard = FindCardInstance(Player1WinnerId))
-		{
-			TArray<FTCGEffectChainEntry> Chain;
-			TArray<FTCGCardEffectRef> EffectRefs;
-			GetPrintedEffectRefsForCard(*WinnerCard, EffectRefs);
-
-			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
-			{
-				if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnDestroyedUnitByBattle))
-				{
-					AddCardEffectRefToChain(Chain, Player1WinnerId, Player1WinnerId, EffectRef);
-				}
-			}
-
-			ResolveEffectChain(Chain);
-		}
-	}
-	else
-	{
-		MoveStackToLocation(Player0LoserStackId, ETCGCardLocation::Graveyard);
-		MoveStackToLocation(Player1LoserStackId, ETCGCardLocation::Graveyard);
-	}
-
-	return true;
+	return UTCG_BattleResolver::ResolveBattleBetweenZones(this, Player0ZoneId, Player1ZoneId);
 }
 
 bool ATCG_GameState::ResolveBattlePhase()
 {
-	if (HasPendingDiscardChoice())
-	{
-		if (bLogBattleFlow || bLogRoundFlow)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase paused PendingDiscard Player=%d Count=%d"), PendingDiscardChoice.PlayerIndex, PendingDiscardChoice.RequiredCount);
-		}
-		return false;
-	}
-
-	bool bResolvedAnyBattle = false;
-	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
-	{
-		const int32 AttackerPlayerIndex = FieldIndex % 2 == 0 ? 0 : 1;
-		const int32 DefenderPlayerIndex = 1 - AttackerPlayerIndex;
-		const FName AttackerZoneId = GetFieldZoneId(AttackerPlayerIndex, FieldIndex);
-		const FTCGCardInstance* AttackerCard = FindTopCardInZone(AttackerZoneId);
-		if (!AttackerCard)
-		{
-			if (bLogBattleFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle declaration skipped Field=%d Attacker=P%d Reason=NoAttacker"), FieldIndex, AttackerPlayerIndex);
-			continue;
-		}
-
-		FName DefenderZoneId = NAME_None;
-		int32 DefenderFieldIndex = INDEX_NONE;
-		const FTCGCardInstance* DefenderCard = nullptr;
-		for (int32 SearchOffset = 0; SearchOffset < FieldZoneCount; ++SearchOffset)
-		{
-			const int32 CandidateFieldIndex = (FieldIndex + SearchOffset) % FieldZoneCount;
-			const FName CandidateZoneId = GetFieldZoneId(DefenderPlayerIndex, CandidateFieldIndex);
-			const FTCGCardInstance* CandidateCard = FindTopCardInZone(CandidateZoneId);
-			if (CandidateCard)
-			{
-				DefenderZoneId = CandidateZoneId;
-				DefenderFieldIndex = CandidateFieldIndex;
-				DefenderCard = CandidateCard;
-				break;
-			}
-		}
-
-		if (!DefenderCard || DefenderZoneId.IsNone())
-		{
-			if (bLogBattleFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle declaration skipped Field=%d Attacker=P%d Reason=NoDefender"), FieldIndex, AttackerPlayerIndex);
-			continue;
-		}
-
-		const FGuid AttackerCardId = AttackerCard->CardInstanceId;
-		const FGuid DefenderCardId = DefenderCard->CardInstanceId;
-
-		TArray<FTCGEffectChainEntry> AttackChain;
-		TArray<FTCGCardEffectRef> AttackEffectRefs;
-		GetPrintedEffectRefsForCard(*AttackerCard, AttackEffectRefs);
-
-		for (const FTCGCardEffectRef& EffectRef : AttackEffectRefs)
-		{
-			if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnAttack))
-			{
-				AddCardEffectRefToChain(AttackChain, AttackerCardId, DefenderCardId, EffectRef);
-			}
-		}
-
-		const bool bAttackChainResolved = ResolveEffectChain(AttackChain);
-
-		const FTCGCardInstance* AttackerAfterAttackEffects = FindCardInstance(AttackerCardId);
-		const FTCGCardInstance* DefenderAfterAttackEffects = FindCardInstance(DefenderCardId);
-
-		if (!AttackerAfterAttackEffects
-			|| AttackerAfterAttackEffects->Location != ETCGCardLocation::Board
-			|| !DefenderAfterAttackEffects
-			|| DefenderAfterAttackEffects->Location != ETCGCardLocation::Board)
-		{
-			if (bLogBattleFlow)
-			{
-				UE_LOG(LogTemp, Warning,
-					TEXT("TCG Debug: Battle damage skipped Field=%d Attacker=P%d OnAttackResolved=%s Reason=UnitLeftBoard"),
-					FieldIndex,
-					AttackerPlayerIndex,
-					bAttackChainResolved ? TEXT("true") : TEXT("false"));
-			}
-
-			bResolvedAnyBattle = true;
-			continue;
-		}
-
-		const FGuid AttackerStackId = AttackerAfterAttackEffects->StackId;
-		const FGuid DefenderStackId = DefenderAfterAttackEffects->StackId;
-		const int32 AttackerAttack = GetFinalAttack(AttackerCardId);
-		const int32 DefenderAttack = GetFinalAttack(DefenderCardId);
-
-		if (AttackerAttack > DefenderAttack)
-		{
-			MoveStackToLocation(DefenderStackId, ETCGCardLocation::Graveyard);
-		}
-		else if (DefenderAttack > AttackerAttack)
-		{
-			MoveStackToLocation(AttackerStackId, ETCGCardLocation::Graveyard);
-		}
-		else
-		{
-			MoveStackToLocation(AttackerStackId, ETCGCardLocation::Graveyard);
-			MoveStackToLocation(DefenderStackId, ETCGCardLocation::Graveyard);
-		}
-		bResolvedAnyBattle = true;
-	}
-	return bResolvedAnyBattle;
+	return UTCG_BattleResolver::ResolveBattlePhase(this);
 }
 
 ETCGMatchResult ATCG_GameState::CheckLoseConditionAfterBattle() const
