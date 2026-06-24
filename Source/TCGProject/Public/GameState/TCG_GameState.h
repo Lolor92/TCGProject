@@ -104,6 +104,41 @@ public:
 	}
 };
 
+USTRUCT(BlueprintType)
+struct FTCGPendingGraveyardToDeckChoice
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	bool bIsPending = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	int32 PlayerIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	int32 RequiredCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	FGuid SourceCardInstanceId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	int32 ChainIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	TArray<FGuid> EligibleCardInstanceIds;
+
+	void Reset()
+	{
+		bIsPending = false;
+		PlayerIndex = INDEX_NONE;
+		RequiredCount = 0;
+		SourceCardInstanceId.Invalidate();
+		ChainIndex = INDEX_NONE;
+		EligibleCardInstanceIds.Reset();
+	}
+};
+
 UCLASS()
 class TCGPROJECT_API ATCG_GameState : public AGameState
 {
@@ -155,6 +190,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Choice")
 	FTCGPendingDiscardChoice PendingDiscardChoice;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	FTCGPendingGraveyardToDeckChoice PendingGraveyardToDeckChoice;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Debug")
 	TArray<TObjectPtr<UTCG_CardDefinition>> DebugCardDefinitions;
@@ -234,6 +272,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "TCG|Choice")
 	void GetPendingDiscardChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const;
 	void ClearPendingDiscardChoice();
+
+	bool BeginPendingGraveyardToDeckChoice(int32 PlayerIndex, int32 Count, const FTCGEffectChainEntry& ChainEntry);
+	UFUNCTION(BlueprintCallable, Category = "TCG|Choice")
+	bool SubmitPendingGraveyardToDeckChoice(int32 PlayerIndex, const TArray<FGuid>& ChosenCardInstanceIds);
+	UFUNCTION(BlueprintPure, Category = "TCG|Choice")
+	bool HasPendingGraveyardToDeckChoice() const;
+	UFUNCTION(BlueprintPure, Category = "TCG|Choice")
+	void GetPendingGraveyardToDeckChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const;
+	void ClearPendingGraveyardToDeckChoice();
 
 	bool MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLocation NewLocation);
 	bool MoveCardToBottomOfDeck(const FGuid& CardInstanceId);
