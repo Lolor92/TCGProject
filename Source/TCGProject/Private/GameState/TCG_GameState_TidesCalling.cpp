@@ -313,16 +313,19 @@ void ATCG_GameState::RunDebugDreampoolMirechantScenario()
 	WaterUnit.ZoneId = GetFieldZoneId(0, 0);
 	WaterUnit.StackId = FGuid::NewGuid();
 	WaterUnit.StackIndex = 0;
+	const FGuid WaterUnitId = WaterUnit.CardInstanceId;
+	const FGuid WaterStackId = WaterUnit.StackId;
+
 	AddCardInstance("Debug_Water_Grave_A", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
 	AddCardInstance("Debug_Water_Grave_B", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
 	AddCardInstance("Debug_Fire_Grave_C", ETCGCardElement::Fire, 1, 0, ETCGCardLocation::Graveyard);
 	AddCardInstance(DebugCard_DreampoolMirechant, ETCGCardElement::Water, 3, 0, ETCGCardLocation::Deck);
 
-	const int32 BeforeAttack = GetFinalAttackPreviewWithContinuousEffects(this, WaterUnit.CardInstanceId);
+	const int32 BeforeAttack = GetFinalAttackPreviewWithContinuousEffects(this, WaterUnitId);
 	const bool bSentTopDeck = SendTopDeckCardToGraveyard(0);
-	const int32 AfterAttack = GetFinalAttackPreviewWithContinuousEffects(this, WaterUnit.CardInstanceId);
+	const int32 AfterAttack = GetFinalAttackPreviewWithContinuousEffects(this, WaterUnitId);
 	TArray<FTCGCardInstance> StackCards;
-	GetCardsInStack(WaterUnit.StackId, StackCards);
+	GetCardsInStack(WaterStackId, StackCards);
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Dreampool Mirechant summary SentTopDeck=%s StackCount=%d WaterGY=%d BeforeATK=%d AfterATK=%d"),
 		bSentTopDeck ? TEXT("true") : TEXT("false"),
 		StackCards.Num(),
