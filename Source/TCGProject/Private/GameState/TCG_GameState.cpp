@@ -23,7 +23,7 @@ namespace
 	constexpr bool bLogRoundFlow = true;
 	constexpr bool bLogPlacementFlow = true;
 	constexpr bool bLogBattleFlow = false;
-	constexpr bool bLogEffectChains = true;
+	constexpr bool bLogEffectChains = false;
 	constexpr bool bLogVerboseCardTriggers = false;
 
 	const FName DebugCard_FireDeckA = "Debug_Fire_Deck_A";
