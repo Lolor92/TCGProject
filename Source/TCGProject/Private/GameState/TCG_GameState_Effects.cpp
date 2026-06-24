@@ -32,6 +32,7 @@ namespace
 		case ETCGEffectStepType::AttachGraveyardCardToSourceMaterial: return TEXT("AttachGraveyardCardToSourceMaterial");
 		case ETCGEffectStepType::SendTopDeckCardsToGraveyard: return TEXT("SendTopDeckCardsToGraveyard");
 		case ETCGEffectStepType::BoostAllOwnUnitsThisRound: return TEXT("BoostAllOwnUnitsThisRound");
+		case ETCGEffectStepType::RevealTopDeckCardsAddWaterToHand: return TEXT("RevealTopDeckCardsAddWaterToHand");
 		default: return TEXT("None");
 		}
 	}
@@ -301,24 +302,20 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		break;
 	}
 	case ETCGEffectStepType::SendTopDeckCardsToGraveyard:
-		{
-			const int32 SendCount = FMath::Max(1, Step.Value <= 0 ? 1 : Step.Value);
-			const int32 SentCount = SendTopDeckCardsToGraveyard(ChainEntry.ControllerPlayerIndex, SendCount);
-
-			bStepSucceeded = SentCount == SendCount;
-
-			if (bLogEffectResolution)
-			{
-				UE_LOG(LogTemp, Warning,
-					TEXT("TCG Effect: Step SendTopDeckCardsToGraveyard Player=%d Requested=%d Sent=%d Success=%s"),
-					ChainEntry.ControllerPlayerIndex,
-					SendCount,
-					SentCount,
-					bStepSucceeded ? TEXT("true") : TEXT("false"));
-			}
-
-			break;
-		}
+	{
+		const int32 SendCount = FMath::Max(1, Step.Value <= 0 ? 1 : Step.Value);
+		const int32 SentCount = SendTopDeckCardsToGraveyard(ChainEntry.ControllerPlayerIndex, SendCount);
+		bStepSucceeded = SentCount == SendCount;
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step SendTopDeckCardsToGraveyard Player=%d Requested=%d Sent=%d Success=%s"), ChainEntry.ControllerPlayerIndex, SendCount, SentCount, bStepSucceeded ? TEXT("true") : TEXT("false"));
+		break;
+	}
+	case ETCGEffectStepType::RevealTopDeckCardsAddWaterToHand:
+	{
+		const int32 RevealCount = FMath::Max(1, Step.Value <= 0 ? 2 : Step.Value);
+		bStepSucceeded = RevealTopDeckCardsAddWaterToHand(ChainEntry.ControllerPlayerIndex, RevealCount, Step.TargetFilter);
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step RevealTopDeckCardsAddWaterToHand Player=%d Reveal=%d Success=%s"), ChainEntry.ControllerPlayerIndex, RevealCount, bStepSucceeded ? TEXT("true") : TEXT("false"));
+		break;
+	}
 	case ETCGEffectStepType::MoveGraveyardCardToBottomDeck:
 	{
 		const int32 MoveCount = FMath::Max(1, Step.Value <= 0 ? 1 : Step.Value);
