@@ -235,4 +235,5 @@ void ATCG_GameState::RunDebugDestroyedRecoveryScenario()
 		RemainingMaterials);
 
 	EndMatch(ETCGMatchResult::Draw);
+	RunDebugMaterialRebirthScenario();
 }
