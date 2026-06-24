@@ -5,6 +5,7 @@ namespace
 	constexpr bool bLogEffectResolution = true;
 	constexpr bool bAutoSubmitDebugDiscardChoice = true;
 	constexpr bool bAutoSubmitDebugGraveyardToDeckChoice = true;
+	constexpr bool bAutoSubmitDebugPlayToEmptyZoneChoice = true;
 
 	const FName LegacyDebugEffect_Draw1 = "Debug_Draw1";
 	const FName LegacyDebugEffect_GainAttackForCardsUnderneath = "Debug_GainAttackForCardsUnderneath";
@@ -310,6 +311,37 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 	}
 	case ETCGEffectStepType::PlaySourceToEmptyZone:
 	{
+		if (Step.SelectionMode == ETCGEffectSelectionMode::PlayerChoice)
+		{
+			const bool bChoiceStarted = BeginPendingPlayToEmptyZoneChoice(ChainEntry.ControllerPlayerIndex, ChainEntry);
+			bool bAutoSubmittedChoice = false;
+			FName DebugChosenZoneId = NAME_None;
+
+			if (bChoiceStarted && bAutoSubmitDebugPlayToEmptyZoneChoice)
+			{
+				TArray<FName> ChoiceOptions;
+				GetPendingPlayToEmptyZoneChoiceOptions(ChoiceOptions);
+				if (ChoiceOptions.Num() > 0)
+				{
+					DebugChosenZoneId = ChoiceOptions[0];
+					bAutoSubmittedChoice = SubmitPendingPlayToEmptyZoneChoice(ChainEntry.ControllerPlayerIndex, DebugChosenZoneId);
+				}
+			}
+
+			if (bLogEffectResolution)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step PlaySourceToEmptyZone Player=%d Mode=%s Pending=%s AutoSubmitted=%s Zone=%s"),
+					ChainEntry.ControllerPlayerIndex,
+					GetTCGEffectSelectionModeDebugName(Step.SelectionMode),
+					bChoiceStarted ? TEXT("true") : TEXT("false"),
+					bAutoSubmittedChoice ? TEXT("true") : TEXT("false"),
+					DebugChosenZoneId.IsNone() ? TEXT("None") : *DebugChosenZoneId.ToString());
+			}
+
+			bStepSucceeded = bAutoSubmittedChoice;
+			break;
+		}
+
 		bStepSucceeded = PlaySourceCardToFirstEmptyZone(ChainEntry.SourceCardInstanceId);
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step PlaySourceToEmptyZone Success=%s"), bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
@@ -496,6 +528,67 @@ void ATCG_GameState::GetPendingGraveyardToDeckChoiceOptions(TArray<FGuid>& OutCa
 void ATCG_GameState::ClearPendingGraveyardToDeckChoice()
 {
 	PendingGraveyardToDeckChoice.Reset();
+}
+
+bool ATCG_GameState::BeginPendingPlayToEmptyZoneChoice(int32 PlayerIndex, const FTCGEffectChainEntry& ChainEntry)
+{
+	if (!IsValidPlayerIndex(PlayerIndex) || PendingPlayToEmptyZoneChoice.bIsPending) return false;
+
+	const FTCGCardInstance* SourceCard = FindCardInstance(ChainEntry.SourceCardInstanceId);
+	if (!SourceCard || SourceCard->OwnerPlayerIndex != PlayerIndex) return false;
+
+	PendingPlayToEmptyZoneChoice.Reset();
+	PendingPlayToEmptyZoneChoice.bIsPending = true;
+	PendingPlayToEmptyZoneChoice.PlayerIndex = PlayerIndex;
+	PendingPlayToEmptyZoneChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
+	PendingPlayToEmptyZoneChoice.ChainIndex = ChainEntry.ChainIndex;
+
+	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
+	{
+		const FName ZoneId = GetFieldZoneId(PlayerIndex, FieldIndex);
+		FGuid ExistingStackId;
+		if (!FindStackIdInZone(ZoneId, ExistingStackId))
+		{
+			PendingPlayToEmptyZoneChoice.EligibleZoneIds.Add(ZoneId);
+		}
+	}
+
+	if (PendingPlayToEmptyZoneChoice.EligibleZoneIds.Num() <= 0)
+	{
+		ClearPendingPlayToEmptyZoneChoice();
+		return false;
+	}
+
+	return true;
+}
+
+bool ATCG_GameState::SubmitPendingPlayToEmptyZoneChoice(int32 PlayerIndex, FName ChosenZoneId)
+{
+	if (!PendingPlayToEmptyZoneChoice.bIsPending || PendingPlayToEmptyZoneChoice.PlayerIndex != PlayerIndex) return false;
+	if (ChosenZoneId.IsNone() || !PendingPlayToEmptyZoneChoice.EligibleZoneIds.Contains(ChosenZoneId)) return false;
+
+	const FGuid SourceCardInstanceId = PendingPlayToEmptyZoneChoice.SourceCardInstanceId;
+	const bool bPlayed = PlaySourceCardToEmptyZone(SourceCardInstanceId, ChosenZoneId);
+	if (!bPlayed) return false;
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending play-to-empty-zone choice submitted Player=%d Zone=%s"), PlayerIndex, *ChosenZoneId.ToString());
+	ClearPendingPlayToEmptyZoneChoice();
+	return true;
+}
+
+bool ATCG_GameState::HasPendingPlayToEmptyZoneChoice() const
+{
+	return PendingPlayToEmptyZoneChoice.bIsPending;
+}
+
+void ATCG_GameState::GetPendingPlayToEmptyZoneChoiceOptions(TArray<FName>& OutZoneIds) const
+{
+	OutZoneIds = PendingPlayToEmptyZoneChoice.EligibleZoneIds;
+}
+
+void ATCG_GameState::ClearPendingPlayToEmptyZoneChoice()
+{
+	PendingPlayToEmptyZoneChoice.Reset();
 }
 
 int32 ATCG_GameState::DiscardCardsFromHand(int32 PlayerIndex, int32 Count)
