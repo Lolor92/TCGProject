@@ -1,5 +1,6 @@
 #include "GameState/TCG_DebugScenarioRunner.h"
 #include "GameState/TCG_GameState.h"
+#include "Cards/TCG_CardDefinition.h"
 
 namespace
 {
@@ -8,10 +9,11 @@ namespace
 		NormalRoundFlow,
 		WraparoundBattle,
 		RoundLimitTiebreak,
-		OverlayPlacement
+		OverlayPlacement,
+		HandDetachResponse
 	};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::NormalRoundFlow;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::HandDetachResponse;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
@@ -85,6 +87,25 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		return StackIds.Num();
 	};
 
+	auto CountMaterialsUnderUnit = [GameState](const FGuid& TopCardId)
+	{
+		const FTCGCardInstance* TopCard = GameState->FindCardInstance(TopCardId);
+		if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid()) return 0;
+
+		int32 Count = 0;
+		for (const FTCGCardInstance& Card : GameState->MatchCards)
+		{
+			if (Card.Location == ETCGCardLocation::Board
+				&& Card.StackId == TopCard->StackId
+				&& Card.CardInstanceId != TopCard->CardInstanceId
+				&& Card.StackIndex < TopCard->StackIndex)
+			{
+				Count++;
+			}
+		}
+		return Count;
+	};
+
 	auto GetRoundLimitResult = [&CountBoardUnits]()
 	{
 		const int32 Player0UnitCount = CountBoardUnits(0);
@@ -93,6 +114,68 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		if (Player1UnitCount > Player0UnitCount) return ETCGMatchResult::Player1Wins;
 		return ETCGMatchResult::Draw;
 	};
+
+	if (DebugRunnerScenario == ETCGDebugRunnerScenario::HandDetachResponse)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Hand detach response scenario start"));
+		GameState->MatchCards.Empty();
+		GameState->SetMatchResult(ETCGMatchResult::None);
+		GameState->SetPhase(ETCGMatchPhase::Battle);
+		GameState->RoundNumber = 1;
+		GameState->TurnNumber = 1;
+
+		const FGuid VictimId = AddDebugBoardUnit("HandDetach_P0_Victim", ETCGCardElement::Earth, 1, 0, 0);
+		const FGuid DestroyerId = AddDebugBoardUnit("HandDetach_P1_Destroyer", ETCGCardElement::Dark, 10, 1, 0);
+
+		FTCGCardInstance* DestroyerCard = GameState->FindCardInstance(DestroyerId);
+		if (DestroyerCard)
+		{
+			DestroyerCard->StackIndex = 3;
+			for (int32 MaterialIndex = 0; MaterialIndex < 3; ++MaterialIndex)
+			{
+				FTCGCardInstance& MaterialCard = GameState->AddCardInstance(FName(*FString::Printf(TEXT("HandDetach_P1_Material_%d"), MaterialIndex)), ETCGCardElement::Water, 1, 1, ETCGCardLocation::Board);
+				MaterialCard.ZoneId = DestroyerCard->ZoneId;
+				MaterialCard.StackId = DestroyerCard->StackId;
+				MaterialCard.StackIndex = MaterialIndex;
+			}
+		}
+
+		UTCG_CardDefinition* ResponseCardDefinition = NewObject<UTCG_CardDefinition>(GameState);
+		ResponseCardDefinition->CardDefinitionId = "Debug_HandDetach_Response";
+		ResponseCardDefinition->DisplayName = FText::FromString(TEXT("Debug Hand Detach Response"));
+		ResponseCardDefinition->Element = ETCGCardElement::Wind;
+		ResponseCardDefinition->BaseAttack = 1;
+		ResponseCardDefinition->Description = FText::FromString(TEXT("If your unit is destroyed, you may discard this card; detach up to 2 materials from the unit that destroyed your unit."));
+
+		FTCGCardEffectRef ResponseEffect;
+		ResponseEffect.Trigger = ETCGEffectTrigger::OnYourUnitDestroyedByBattle;
+		ResponseEffect.bOptional = true;
+		FTCGEffectStep ResponseStep;
+		ResponseStep.StepType = ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget;
+		ResponseEffect.Steps.Add(ResponseStep);
+		ResponseCardDefinition->Effects.Add(ResponseEffect);
+		GameState->DebugCardDefinitions.Add(ResponseCardDefinition);
+
+		FTCGCardInstance* ResponseCard = GameState->AddCardInstanceFromDefinition(ResponseCardDefinition, 0, ETCGCardLocation::Hand);
+		const int32 MaterialsBefore = CountMaterialsUnderUnit(DestroyerId);
+
+		const bool bResolved = GameState->ResolveBattlePhase();
+		const FTCGCardInstance* VictimAfterBattle = GameState->FindCardInstance(VictimId);
+		const FTCGCardInstance* ResponseAfterBattle = ResponseCard ? GameState->FindCardInstance(ResponseCard->CardInstanceId) : nullptr;
+		const int32 MaterialsAfter = CountMaterialsUnderUnit(DestroyerId);
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: Hand detach response summary Resolved=%s VictimGraveyard=%s ResponseDiscarded=%s MaterialsBefore=%d MaterialsAfter=%d Detached=%d ExpectedDetached=2"),
+			bResolved ? TEXT("true") : TEXT("false"),
+			(VictimAfterBattle && VictimAfterBattle->Location == ETCGCardLocation::Graveyard) ? TEXT("true") : TEXT("false"),
+			(ResponseAfterBattle && ResponseAfterBattle->Location == ETCGCardLocation::Graveyard) ? TEXT("true") : TEXT("false"),
+			MaterialsBefore,
+			MaterialsAfter,
+			MaterialsBefore - MaterialsAfter);
+
+		GameState->EndMatch(ETCGMatchResult::Draw);
+		return;
+	}
 
 	if (DebugRunnerScenario == ETCGDebugRunnerScenario::WraparoundBattle)
 	{
