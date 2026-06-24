@@ -47,7 +47,8 @@ enum class ETCGEffectTrigger : uint8
 	OnDestroyedByBattle       UMETA(DisplayName = "16 - On Destroyed By Battle"),
 	OnYourUnitDestroyedByBattle UMETA(DisplayName = "17 - On Your Unit Destroyed By Battle"),
 	OnOpponentAttack          UMETA(DisplayName = "18 - On Opponent Attack"),
-	OnOpponentUnitEffectActivatedWhenYourUnitAttacks UMETA(DisplayName = "19 - On Opponent Unit Effect Activated When Your Unit Attacks")
+	OnOpponentUnitEffectActivatedWhenYourUnitAttacks UMETA(DisplayName = "19 - On Opponent Unit Effect Activated When Your Unit Attacks"),
+	OnYourUnitWouldBeDestroyedByCardEffect UMETA(DisplayName = "20 - On Your Unit Would Be Destroyed By Card Effect")
 };
 
 UENUM(BlueprintType)
@@ -77,7 +78,9 @@ enum class ETCGEffectStepType : uint8
 	MoveGraveyardCardToTopDeck          UMETA(DisplayName = "31 - Move Graveyard Card To Top Deck"),
 	AttackMillTwoWaterBounceBattlingUnit UMETA(DisplayName = "45 - Attack: Remove Material, Mill 2, Bounce Battle Target If Water"),
 	DiscardSourceDetachUpToTwoMaterialsFromTarget UMETA(DisplayName = "46 - Discard Source, Detach Up To 2 Materials From Target"),
-	BanishSourceNegateOpponentAttackEffectActivation UMETA(DisplayName = "47 - Banish Source, Negate Opponent Attack Effect Activation")
+	BanishSourceNegateOpponentAttackEffectActivation UMETA(DisplayName = "47 - Banish Source, Negate Opponent Attack Effect Activation"),
+	DestroyTargetUnitByCardEffect       UMETA(DisplayName = "48 - Destroy Target Unit By Card Effect"),
+	DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials UMETA(DisplayName = "49 - Discard Source, Return Target Unit To Hand, Draw If 2+ Materials")
 };
 
 UENUM(BlueprintType)
@@ -127,10 +130,10 @@ struct FTCGEffectStep
 	GENERATED_BODY()
 public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "1. Step") ETCGEffectStepType StepType = ETCGEffectStepType::None;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "2. Target", meta = (EditCondition = "StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::MoveBottomOverlayToGraveyard || StepType == ETCGEffectStepType::RemoveMaterialFromTargetUnit || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial", EditConditionHides)) ETCGEffectTargetMode TargetMode = ETCGEffectTargetMode::None;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "2. Target", meta = (EditCondition = "StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::MoveBottomOverlayToGraveyard || StepType == ETCGEffectStepType::RemoveMaterialFromTargetUnit || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial || StepType == ETCGEffectStepType::DestroyTargetUnitByCardEffect", EditConditionHides)) ETCGEffectTargetMode TargetMode = ETCGEffectTargetMode::None;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "3. Value", meta = (EditCondition = "StepType == ETCGEffectStepType::DrawCards || StepType == ETCGEffectStepType::DiscardCards || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::SendTopDeckCardsToGraveyard || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToBottomDeck || StepType == ETCGEffectStepType::MoveHandCardToTopDeck || StepType == ETCGEffectStepType::BoostAllOwnUnitsThisRound", EditConditionHides)) int32 Value = 0;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "3. Value", meta = (EditCondition = "StepType == ETCGEffectStepType::ModifyAttack", EditConditionHides)) ETCGEffectValueMode ValueMode = ETCGEffectValueMode::Fixed;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "4. Choice", meta = (EditCondition = "StepType != ETCGEffectStepType::None && StepType != ETCGEffectStepType::Then && StepType != ETCGEffectStepType::ModifyAttack && StepType != ETCGEffectStepType::SendTopDeckCardToGraveyard && StepType != ETCGEffectStepType::SendTopDeckCardsToGraveyard && StepType != ETCGEffectStepType::BoostAllOwnUnitsThisRound && StepType != ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit && StepType != ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget && StepType != ETCGEffectStepType::BanishSourceNegateOpponentAttackEffectActivation", EditConditionHides)) ETCGEffectSelectionMode SelectionMode = ETCGEffectSelectionMode::Automatic;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "4. Choice", meta = (EditCondition = "StepType != ETCGEffectStepType::None && StepType != ETCGEffectStepType::Then && StepType != ETCGEffectStepType::ModifyAttack && StepType != ETCGEffectStepType::SendTopDeckCardToGraveyard && StepType != ETCGEffectStepType::SendTopDeckCardsToGraveyard && StepType != ETCGEffectStepType::BoostAllOwnUnitsThisRound && StepType != ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit && StepType != ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget && StepType != ETCGEffectStepType::BanishSourceNegateOpponentAttackEffectActivation && StepType != ETCGEffectStepType::DestroyTargetUnitByCardEffect && StepType != ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials", EditConditionHides)) ETCGEffectSelectionMode SelectionMode = ETCGEffectSelectionMode::Automatic;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "5. Chain") bool bRequiresPreviousStepSuccess = false;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "6. Filter", meta = (EditCondition = "StepType == ETCGEffectStepType::SelectTarget || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToTopDeck || StepType == ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck || StepType == ETCGEffectStepType::PlayGraveyardCardToEmptyZone || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial", EditConditionHides)) FTCGEffectTargetFilter TargetFilter;
 };
