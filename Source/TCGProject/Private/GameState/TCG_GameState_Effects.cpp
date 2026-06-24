@@ -30,6 +30,8 @@ namespace
 		case ETCGEffectStepType::AttachSourceToWaterUnitMaterial: return TEXT("AttachSourceToWaterUnitMaterialLegacy");
 		case ETCGEffectStepType::AttachSourceToUnitMaterial: return TEXT("AttachSourceToUnitMaterial");
 		case ETCGEffectStepType::AttachGraveyardCardToSourceMaterial: return TEXT("AttachGraveyardCardToSourceMaterial");
+		case ETCGEffectStepType::SendTopDeckCardsToGraveyard: return TEXT("SendTopDeckCardsToGraveyard");
+		case ETCGEffectStepType::BoostAllOwnUnitsThisRound: return TEXT("BoostAllOwnUnitsThisRound");
 		default: return TEXT("None");
 		}
 	}
@@ -298,6 +300,25 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step SendTopDeckCardToGraveyard Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
+	case ETCGEffectStepType::SendTopDeckCardsToGraveyard:
+		{
+			const int32 SendCount = FMath::Max(1, Step.Value <= 0 ? 1 : Step.Value);
+			const int32 SentCount = SendTopDeckCardsToGraveyard(ChainEntry.ControllerPlayerIndex, SendCount);
+
+			bStepSucceeded = SentCount == SendCount;
+
+			if (bLogEffectResolution)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("TCG Effect: Step SendTopDeckCardsToGraveyard Player=%d Requested=%d Sent=%d Success=%s"),
+					ChainEntry.ControllerPlayerIndex,
+					SendCount,
+					SentCount,
+					bStepSucceeded ? TEXT("true") : TEXT("false"));
+			}
+
+			break;
+		}
 	case ETCGEffectStepType::MoveGraveyardCardToBottomDeck:
 	{
 		const int32 MoveCount = FMath::Max(1, Step.Value <= 0 ? 1 : Step.Value);
