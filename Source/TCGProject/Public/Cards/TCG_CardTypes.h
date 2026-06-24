@@ -67,7 +67,9 @@ enum class ETCGEffectStepType : uint8
 	SendTopDeckCardsToGraveyard         UMETA(DisplayName = "Send Top Deck Cards To Graveyard"),
 	BoostAllOwnUnitsThisRound           UMETA(DisplayName = "Boost All Own Units This Round"),
 	RevealTopDeckCardsAddElementToHand  UMETA(DisplayName = "Reveal Top Deck Cards Add Element To Hand"),
-	PlayGraveyardCardToEmptyZone        UMETA(DisplayName = "Play Graveyard Card To Empty Zone")
+	PlayGraveyardCardToEmptyZone        UMETA(DisplayName = "Play Graveyard Card To Empty Zone"),
+	MoveGraveyardCardsToHandAndTopDeck  UMETA(DisplayName = "Move Graveyard Cards To Hand And Top Deck"),
+	RemoveMaterialFromTargetUnit        UMETA(DisplayName = "Remove Material From Target Unit")
 };
 
 UENUM(BlueprintType)
