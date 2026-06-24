@@ -47,8 +47,13 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
 	ETCGEffectTrigger Trigger = ETCGEffectTrigger::None;
 
+	// Legacy/debug shortcut. Real effects should use EffectRef.Steps.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
 	FName EffectId = NAME_None;
+
+	// Full effect data captured when this chain entry is built.
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	FTCGCardEffectRef EffectRef;
 
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
 	int32 ControllerPlayerIndex = INDEX_NONE;
@@ -177,10 +182,15 @@ public:
 	int32 GetPrintedEffectsForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, TArray<FName>& OutEffectIds) const;
 	bool AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId,
 		const FGuid& TargetCardInstanceId, ETCGEffectTrigger Trigger, FName EffectId);
+	bool AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId,
+		const FGuid& TargetCardInstanceId, const FTCGCardEffectRef& EffectRef);
 	void ApplyDebugEffectChainEntryRequirements(FTCGEffectChainEntry& ChainEntry) const;
 	bool CanResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEntry) const;
 	int32 BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId, TArray<FTCGEffectChainEntry>& OutChain);
 	bool ResolveEffectChain(const TArray<FTCGEffectChainEntry>& Chain);
+	bool ResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);
+	bool ResolveModularEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);
+	bool ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step, bool bPreviousStepSucceeded);
 	bool ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);
 
 	bool MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLocation NewLocation);
@@ -203,6 +213,7 @@ public:
 	int32 GetNextLocationIndex(int32 PlayerIndex, ETCGCardLocation Location) const;
 	bool DrawCard(int32 PlayerIndex);
 	int32 DrawCards(int32 PlayerIndex, int32 Count);
+	int32 DiscardCardsFromHand(int32 PlayerIndex, int32 Count);
 	bool PlayFirstCardFromHandToZone(int32 PlayerIndex, FName ZoneId);
 	void CreateDebugTestCards();
 	void SetupDebugMatch();
