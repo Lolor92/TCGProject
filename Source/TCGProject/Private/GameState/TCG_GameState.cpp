@@ -697,10 +697,17 @@ bool ATCG_GameState::MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLoc
 	if (!Card) return false;
 
 	const ETCGCardLocation PreviousLocation = Card->Location;
+	const FTCGCardInstance* PreviousTopCard = nullptr;
+	if (PreviousLocation == ETCGCardLocation::Board && Card->StackId.IsValid())
+	{
+		PreviousTopCard = FindTopCardInStack(Card->StackId);
+	}
+
 	const bool bWasMaterial =
 		PreviousLocation == ETCGCardLocation::Board
 		&& Card->StackId.IsValid()
-		&& Card->StackIndex > 0;
+		&& PreviousTopCard
+		&& PreviousTopCard->CardInstanceId != CardInstanceId;
 
 	if (PreviousLocation == NewLocation)
 	{
