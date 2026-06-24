@@ -51,7 +51,8 @@ enum class ETCGEffectTrigger : uint8
 	OnBattleStart     UMETA(DisplayName = "On Battle Start"),
 	OnBattleEnd       UMETA(DisplayName = "On Battle End"),
 	OnStackAdded      UMETA(DisplayName = "On Stack Added"),
-	OnBecomingTopCard UMETA(DisplayName = "On Becoming Top Card")
+	OnBecomingTopCard UMETA(DisplayName = "On Becoming Top Card"),
+	OnAttack          UMETA(DisplayName = "On Attack")
 };
 
 /**
@@ -60,19 +61,20 @@ enum class ETCGEffectTrigger : uint8
 UENUM(BlueprintType)
 enum class ETCGEffectStepType : uint8
 {
-	None                            UMETA(DisplayName = "None"),
-	Then                            UMETA(DisplayName = "Then"),
-	DrawCards                       UMETA(DisplayName = "Draw Cards"),
-	DiscardCards                    UMETA(DisplayName = "Discard Cards"),
-	ModifyAttack                    UMETA(DisplayName = "Modify Attack"),
-	SelectTarget                    UMETA(DisplayName = "Select Target"),
-	MoveBottomOverlayToGraveyard    UMETA(DisplayName = "Move Bottom Overlay To Graveyard"),
-	PlaySourceToEmptyZone           UMETA(DisplayName = "Play Source To Empty Zone"),
-	SendTopDeckCardToGraveyard      UMETA(DisplayName = "Send Top Deck Card To Graveyard"),
-	MoveGraveyardCardToBottomDeck   UMETA(DisplayName = "Move Graveyard Card To Bottom Deck"),
-	AttachSourceToWaterUnitMaterial UMETA(DisplayName = "Attach Source To Water Unit Material Legacy"),
-	AttachSourceToUnitMaterial      UMETA(DisplayName = "Attach Source To Unit Material"),
-	MoveHandCardToTopDeck           UMETA(DisplayName = "Move Hand Card To Top Deck")
+	None                                  UMETA(DisplayName = "None"),
+	Then                                  UMETA(DisplayName = "Then"),
+	DrawCards                             UMETA(DisplayName = "Draw Cards"),
+	DiscardCards                          UMETA(DisplayName = "Discard Cards"),
+	ModifyAttack                          UMETA(DisplayName = "Modify Attack"),
+	SelectTarget                          UMETA(DisplayName = "Select Target"),
+	MoveBottomOverlayToGraveyard          UMETA(DisplayName = "Move Bottom Overlay To Graveyard"),
+	PlaySourceToEmptyZone                 UMETA(DisplayName = "Play Source To Empty Zone"),
+	SendTopDeckCardToGraveyard            UMETA(DisplayName = "Send Top Deck Card To Graveyard"),
+	MoveGraveyardCardToBottomDeck         UMETA(DisplayName = "Move Graveyard Card To Bottom Deck"),
+	AttachSourceToWaterUnitMaterial       UMETA(DisplayName = "Attach Source To Water Unit Material Legacy"),
+	AttachSourceToUnitMaterial            UMETA(DisplayName = "Attach Source To Unit Material"),
+	MoveHandCardToTopDeck                 UMETA(DisplayName = "Move Hand Card To Top Deck"),
+	AttachGraveyardCardToSourceMaterial   UMETA(DisplayName = "Attach Graveyard Card To Source Material")
 };
 
 /**
