@@ -30,8 +30,9 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		ATCG_GameState* TCGGameState = GetGameState<ATCG_GameState>();
 		if (TCGGameState)
 		{
-			// Dedicated Tide's Calling debug scenario.
-			TCGGameState->RunDebugTidesCallingScenario();
+			TCGGameState->StartMatch();
+			TCGGameState->SetupDebugMatch();
+			TCGGameState->RunDebugTurnFlow();
 		}
 	}
 }
