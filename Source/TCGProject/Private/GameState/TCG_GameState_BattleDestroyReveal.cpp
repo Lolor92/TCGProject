@@ -39,6 +39,36 @@ namespace
 		}
 		return Count;
 	}
+
+	bool MoveRevealedCardsWithChoice(ATCG_GameState* GameState, int32 PlayerIndex, const TArray<FGuid>& RevealedCardIds, const FGuid& ChosenCardId)
+	{
+		if (!GameState || !ChosenCardId.IsValid()) return false;
+
+		const FTCGCardInstance* ChosenCardBeforeMove = GameState->FindCardInstance(ChosenCardId);
+		const FName ChosenCardDefinitionId = ChosenCardBeforeMove ? ChosenCardBeforeMove->CardDefinitionId : NAME_None;
+
+		if (!GameState->MoveCardToLocation(ChosenCardId, ETCGCardLocation::Hand)) return false;
+
+		int32 SentOtherCount = 0;
+		for (const FGuid& RevealedCardId : RevealedCardIds)
+		{
+			if (RevealedCardId == ChosenCardId) continue;
+			const FTCGCardInstance* OtherCardBeforeMove = GameState->FindCardInstance(RevealedCardId);
+			const FName OtherCardDefinitionId = OtherCardBeforeMove ? OtherCardBeforeMove->CardDefinitionId : NAME_None;
+			if (GameState->MoveCardToLocation(RevealedCardId, ETCGCardLocation::Graveyard))
+			{
+				SentOtherCount++;
+				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal sent other card to graveyard Player=%d Card=%s"), PlayerIndex, *OtherCardDefinitionId.ToString());
+			}
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal added chosen card to hand Player=%d Card=%s SentOther=%d"),
+			PlayerIndex,
+			*ChosenCardDefinitionId.ToString(),
+			SentOtherCount);
+
+		return true;
+	}
 }
 
 bool ATCG_GameState::RevealTopDeckCardsAddElementToHand(int32 PlayerIndex, int32 Count, const FTCGEffectTargetFilter& TargetFilter)
@@ -72,7 +102,7 @@ bool ATCG_GameState::RevealTopDeckCardsAddElementToHand(int32 PlayerIndex, int32
 		return false;
 	}
 
-	return SubmitPendingRevealDeckChoice(PlayerIndex, ChosenCardId);
+	return MoveRevealedCardsWithChoice(this, PlayerIndex, RevealedCardIds, ChosenCardId);
 }
 
 bool ATCG_GameState::BeginPendingRevealDeckChoice(int32 PlayerIndex, int32 Count, const FTCGEffectTargetFilter& TargetFilter, const FTCGEffectChainEntry& ChainEntry)
@@ -128,28 +158,8 @@ bool ATCG_GameState::SubmitPendingRevealDeckChoice(int32 PlayerIndex, const FGui
 	if (!ChosenCardInstanceId.IsValid() || !PendingRevealDeckChoice.EligibleCardInstanceIds.Contains(ChosenCardInstanceId)) return false;
 
 	const TArray<FGuid> RevealedCardIds = PendingRevealDeckChoice.RevealedCardInstanceIds;
-	const FTCGCardInstance* ChosenCardBeforeMove = FindCardInstance(ChosenCardInstanceId);
-	const FName ChosenCardDefinitionId = ChosenCardBeforeMove ? ChosenCardBeforeMove->CardDefinitionId : NAME_None;
-
-	if (!MoveCardToLocation(ChosenCardInstanceId, ETCGCardLocation::Hand)) return false;
-
-	int32 SentOtherCount = 0;
-	for (const FGuid& RevealedCardId : RevealedCardIds)
-	{
-		if (RevealedCardId == ChosenCardInstanceId) continue;
-		const FTCGCardInstance* OtherCardBeforeMove = FindCardInstance(RevealedCardId);
-		const FName OtherCardDefinitionId = OtherCardBeforeMove ? OtherCardBeforeMove->CardDefinitionId : NAME_None;
-		if (MoveCardToLocation(RevealedCardId, ETCGCardLocation::Graveyard))
-		{
-			SentOtherCount++;
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal sent other card to graveyard Player=%d Card=%s"), PlayerIndex, *OtherCardDefinitionId.ToString());
-		}
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal added chosen card to hand Player=%d Card=%s SentOther=%d"),
-		PlayerIndex,
-		*ChosenCardDefinitionId.ToString(),
-		SentOtherCount);
+	const bool bMoved = MoveRevealedCardsWithChoice(this, PlayerIndex, RevealedCardIds, ChosenCardInstanceId);
+	if (!bMoved) return false;
 
 	ClearPendingRevealDeckChoice();
 	return true;
