@@ -275,6 +275,89 @@ namespace
 
 		GameState->EndMatch(ETCGMatchResult::Draw);
 	}
+
+	void RunDebugGraveyardNegateOpponentAttackScenario(ATCG_GameState* GameState)
+	{
+		if (!GameState) return;
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: GraveyardNegateOpponentAttack scenario start"));
+
+		GameState->MatchCards.Empty();
+		GameState->StartMatch();
+		GameState->SetPhase(ETCGMatchPhase::Battle);
+		GameState->SetMatchResult(ETCGMatchResult::None);
+
+		const FGuid AttackerId = GameState->AddCardInstance("Debug_GraveNegate_Attacker", ETCGCardElement::Light, 5, 0, ETCGCardLocation::Board).CardInstanceId;
+		if (FTCGCardInstance* Attacker = GameState->FindCardInstance(AttackerId))
+		{
+			Attacker->ZoneId = ATCG_GameState::GetFieldZoneId(0, 0);
+			Attacker->StackId = FGuid::NewGuid();
+			Attacker->StackIndex = 0;
+		}
+
+		UTCG_CardDefinition* DefenderDefinition = NewObject<UTCG_CardDefinition>(GameState);
+		DefenderDefinition->CardDefinitionId = "Debug_GraveNegate_Defender";
+		DefenderDefinition->Element = ETCGCardElement::Dark;
+		DefenderDefinition->BaseAttack = 1;
+
+		FTCGCardEffectRef DefenderEffect;
+		DefenderEffect.Trigger = ETCGEffectTrigger::OnOpponentAttack;
+		FTCGEffectStep DefenderBoostStep;
+		DefenderBoostStep.StepType = ETCGEffectStepType::ModifyAttack;
+		DefenderBoostStep.TargetMode = ETCGEffectTargetMode::SourceCard;
+		DefenderBoostStep.Value = 99;
+		DefenderEffect.Steps.Add(DefenderBoostStep);
+		DefenderDefinition->Effects.Add(DefenderEffect);
+		GameState->DebugCardDefinitions.Add(DefenderDefinition);
+
+		FTCGCardInstance* DefenderCard = GameState->AddCardInstanceFromDefinition(DefenderDefinition, 1, ETCGCardLocation::Board);
+		const FGuid DefenderId = DefenderCard ? DefenderCard->CardInstanceId : FGuid();
+		if (FTCGCardInstance* Defender = GameState->FindCardInstance(DefenderId))
+		{
+			Defender->ZoneId = ATCG_GameState::GetFieldZoneId(1, 0);
+			Defender->StackId = FGuid::NewGuid();
+			Defender->StackIndex = 0;
+		}
+
+		UTCG_CardDefinition* ResponseDefinition = NewObject<UTCG_CardDefinition>(GameState);
+		ResponseDefinition->CardDefinitionId = "Debug_GraveNegate_Response";
+		ResponseDefinition->Element = ETCGCardElement::Wind;
+		ResponseDefinition->BaseAttack = 1;
+
+		FTCGCardEffectRef ResponseEffect;
+		ResponseEffect.Trigger = ETCGEffectTrigger::OnOpponentUnitEffectActivatedWhenYourUnitAttacks;
+		ResponseEffect.bOptional = true;
+		FTCGEffectStep ResponseStep;
+		ResponseStep.StepType = ETCGEffectStepType::BanishSourceNegateOpponentAttackEffectActivation;
+		ResponseEffect.Steps.Add(ResponseStep);
+		ResponseDefinition->Effects.Add(ResponseEffect);
+		GameState->DebugCardDefinitions.Add(ResponseDefinition);
+
+		FTCGCardInstance* ResponseCard = GameState->AddCardInstanceFromDefinition(ResponseDefinition, 0, ETCGCardLocation::Graveyard);
+		const FGuid ResponseId = ResponseCard ? ResponseCard->CardInstanceId : FGuid();
+
+		const bool bBattleResolved = GameState->ResolveBattlePhase();
+
+		const FTCGCardInstance* AttackerAfter = GameState->FindCardInstance(AttackerId);
+		const FTCGCardInstance* DefenderAfter = GameState->FindCardInstance(DefenderId);
+		const FTCGCardInstance* ResponseAfter = GameState->FindCardInstance(ResponseId);
+
+		const bool bAttackerStillBoard = AttackerAfter && AttackerAfter->Location == ETCGCardLocation::Board;
+		const bool bDefenderGraveyard = DefenderAfter && DefenderAfter->Location == ETCGCardLocation::Graveyard;
+		const bool bResponseBanished = ResponseAfter && ResponseAfter->Location == ETCGCardLocation::Banish;
+		const bool bDefenderBoostPrevented = DefenderAfter && DefenderAfter->AttackModifier == 0;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: GraveyardNegateOpponentAttack summary Battle=%s ResponseBanished=%s DefenderBoostPrevented=%s AttackerStillBoard=%s DefenderGraveyard=%s DefenderAttackModifier=%d"),
+			bBattleResolved ? TEXT("true") : TEXT("false"),
+			bResponseBanished ? TEXT("true") : TEXT("false"),
+			bDefenderBoostPrevented ? TEXT("true") : TEXT("false"),
+			bAttackerStillBoard ? TEXT("true") : TEXT("false"),
+			bDefenderGraveyard ? TEXT("true") : TEXT("false"),
+			DefenderAfter ? DefenderAfter->AttackModifier : INDEX_NONE);
+
+		GameState->EndMatch(ETCGMatchResult::Draw);
+	}
 }
 
 void ATCG_GameState::RunDebugMaterialRebirthScenario()
@@ -365,4 +448,5 @@ void ATCG_GameState::RunDebugMaterialRebirthScenario()
 	RunDebugAttackMillGraveyardSplitScenario(this);
 	RunDebugAttackMillBounceScenario(this);
 	RunDebugHandDetachResponseScenario(this);
+	RunDebugGraveyardNegateOpponentAttackScenario(this);
 }
