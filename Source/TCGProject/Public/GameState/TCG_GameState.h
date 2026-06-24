@@ -265,4 +265,5 @@ public:
 	void CreateDebugTestCards();
 	void SetupDebugMatch();
 	void RunDebugTurnFlow();
+	void RunDebugTidesCallingScenario();
 };
