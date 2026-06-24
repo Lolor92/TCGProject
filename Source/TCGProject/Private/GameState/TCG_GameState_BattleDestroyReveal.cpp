@@ -72,14 +72,71 @@ bool ATCG_GameState::RevealTopDeckCardsAddElementToHand(int32 PlayerIndex, int32
 		return false;
 	}
 
-	const FTCGCardInstance* ChosenCardBeforeMove = FindCardInstance(ChosenCardId);
+	return SubmitPendingRevealDeckChoice(PlayerIndex, ChosenCardId);
+}
+
+bool ATCG_GameState::BeginPendingRevealDeckChoice(int32 PlayerIndex, int32 Count, const FTCGEffectTargetFilter& TargetFilter, const FTCGEffectChainEntry& ChainEntry)
+{
+	if (!IsValidPlayerIndex(PlayerIndex) || Count <= 0 || PendingRevealDeckChoice.bIsPending) return false;
+
+	const TArray<FGuid> RevealedCardIds = GetTopDeckCardIds(this, PlayerIndex, Count);
+	if (RevealedCardIds.Num() <= 0) return false;
+
+	PendingRevealDeckChoice.Reset();
+	PendingRevealDeckChoice.bIsPending = true;
+	PendingRevealDeckChoice.PlayerIndex = PlayerIndex;
+	PendingRevealDeckChoice.RequiredCount = 1;
+	PendingRevealDeckChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
+	PendingRevealDeckChoice.ChainIndex = ChainEntry.ChainIndex;
+	PendingRevealDeckChoice.RevealedCardInstanceIds = RevealedCardIds;
+
+	for (const FGuid& RevealedCardId : RevealedCardIds)
+	{
+		const FTCGCardInstance* RevealedCard = FindCardInstance(RevealedCardId);
+		if (!RevealedCard) continue;
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Revealed top deck card Player=%d Card=%s Element=%d"),
+			PlayerIndex,
+			*RevealedCard->CardDefinitionId.ToString(),
+			static_cast<int32>(RevealedCard->Element));
+
+		const bool bMatchesElement = !TargetFilter.bRequireElement || RevealedCard->Element == TargetFilter.RequiredElement;
+		if (bMatchesElement)
+		{
+			PendingRevealDeckChoice.EligibleCardInstanceIds.Add(RevealedCardId);
+		}
+	}
+
+	if (PendingRevealDeckChoice.EligibleCardInstanceIds.Num() <= 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal choice found no matching card, cards stay on top deck in same order Player=%d Revealed=%d"), PlayerIndex, RevealedCardIds.Num());
+		ClearPendingRevealDeckChoice();
+		return false;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending reveal deck choice started Player=%d Revealed=%d Eligible=%d"),
+		PlayerIndex,
+		PendingRevealDeckChoice.RevealedCardInstanceIds.Num(),
+		PendingRevealDeckChoice.EligibleCardInstanceIds.Num());
+
+	return true;
+}
+
+bool ATCG_GameState::SubmitPendingRevealDeckChoice(int32 PlayerIndex, const FGuid& ChosenCardInstanceId)
+{
+	if (!PendingRevealDeckChoice.bIsPending || PendingRevealDeckChoice.PlayerIndex != PlayerIndex) return false;
+	if (!ChosenCardInstanceId.IsValid() || !PendingRevealDeckChoice.EligibleCardInstanceIds.Contains(ChosenCardInstanceId)) return false;
+
+	const TArray<FGuid> RevealedCardIds = PendingRevealDeckChoice.RevealedCardInstanceIds;
+	const FTCGCardInstance* ChosenCardBeforeMove = FindCardInstance(ChosenCardInstanceId);
 	const FName ChosenCardDefinitionId = ChosenCardBeforeMove ? ChosenCardBeforeMove->CardDefinitionId : NAME_None;
-	MoveCardToLocation(ChosenCardId, ETCGCardLocation::Hand);
+
+	if (!MoveCardToLocation(ChosenCardInstanceId, ETCGCardLocation::Hand)) return false;
 
 	int32 SentOtherCount = 0;
 	for (const FGuid& RevealedCardId : RevealedCardIds)
 	{
-		if (RevealedCardId == ChosenCardId) continue;
+		if (RevealedCardId == ChosenCardInstanceId) continue;
 		const FTCGCardInstance* OtherCardBeforeMove = FindCardInstance(RevealedCardId);
 		const FName OtherCardDefinitionId = OtherCardBeforeMove ? OtherCardBeforeMove->CardDefinitionId : NAME_None;
 		if (MoveCardToLocation(RevealedCardId, ETCGCardLocation::Graveyard))
@@ -89,13 +146,19 @@ bool ATCG_GameState::RevealTopDeckCardsAddElementToHand(int32 PlayerIndex, int32
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal added card to hand Player=%d Card=%s SentOther=%d"),
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal added chosen card to hand Player=%d Card=%s SentOther=%d"),
 		PlayerIndex,
 		*ChosenCardDefinitionId.ToString(),
 		SentOtherCount);
 
+	ClearPendingRevealDeckChoice();
 	return true;
 }
+
+bool ATCG_GameState::HasPendingRevealDeckChoice() const { return PendingRevealDeckChoice.bIsPending; }
+void ATCG_GameState::GetPendingRevealDeckChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingRevealDeckChoice.EligibleCardInstanceIds; }
+void ATCG_GameState::GetPendingRevealDeckChoiceRevealedCards(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingRevealDeckChoice.RevealedCardInstanceIds; }
+void ATCG_GameState::ClearPendingRevealDeckChoice() { PendingRevealDeckChoice.Reset(); }
 
 namespace
 {
