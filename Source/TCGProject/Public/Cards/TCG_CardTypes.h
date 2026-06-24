@@ -86,6 +86,17 @@ enum class ETCGEffectTargetMode : uint8
 };
 
 /**
+ * How an effect step gets its numeric value.
+ */
+UENUM(BlueprintType)
+enum class ETCGEffectValueMode : uint8
+{
+	Fixed                  UMETA(DisplayName = "Fixed"),
+	CardsUnderneathSource  UMETA(DisplayName = "Cards Underneath Source"),
+	CardsUnderneathTarget  UMETA(DisplayName = "Cards Underneath Target")
+};
+
+/**
  * Basic target filter for selection steps.
  *
  * This is intentionally small for now. It gives us a data shape that can grow
@@ -113,7 +124,8 @@ public:
  * Examples:
  * - DrawCards, TargetMode Controller, Value 2
  * - DiscardCards, TargetMode Controller, Value 1, bRequiresPreviousStepSuccess true
- * - ModifyAttack, TargetMode SourceCard, Value 2, bRequiresPreviousStepSuccess true
+ * - ModifyAttack, TargetMode SourceCard, Value 2, ValueMode Fixed
+ * - ModifyAttack, TargetMode TriggerTarget, ValueMode CardsUnderneathTarget
  */
 USTRUCT(BlueprintType)
 struct FTCGEffectStep
@@ -128,9 +140,13 @@ public:
 	ETCGEffectTargetMode TargetMode = ETCGEffectTargetMode::None;
 
 	// Generic number used by the step.
-	// DrawCards: number to draw. DiscardCards: number to discard. ModifyAttack: amount to add.
+	// DrawCards: number to draw. DiscardCards: number to discard.
+	// ModifyAttack with Fixed value mode: amount to add.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	int32 Value = 0;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	ETCGEffectValueMode ValueMode = ETCGEffectValueMode::Fixed;
 
 	// If true, this step only resolves when the previous meaningful step succeeded.
 	// This is the data version of "then".
