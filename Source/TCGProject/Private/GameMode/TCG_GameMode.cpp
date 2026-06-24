@@ -30,9 +30,8 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		ATCG_GameState* TCGGameState = GetGameState<ATCG_GameState>();
 		if (TCGGameState)
 		{
-			TCGGameState->StartMatch();
-			TCGGameState->SetupDebugMatch();
-			TCGGameState->RunDebugTurnFlow();
+			// Dedicated Dreampool Mirechant debug scenario.
+			TCGGameState->RunDebugDreampoolMirechantScenario();
 		}
 	}
 }
