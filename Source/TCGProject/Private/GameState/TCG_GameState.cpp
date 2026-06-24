@@ -34,6 +34,10 @@ namespace
 		case ETCGEffectTrigger::OnPlay: return TEXT("OnPlay");
 		case ETCGEffectTrigger::OnDestroyed: return TEXT("OnDestroyed");
 		case ETCGEffectTrigger::OnSentToGraveyard: return TEXT("OnSentToGraveyard");
+		case ETCGEffectTrigger::OnSentFromDeckToGraveyard: return TEXT("OnSentFromDeckToGraveyard");
+		case ETCGEffectTrigger::OnSentFromHandToGraveyard: return TEXT("OnSentFromHandToGraveyard");
+		case ETCGEffectTrigger::OnSentFromBoardToGraveyard: return TEXT("OnSentFromBoardToGraveyard");
+		case ETCGEffectTrigger::OnSentFromMaterialToGraveyard: return TEXT("OnSentFromMaterialToGraveyard");
 		case ETCGEffectTrigger::OnBanished: return TEXT("OnBanished");
 		case ETCGEffectTrigger::OnBattleStart: return TEXT("OnBattleStart");
 		case ETCGEffectTrigger::OnBattleEnd: return TEXT("OnBattleEnd");
@@ -582,6 +586,16 @@ void ATCG_GameState::ApplyDebugEffectChainEntryRequirements(FTCGEffectChainEntry
 	ChainEntry.bRequiresSourceInTargetStack = false;
 	ChainEntry.bRequiresSourceUnderTarget = false;
 
+	if (ChainEntry.Trigger == ETCGEffectTrigger::OnSentToGraveyard
+		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromDeckToGraveyard
+		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromHandToGraveyard
+		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromBoardToGraveyard
+		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromMaterialToGraveyard)
+	{
+		ChainEntry.bRequiresSourceOnBoard = false;
+		ChainEntry.bRequiresTargetOnBoard = false;
+	}
+
 	if (ChainEntry.EffectId == DebugEffect_Draw1 && SourceCard->CardInstanceId != TargetCard->CardInstanceId)
 	{
 		ChainEntry.bRequiresSourceInTargetStack = true;
@@ -682,14 +696,75 @@ bool ATCG_GameState::MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLoc
 	FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
 	if (!Card) return false;
 
+	const ETCGCardLocation PreviousLocation = Card->Location;
+	const bool bWasMaterial =
+		PreviousLocation == ETCGCardLocation::Board
+		&& Card->StackId.IsValid()
+		&& Card->StackIndex > 0;
+
+	if (PreviousLocation == NewLocation)
+	{
+		return true;
+	}
+
 	Card->Location = NewLocation;
 	Card->LocationIndex = GetNextLocationIndex(Card->OwnerPlayerIndex, NewLocation);
+
 	if (NewLocation != ETCGCardLocation::Board)
 	{
 		Card->ZoneId = NAME_None;
 		Card->StackId.Invalidate();
 		Card->StackIndex = INDEX_NONE;
 	}
+
+	if (NewLocation == ETCGCardLocation::Graveyard && PreviousLocation != ETCGCardLocation::Graveyard)
+	{
+		HandleCardSentToGraveyard(CardInstanceId);
+
+		ETCGEffectTrigger SpecificGraveyardTrigger = ETCGEffectTrigger::None;
+		if (PreviousLocation == ETCGCardLocation::Deck)
+		{
+			SpecificGraveyardTrigger = ETCGEffectTrigger::OnSentFromDeckToGraveyard;
+		}
+		else if (PreviousLocation == ETCGCardLocation::Hand)
+		{
+			SpecificGraveyardTrigger = ETCGEffectTrigger::OnSentFromHandToGraveyard;
+		}
+		else if (bWasMaterial)
+		{
+			SpecificGraveyardTrigger = ETCGEffectTrigger::OnSentFromMaterialToGraveyard;
+		}
+		else if (PreviousLocation == ETCGCardLocation::Board)
+		{
+			SpecificGraveyardTrigger = ETCGEffectTrigger::OnSentFromBoardToGraveyard;
+		}
+
+		TArray<FTCGEffectChainEntry> GraveyardChain;
+
+		const FTCGCardInstance* MovedCard = FindCardInstance(CardInstanceId);
+		if (MovedCard)
+		{
+			TArray<FTCGCardEffectRef> EffectRefs;
+			GetPrintedEffectRefsForCard(*MovedCard, EffectRefs);
+
+			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+			{
+				if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnSentToGraveyard))
+				{
+					AddCardEffectRefToChain(GraveyardChain, CardInstanceId, CardInstanceId, EffectRef);
+				}
+
+				if (SpecificGraveyardTrigger != ETCGEffectTrigger::None
+					&& DoesCardEffectMatchTrigger(EffectRef, SpecificGraveyardTrigger))
+				{
+					AddCardEffectRefToChain(GraveyardChain, CardInstanceId, CardInstanceId, EffectRef);
+				}
+			}
+		}
+
+		ResolveEffectChain(GraveyardChain);
+	}
+
 	return true;
 }
 
