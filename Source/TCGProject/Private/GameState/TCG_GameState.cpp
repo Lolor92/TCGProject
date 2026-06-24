@@ -10,7 +10,7 @@ namespace
 	constexpr bool bLogBattleFlow = true;
 	constexpr bool bLogEffectChains = false;
 	constexpr bool bLogVerboseCardTriggers = false;
-	constexpr int32 DebugMaxRoundCount = 2;
+	constexpr int32 DebugMaxRoundCount = 20;
 
 	const FName DebugCard_FireDeckA = "Debug_Fire_Deck_A";
 	const FName DebugCard_FireDeckB = "Debug_Fire_Deck_B";
@@ -913,25 +913,53 @@ bool ATCG_GameState::ResolveBattlePhase()
 
 	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
 	{
-		const FName Player0ZoneId = GetFieldZoneId(0, FieldIndex);
-		const FName Player1ZoneId = GetFieldZoneId(1, FieldIndex);
+		const int32 AttackerPlayerIndex = FieldIndex % 2 == 0 ? 0 : 1;
+		const int32 DefenderPlayerIndex = 1 - AttackerPlayerIndex;
+		const FName AttackerZoneId = GetFieldZoneId(AttackerPlayerIndex, FieldIndex);
+		const FTCGCardInstance* AttackerCard = FindTopCardInZone(AttackerZoneId);
 
-		const FTCGCardInstance* Player0Card = FindTopCardInZone(Player0ZoneId);
-		const FTCGCardInstance* Player1Card = FindTopCardInZone(Player1ZoneId);
-
-		if (!Player0Card && !Player1Card) continue;
-		if (!Player0Card || !Player1Card)
+		if (!AttackerCard)
 		{
 			if (bLogBattleFlow)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle skipped %s vs %s P0Card=%s P1Card=%s"),
-					*Player0ZoneId.ToString(), *Player1ZoneId.ToString(),
-					Player0Card ? *Player0Card->CardDefinitionId.ToString() : TEXT("None"),
-					Player1Card ? *Player1Card->CardDefinitionId.ToString() : TEXT("None"));
+				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle declaration skipped Field=%d Attacker=P%d Reason=NoAttacker"), FieldIndex, AttackerPlayerIndex);
 			}
 			continue;
 		}
 
+		FName DefenderZoneId = NAME_None;
+		int32 DefenderFieldIndex = INDEX_NONE;
+
+		for (int32 SearchOffset = 0; SearchOffset < FieldZoneCount; ++SearchOffset)
+		{
+			const int32 CandidateFieldIndex = (FieldIndex + SearchOffset) % FieldZoneCount;
+			const FName CandidateZoneId = GetFieldZoneId(DefenderPlayerIndex, CandidateFieldIndex);
+
+			if (FindTopCardInZone(CandidateZoneId))
+			{
+				DefenderZoneId = CandidateZoneId;
+				DefenderFieldIndex = CandidateFieldIndex;
+				break;
+			}
+		}
+
+		if (DefenderZoneId.IsNone())
+		{
+			if (bLogBattleFlow)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle declaration skipped Field=%d Attacker=P%d Reason=NoDefender"), FieldIndex, AttackerPlayerIndex);
+			}
+			continue;
+		}
+
+		if (bLogBattleFlow)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle declaration Field=%d Attacker=P%d Target=P%d Field=%d"),
+				FieldIndex, AttackerPlayerIndex, DefenderPlayerIndex, DefenderFieldIndex);
+		}
+
+		const FName Player0ZoneId = AttackerPlayerIndex == 0 ? AttackerZoneId : DefenderZoneId;
+		const FName Player1ZoneId = AttackerPlayerIndex == 1 ? AttackerZoneId : DefenderZoneId;
 		bResolvedAnyBattle |= ResolveBattleBetweenZones(Player0ZoneId, Player1ZoneId);
 	}
 
@@ -1059,32 +1087,10 @@ void ATCG_GameState::SetupDebugMatch()
 
 void ATCG_GameState::RunDebugTurnFlow()
 {
-	auto HasAnyCardsInHandOrDeck = [this]()
-	{
-		TArray<FTCGCardInstance> Player0Hand;
-		TArray<FTCGCardInstance> Player1Hand;
-		TArray<FTCGCardInstance> Player0Deck;
-		TArray<FTCGCardInstance> Player1Deck;
-		GetCardsInHand(0, Player0Hand);
-		GetCardsInHand(1, Player1Hand);
-		GetCardsInDeck(0, Player0Deck);
-		GetCardsInDeck(1, Player1Deck);
-		return Player0Hand.Num() + Player1Hand.Num() + Player0Deck.Num() + Player1Deck.Num() > 0;
-	};
-
 	int32 RoundsResolved = 0;
 
 	while (!IsMatchOver() && RoundsResolved < DebugMaxRoundCount)
 	{
-		if (RoundsResolved > 0 && !HasAnyCardsInHandOrDeck())
-		{
-			if (bLogRoundFlow)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round loop stopped, no cards left in hand/deck for placement"));
-			}
-			break;
-		}
-
 		if (RoundsResolved > 0)
 		{
 			RoundNumber++;
@@ -1114,14 +1120,20 @@ void ATCG_GameState::RunDebugTurnFlow()
 			}
 
 			const int32 FieldIndex = GetNextRequiredFieldZoneIndex(ActivePlayer);
+			const int32 LogStepNumber = PlacementStepIndex + 1;
+
 			if (FieldIndex == INDEX_NONE)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement step %d P%d no legal field zone"), PlacementStepIndex + 1, ActivePlayer);
-				break;
+				if (bLogPlacementFlow)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement R%d Step=%d P%d skipped no empty field"), RoundNumber, LogStepNumber, ActivePlayer);
+				}
+
+				AdvancePlacementStep();
+				continue;
 			}
 
 			const FName ZoneId = GetFieldZoneId(ActivePlayer, FieldIndex);
-			const int32 LogStepNumber = PlacementStepIndex + 1;
 			const bool bPlayedCard = PlayFirstCardFromHandToZone(ActivePlayer, ZoneId);
 
 			if (bLogPlacementFlow)
@@ -1130,7 +1142,10 @@ void ATCG_GameState::RunDebugTurnFlow()
 					RoundNumber, LogStepNumber, ActivePlayer, FieldIndex, bPlayedCard ? TEXT("true") : TEXT("false"));
 			}
 
-			if (!bPlayedCard) break;
+			if (!bPlayedCard)
+			{
+				AdvancePlacementStep();
+			}
 		}
 
 		if (CurrentPhase != ETCGMatchPhase::Battle)
@@ -1172,6 +1187,11 @@ void ATCG_GameState::RunDebugTurnFlow()
 		{
 			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round %d end"), RoundNumber);
 		}
+	}
+
+	if (!IsMatchOver() && RoundsResolved >= DebugMaxRoundCount)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round loop stopped at debug max rounds: %d"), DebugMaxRoundCount);
 	}
 }
 
