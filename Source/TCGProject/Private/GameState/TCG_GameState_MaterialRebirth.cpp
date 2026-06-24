@@ -84,6 +84,94 @@ namespace
 
 		GameState->EndMatch(ETCGMatchResult::Draw);
 	}
+
+	void RunDebugAttackMillBounceScenario(ATCG_GameState* GameState)
+	{
+		if (!GameState) return;
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: AttackMillBounce scenario start"));
+
+		GameState->MatchCards.Empty();
+		GameState->StartMatch();
+		GameState->SetPhase(ETCGMatchPhase::Battle);
+		GameState->SetMatchResult(ETCGMatchResult::None);
+
+		const FGuid AttackerStackId = FGuid::NewGuid();
+		const FName AttackerZoneId = ATCG_GameState::GetFieldZoneId(0, 0);
+		const FGuid AttackerMaterialId = GameState->AddCardInstance("Debug_Water_AttackMillBounce_Material", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Board).CardInstanceId;
+		if (FTCGCardInstance* AttackerMaterial = GameState->FindCardInstance(AttackerMaterialId))
+		{
+			AttackerMaterial->ZoneId = AttackerZoneId;
+			AttackerMaterial->StackId = AttackerStackId;
+			AttackerMaterial->StackIndex = 0;
+		}
+
+		const FGuid AttackerTopId = GameState->AddCardInstance("Debug_Fire_AttackMillBounce_Attacker", ETCGCardElement::Fire, 1, 0, ETCGCardLocation::Board).CardInstanceId;
+		if (FTCGCardInstance* AttackerTop = GameState->FindCardInstance(AttackerTopId))
+		{
+			AttackerTop->ZoneId = AttackerZoneId;
+			AttackerTop->StackId = AttackerStackId;
+			AttackerTop->StackIndex = 1;
+		}
+
+		const FGuid DefenderStackId = FGuid::NewGuid();
+		const FName DefenderZoneId = ATCG_GameState::GetFieldZoneId(1, 0);
+		const FGuid DefenderMaterialId = GameState->AddCardInstance("Debug_Earth_AttackMillBounce_DefenderMaterial", ETCGCardElement::Earth, 1, 1, ETCGCardLocation::Board).CardInstanceId;
+		if (FTCGCardInstance* DefenderMaterial = GameState->FindCardInstance(DefenderMaterialId))
+		{
+			DefenderMaterial->ZoneId = DefenderZoneId;
+			DefenderMaterial->StackId = DefenderStackId;
+			DefenderMaterial->StackIndex = 0;
+		}
+
+		const FGuid DefenderTopId = GameState->AddCardInstance("Debug_Dark_AttackMillBounce_Defender", ETCGCardElement::Dark, 99, 1, ETCGCardLocation::Board).CardInstanceId;
+		if (FTCGCardInstance* DefenderTop = GameState->FindCardInstance(DefenderTopId))
+		{
+			DefenderTop->ZoneId = DefenderZoneId;
+			DefenderTop->StackId = DefenderStackId;
+			DefenderTop->StackIndex = 1;
+		}
+
+		const FGuid FirstMilledId = GameState->AddCardInstance("Debug_Water_AttackMillBounce_MillA", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Deck).CardInstanceId;
+		const FGuid SecondMilledId = GameState->AddCardInstance("Debug_Water_AttackMillBounce_MillB", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Deck).CardInstanceId;
+
+		FTCGCardEffectRef BounceEffect;
+		BounceEffect.Trigger = ETCGEffectTrigger::OnAttack;
+
+		FTCGEffectStep BounceStep;
+		BounceStep.StepType = ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit;
+		BounceEffect.Steps.Add(BounceStep);
+
+		TArray<FTCGEffectChainEntry> Chain;
+		const bool bChainAdded = GameState->AddCardEffectRefToChain(Chain, AttackerTopId, DefenderTopId, BounceEffect);
+		const bool bChainResolved = GameState->ResolveEffectChain(Chain);
+
+		const FTCGCardInstance* AttackerMaterialAfter = GameState->FindCardInstance(AttackerMaterialId);
+		const FTCGCardInstance* FirstMilledAfter = GameState->FindCardInstance(FirstMilledId);
+		const FTCGCardInstance* SecondMilledAfter = GameState->FindCardInstance(SecondMilledId);
+		const FTCGCardInstance* DefenderMaterialAfter = GameState->FindCardInstance(DefenderMaterialId);
+		const FTCGCardInstance* DefenderTopAfter = GameState->FindCardInstance(DefenderTopId);
+
+		const bool bAttackerMaterialToGraveyard = AttackerMaterialAfter && AttackerMaterialAfter->Location == ETCGCardLocation::Graveyard;
+		const bool bFirstMilledToGraveyard = FirstMilledAfter && FirstMilledAfter->Location == ETCGCardLocation::Graveyard;
+		const bool bSecondMilledToGraveyard = SecondMilledAfter && SecondMilledAfter->Location == ETCGCardLocation::Graveyard;
+		const bool bDefenderMaterialToGraveyard = DefenderMaterialAfter && DefenderMaterialAfter->Location == ETCGCardLocation::Graveyard;
+		const bool bDefenderTopToDeck = DefenderTopAfter && DefenderTopAfter->Location == ETCGCardLocation::Deck;
+		const bool bDefenderLeftBoardBeforeDamage = DefenderTopAfter && DefenderTopAfter->Location != ETCGCardLocation::Board;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: AttackMillBounce summary ChainAdded=%s ChainResolved=%s AttackerMaterialToGraveyard=%s FirstMilledToGraveyard=%s SecondMilledToGraveyard=%s DefenderMaterialToGraveyard=%s DefenderTopToDeck=%s DefenderLeftBoardBeforeDamage=%s"),
+			bChainAdded ? TEXT("true") : TEXT("false"),
+			bChainResolved ? TEXT("true") : TEXT("false"),
+			bAttackerMaterialToGraveyard ? TEXT("true") : TEXT("false"),
+			bFirstMilledToGraveyard ? TEXT("true") : TEXT("false"),
+			bSecondMilledToGraveyard ? TEXT("true") : TEXT("false"),
+			bDefenderMaterialToGraveyard ? TEXT("true") : TEXT("false"),
+			bDefenderTopToDeck ? TEXT("true") : TEXT("false"),
+			bDefenderLeftBoardBeforeDamage ? TEXT("true") : TEXT("false"));
+
+		GameState->EndMatch(ETCGMatchResult::Draw);
+	}
 }
 
 void ATCG_GameState::RunDebugMaterialRebirthScenario()
@@ -172,4 +260,5 @@ void ATCG_GameState::RunDebugMaterialRebirthScenario()
 	EndMatch(ETCGMatchResult::Draw);
 
 	RunDebugAttackMillGraveyardSplitScenario(this);
+	RunDebugAttackMillBounceScenario(this);
 }
