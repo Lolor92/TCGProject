@@ -19,4 +19,8 @@ public:
 	static bool PlayGraveyardCardToEmptyZone(ATCG_GameState* GameState, const FGuid& CardInstanceId, FName ZoneId);
 	static bool ReturnUnitStackToBottomDeckMaterialsToGraveyard(ATCG_GameState* GameState, const FGuid& TargetTopCardInstanceId);
 	static bool ResolveAttackMillTwoWaterBounceBattlingUnit(ATCG_GameState* GameState, const FGuid& SourceCardInstanceId, const FGuid& BattleTargetCardInstanceId);
+	static int32 DiscardCardsFromHand(ATCG_GameState* GameState, int32 PlayerIndex, int32 Count);
+	static bool MoveCardToTopOfDeck(ATCG_GameState* GameState, const FGuid& CardInstanceId);
+	static bool MoveFirstHandCardToTopDeck(ATCG_GameState* GameState, int32 PlayerIndex);
+	static bool AttachGraveyardCardToSourceMaterial(ATCG_GameState* GameState, int32 PlayerIndex, const FGuid& SourceCardInstanceId, const FTCGEffectTargetFilter& TargetFilter);
 };
