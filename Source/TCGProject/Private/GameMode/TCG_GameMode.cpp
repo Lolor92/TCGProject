@@ -30,8 +30,8 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		ATCG_GameState* TCGGameState = GetGameState<ATCG_GameState>();
 		if (TCGGameState)
 		{
-			// Dedicated draw 2, return 1 to top deck debug scenario.
-			TCGGameState->RunDebugDraw2Return1Scenario();
+			// Dedicated attack mill, attach Water material debug scenario.
+			TCGGameState->RunDebugAttackMillAttachScenario();
 		}
 	}
 }
