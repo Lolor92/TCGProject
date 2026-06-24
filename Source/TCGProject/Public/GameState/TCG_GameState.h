@@ -82,7 +82,7 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FTCGPendingHandToTopDeckChoice PendingHandToTopDeckChoice;
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FTCGPendingPlayToEmptyZoneChoice PendingPlayToEmptyZoneChoice;
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FTCGPendingAttachSourceToWaterUnitChoice PendingAttachSourceToWaterUnitChoice;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FTCGPendingRevealDeckChoice PendingRevealDeckChoice;
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Choice") FTCGPendingRevealDeckChoice PendingRevealDeckChoice;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Debug") TArray<TObjectPtr<UTCG_CardDefinition>> DebugCardDefinitions;
 	static constexpr int32 FieldZoneCount = 4;
 	static FName GetFieldZoneId(int32 PlayerIndex, int32 FieldIndex);

@@ -73,6 +73,7 @@ void ATCG_GameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ATCG_GameState, MatchResult);
 	DOREPLIFETIME(ATCG_GameState, MatchCards);
 	DOREPLIFETIME(ATCG_GameState, PendingDiscardChoice);
+	DOREPLIFETIME(ATCG_GameState, PendingRevealDeckChoice);
 	DOREPLIFETIME(ATCG_GameState, PendingGraveyardToDeckChoice);
 }
 
@@ -93,6 +94,7 @@ void ATCG_GameState::StartMatch()
 	MatchResult = ETCGMatchResult::None;
 	ClearPendingDiscardChoice();
 	ClearPendingGraveyardToDeckChoice();
+	ClearPendingRevealDeckChoice();
 }
 
 void ATCG_GameState::SetPhase(ETCGMatchPhase NewPhase)
