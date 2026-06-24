@@ -1,6 +1,7 @@
 #include "GameState/TCG_GameState.h"
 #include "GameState/TCG_BattleResolver.h"
 #include "GameState/TCG_DebugScenarioRunner.h"
+#include "GameState/TCG_CardMovementService.h"
 #include "Net/UnrealNetwork.h"
 
 namespace
@@ -695,105 +696,12 @@ bool ATCG_GameState::ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& Ch
 
 bool ATCG_GameState::MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLocation NewLocation)
 {
-	FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
-	if (!Card) return false;
-
-	const ETCGCardLocation PreviousLocation = Card->Location;
-	const FTCGCardInstance* PreviousTopCard = nullptr;
-	if (PreviousLocation == ETCGCardLocation::Board && Card->StackId.IsValid())
-	{
-		PreviousTopCard = FindTopCardInStack(Card->StackId);
-	}
-
-	const bool bWasMaterial =
-		PreviousLocation == ETCGCardLocation::Board
-		&& Card->StackId.IsValid()
-		&& PreviousTopCard
-		&& PreviousTopCard->CardInstanceId != CardInstanceId;
-
-	if (PreviousLocation == NewLocation)
-	{
-		return true;
-	}
-
-	Card->Location = NewLocation;
-	Card->LocationIndex = GetNextLocationIndex(Card->OwnerPlayerIndex, NewLocation);
-
-	if (NewLocation != ETCGCardLocation::Board)
-	{
-		Card->ZoneId = NAME_None;
-		Card->StackId.Invalidate();
-		Card->StackIndex = INDEX_NONE;
-	}
-
-	if (NewLocation == ETCGCardLocation::Graveyard && PreviousLocation != ETCGCardLocation::Graveyard)
-	{
-		HandleCardSentToGraveyard(CardInstanceId);
-
-		ETCGEffectTrigger SpecificGraveyardTrigger = ETCGEffectTrigger::None;
-		if (PreviousLocation == ETCGCardLocation::Deck)
-		{
-			SpecificGraveyardTrigger = ETCGEffectTrigger::OnSentFromDeckToGraveyard;
-		}
-		else if (PreviousLocation == ETCGCardLocation::Hand)
-		{
-			SpecificGraveyardTrigger = ETCGEffectTrigger::OnSentFromHandToGraveyard;
-		}
-		else if (bWasMaterial)
-		{
-			SpecificGraveyardTrigger = ETCGEffectTrigger::OnSentFromMaterialToGraveyard;
-		}
-		else if (PreviousLocation == ETCGCardLocation::Board)
-		{
-			SpecificGraveyardTrigger = ETCGEffectTrigger::OnSentFromBoardToGraveyard;
-		}
-
-		TArray<FTCGEffectChainEntry> GraveyardChain;
-
-		const FTCGCardInstance* MovedCard = FindCardInstance(CardInstanceId);
-		if (MovedCard)
-		{
-			TArray<FTCGCardEffectRef> EffectRefs;
-			GetPrintedEffectRefsForCard(*MovedCard, EffectRefs);
-
-			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
-			{
-				if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnSentToGraveyard))
-				{
-					AddCardEffectRefToChain(GraveyardChain, CardInstanceId, CardInstanceId, EffectRef);
-				}
-
-				if (SpecificGraveyardTrigger != ETCGEffectTrigger::None
-					&& DoesCardEffectMatchTrigger(EffectRef, SpecificGraveyardTrigger))
-				{
-					AddCardEffectRefToChain(GraveyardChain, CardInstanceId, CardInstanceId, EffectRef);
-				}
-			}
-		}
-
-		ResolveEffectChain(GraveyardChain);
-	}
-
-	return true;
+	return UTCG_CardMovementService::MoveCardToLocation(this, CardInstanceId, NewLocation);
 }
 
 bool ATCG_GameState::MoveStackToLocation(const FGuid& StackId, ETCGCardLocation NewLocation)
 {
-	if (!StackId.IsValid()) return false;
-
-	TArray<FGuid> CardIdsInStack;
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.StackId == StackId && Card.Location == ETCGCardLocation::Board) CardIdsInStack.Add(Card.CardInstanceId);
-	}
-	if (CardIdsInStack.Num() <= 0) return false;
-
-	bool bMovedAllCards = true;
-	for (const FGuid& CardId : CardIdsInStack)
-	{
-		bMovedAllCards &= MoveCardToLocation(CardId, NewLocation);
-	}
-	return bMovedAllCards;
+	return UTCG_CardMovementService::MoveStackToLocation(this, StackId, NewLocation);
 }
 
 bool ATCG_GameState::DoesPlayerHaveAnyCardOnBoard(int32 PlayerIndex) const
