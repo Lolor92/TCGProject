@@ -47,7 +47,7 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
 	ETCGEffectTrigger Trigger = ETCGEffectTrigger::None;
 
-	// Legacy/debug shortcut. Real effects should use EffectRef.Steps.
+	// Temporary migration/debug id captured from older card assets.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
 	FName EffectId = NAME_None;
 
@@ -69,6 +69,41 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
 	bool bRequiresSourceUnderTarget = false;
+};
+
+USTRUCT(BlueprintType)
+struct FTCGPendingDiscardChoice
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	bool bIsPending = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	int32 PlayerIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	int32 RequiredCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	FGuid SourceCardInstanceId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	int32 ChainIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	TArray<FGuid> EligibleCardInstanceIds;
+
+	void Reset()
+	{
+		bIsPending = false;
+		PlayerIndex = INDEX_NONE;
+		RequiredCount = 0;
+		SourceCardInstanceId.Invalidate();
+		ChainIndex = INDEX_NONE;
+		EligibleCardInstanceIds.Reset();
+	}
 };
 
 UCLASS()
@@ -120,6 +155,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Cards")
 	TArray<FTCGCardInstance> MatchCards;
+
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Choice")
+	FTCGPendingDiscardChoice PendingDiscardChoice;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Debug")
 	TArray<TObjectPtr<UTCG_CardDefinition>> DebugCardDefinitions;
@@ -179,9 +217,6 @@ public:
 	bool HasDebugCardDefinition(FName CardDefinitionId) const;
 	bool ValidateDebugCardDefinitions() const;
 	int32 GetPrintedEffectRefsForCard(const FTCGCardInstance& Card, TArray<FTCGCardEffectRef>& OutEffectRefs) const;
-	int32 GetPrintedEffectsForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, TArray<FName>& OutEffectIds) const;
-	bool AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId,
-		const FGuid& TargetCardInstanceId, ETCGEffectTrigger Trigger, FName EffectId);
 	bool AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId,
 		const FGuid& TargetCardInstanceId, const FTCGCardEffectRef& EffectRef);
 	void ApplyDebugEffectChainEntryRequirements(FTCGEffectChainEntry& ChainEntry) const;
@@ -191,10 +226,19 @@ public:
 	bool ResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);
 	bool ResolveModularEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);
 	bool ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step, bool bPreviousStepSucceeded);
-	bool ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);
+
+	bool BeginPendingDiscardChoice(int32 PlayerIndex, int32 Count, const FTCGEffectChainEntry& ChainEntry);
+	UFUNCTION(BlueprintCallable, Category = "TCG|Choice")
+	bool SubmitPendingDiscardChoice(int32 PlayerIndex, const TArray<FGuid>& ChosenCardInstanceIds);
+	UFUNCTION(BlueprintPure, Category = "TCG|Choice")
+	bool HasPendingDiscardChoice() const;
+	UFUNCTION(BlueprintPure, Category = "TCG|Choice")
+	void GetPendingDiscardChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const;
+	void ClearPendingDiscardChoice();
 
 	bool MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLocation NewLocation);
 	bool MoveStackToLocation(const FGuid& StackId, ETCGCardLocation NewLocation);
+	bool MoveBottomOverlayToGraveyard(const FGuid& TargetCardInstanceId);
 	bool DoesPlayerHaveAnyCardOnBoard(int32 PlayerIndex) const;
 	int32 GetCardsUnderneathCount(const FGuid& CardInstanceId) const;
 	int32 GetFinalAttack(const FGuid& CardInstanceId) const;
