@@ -245,4 +245,5 @@ void RunDebugBattleDestroyRevealScenario(ATCG_GameState* GameState)
 		GraveAfter);
 
 	GameState->EndMatch(ETCGMatchResult::Draw);
+	GameState->RunDebugDestroyedRecoveryScenario();
 }
