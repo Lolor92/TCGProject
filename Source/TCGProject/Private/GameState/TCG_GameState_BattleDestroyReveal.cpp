@@ -137,9 +137,9 @@ void RunDebugBattleDestroyRevealScenario(ATCG_GameState* GameState)
 	Defender.StackId = FGuid::NewGuid();
 	Defender.StackIndex = 0;
 
-	GameState->AddCardInstance(DebugCard_BattleDestroyReveal, ETCGCardElement::Water, 2, 0, ETCGCardLocation::Deck);
 	GameState->AddCardInstance("Debug_Earth_RevealOther", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
 	GameState->AddCardInstance("Debug_Water_RevealPick", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Deck);
+	GameState->AddCardInstance(DebugCard_BattleDestroyReveal, ETCGCardElement::Water, 2, 0, ETCGCardLocation::Deck);
 
 	const int32 HandBefore = CountPlayerCardsInLocation(GameState, 0, ETCGCardLocation::Hand);
 	const int32 GraveBefore = CountPlayerCardsInLocation(GameState, 0, ETCGCardLocation::Graveyard);
