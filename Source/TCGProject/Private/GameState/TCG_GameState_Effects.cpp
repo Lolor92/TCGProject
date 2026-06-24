@@ -19,6 +19,9 @@ namespace
 		case ETCGEffectStepType::ModifyAttack: return TEXT("ModifyAttack");
 		case ETCGEffectStepType::SelectTarget: return TEXT("SelectTarget");
 		case ETCGEffectStepType::MoveBottomOverlayToGraveyard: return TEXT("MoveBottomOverlayToGraveyard");
+		case ETCGEffectStepType::PlaySourceToEmptyZone: return TEXT("PlaySourceToEmptyZone");
+		case ETCGEffectStepType::SendTopDeckCardToGraveyard: return TEXT("SendTopDeckCardToGraveyard");
+		case ETCGEffectStepType::MoveGraveyardCardToBottomDeck: return TEXT("MoveGraveyardCardToBottomDeck");
 		default: return TEXT("None");
 		}
 	}
@@ -224,10 +227,7 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		if (bLogEffectResolution)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DrawCards Player=%d Requested=%d Drawn=%d Success=%s"),
-				ChainEntry.ControllerPlayerIndex,
-				DrawCount,
-				DrawnCount,
-				bStepSucceeded ? TEXT("true") : TEXT("false"));
+				ChainEntry.ControllerPlayerIndex, DrawCount, DrawnCount, bStepSucceeded ? TEXT("true") : TEXT("false"));
 		}
 		break;
 	}
@@ -256,11 +256,8 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 			if (bLogEffectResolution)
 			{
 				UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardCards Player=%d Requested=%d Mode=%s Pending=%s AutoSubmitted=%s"),
-					ChainEntry.ControllerPlayerIndex,
-					DiscardCount,
-					GetTCGEffectSelectionModeDebugName(Step.SelectionMode),
-					bChoiceStarted ? TEXT("true") : TEXT("false"),
-					bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
+					ChainEntry.ControllerPlayerIndex, DiscardCount, GetTCGEffectSelectionModeDebugName(Step.SelectionMode),
+					bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
 			}
 			bStepSucceeded = bAutoSubmittedChoice;
 			break;
@@ -271,11 +268,7 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		if (bLogEffectResolution)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardCards Player=%d Requested=%d Discarded=%d Mode=%s Success=%s"),
-				ChainEntry.ControllerPlayerIndex,
-				DiscardCount,
-				DiscardedCount,
-				GetTCGEffectSelectionModeDebugName(Step.SelectionMode),
-				bStepSucceeded ? TEXT("true") : TEXT("false"));
+				ChainEntry.ControllerPlayerIndex, DiscardCount, DiscardedCount, GetTCGEffectSelectionModeDebugName(Step.SelectionMode), bStepSucceeded ? TEXT("true") : TEXT("false"));
 		}
 		break;
 	}
@@ -311,19 +304,13 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		if (bLogEffectResolution)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step ModifyAttack TargetMode=%s ValueMode=%s Amount=%d Success=%s"),
-				GetTCGEffectTargetModeDebugName(Step.TargetMode),
-				GetTCGEffectValueModeDebugName(Step.ValueMode),
-				AttackDelta,
-				bStepSucceeded ? TEXT("true") : TEXT("false"));
+				GetTCGEffectTargetModeDebugName(Step.TargetMode), GetTCGEffectValueModeDebugName(Step.ValueMode), AttackDelta, bStepSucceeded ? TEXT("true") : TEXT("false"));
 		}
 		break;
 	}
 	case ETCGEffectStepType::SelectTarget:
 	{
-		const int32 OwnerPlayerIndex = Step.TargetFilter.OwnerMode == ETCGEffectTargetMode::Opponent
-			? 1 - ChainEntry.ControllerPlayerIndex
-			: ChainEntry.ControllerPlayerIndex;
-
+		const int32 OwnerPlayerIndex = Step.TargetFilter.OwnerMode == ETCGEffectTargetMode::Opponent ? 1 - ChainEntry.ControllerPlayerIndex : ChainEntry.ControllerPlayerIndex;
 		for (const FTCGCardInstance& Card : MatchCards)
 		{
 			if (Card.OwnerPlayerIndex != OwnerPlayerIndex) continue;
@@ -341,23 +328,44 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		if (bLogEffectResolution)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step SelectTarget OwnerMode=%s Location=%d Success=%s"),
-				GetTCGEffectTargetModeDebugName(Step.TargetFilter.OwnerMode),
-				static_cast<int32>(Step.TargetFilter.RequiredLocation),
-				bStepSucceeded ? TEXT("true") : TEXT("false"));
+				GetTCGEffectTargetModeDebugName(Step.TargetFilter.OwnerMode), static_cast<int32>(Step.TargetFilter.RequiredLocation), bStepSucceeded ? TEXT("true") : TEXT("false"));
 		}
 		break;
 	}
 	case ETCGEffectStepType::MoveBottomOverlayToGraveyard:
 	{
-		const FGuid TargetCardInstanceId = Step.TargetMode == ETCGEffectTargetMode::SourceCard
-			? ChainEntry.SourceCardInstanceId
-			: ChainEntry.TargetCardInstanceId;
+		const FGuid TargetCardInstanceId = Step.TargetMode == ETCGEffectTargetMode::SourceCard ? ChainEntry.SourceCardInstanceId : ChainEntry.TargetCardInstanceId;
 		bStepSucceeded = MoveBottomOverlayToGraveyard(TargetCardInstanceId);
 		if (bLogEffectResolution)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveBottomOverlayToGraveyard TargetMode=%s Success=%s"),
-				GetTCGEffectTargetModeDebugName(Step.TargetMode),
-				bStepSucceeded ? TEXT("true") : TEXT("false"));
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveBottomOverlayToGraveyard TargetMode=%s Success=%s"), GetTCGEffectTargetModeDebugName(Step.TargetMode), bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
+		break;
+	}
+	case ETCGEffectStepType::PlaySourceToEmptyZone:
+	{
+		bStepSucceeded = PlaySourceCardToFirstEmptyZone(ChainEntry.SourceCardInstanceId);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step PlaySourceToEmptyZone Success=%s"), bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
+		break;
+	}
+	case ETCGEffectStepType::SendTopDeckCardToGraveyard:
+	{
+		bStepSucceeded = SendTopDeckCardToGraveyard(ChainEntry.ControllerPlayerIndex);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step SendTopDeckCardToGraveyard Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
+		break;
+	}
+	case ETCGEffectStepType::MoveGraveyardCardToBottomDeck:
+	{
+		bStepSucceeded = MoveFirstGraveyardCardToBottomDeck(ChainEntry.ControllerPlayerIndex);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveGraveyardCardToBottomDeck Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
 		}
 		break;
 	}
@@ -368,9 +376,7 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 	if (bLogEffectResolution && Step.StepType != ETCGEffectStepType::None)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step result Type=%s PreviousSuccess=%s Success=%s"),
-			GetTCGEffectStepDebugName(Step.StepType),
-			bPreviousStepSucceeded ? TEXT("true") : TEXT("false"),
-			bStepSucceeded ? TEXT("true") : TEXT("false"));
+			GetTCGEffectStepDebugName(Step.StepType), bPreviousStepSucceeded ? TEXT("true") : TEXT("false"), bStepSucceeded ? TEXT("true") : TEXT("false"));
 	}
 
 	return bStepSucceeded;
@@ -378,17 +384,11 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 
 bool ATCG_GameState::BeginPendingDiscardChoice(int32 PlayerIndex, int32 Count, const FTCGEffectChainEntry& ChainEntry)
 {
-	if (!IsValidPlayerIndex(PlayerIndex) || Count <= 0 || PendingDiscardChoice.bIsPending)
-	{
-		return false;
-	}
+	if (!IsValidPlayerIndex(PlayerIndex) || Count <= 0 || PendingDiscardChoice.bIsPending) return false;
 
 	TArray<FTCGCardInstance> HandCards;
 	GetCardsInHand(PlayerIndex, HandCards);
-	if (HandCards.Num() < Count)
-	{
-		return false;
-	}
+	if (HandCards.Num() < Count) return false;
 
 	PendingDiscardChoice.Reset();
 	PendingDiscardChoice.bIsPending = true;
@@ -407,32 +407,16 @@ bool ATCG_GameState::BeginPendingDiscardChoice(int32 PlayerIndex, int32 Count, c
 
 bool ATCG_GameState::SubmitPendingDiscardChoice(int32 PlayerIndex, const TArray<FGuid>& ChosenCardInstanceIds)
 {
-	if (!PendingDiscardChoice.bIsPending || PendingDiscardChoice.PlayerIndex != PlayerIndex)
-	{
-		return false;
-	}
-
-	if (ChosenCardInstanceIds.Num() != PendingDiscardChoice.RequiredCount)
-	{
-		return false;
-	}
+	if (!PendingDiscardChoice.bIsPending || PendingDiscardChoice.PlayerIndex != PlayerIndex) return false;
+	if (ChosenCardInstanceIds.Num() != PendingDiscardChoice.RequiredCount) return false;
 
 	TSet<FGuid> UniqueChosenIds;
 	for (const FGuid& ChosenId : ChosenCardInstanceIds)
 	{
-		if (!ChosenId.IsValid() || UniqueChosenIds.Contains(ChosenId))
-		{
-			return false;
-		}
-		if (!PendingDiscardChoice.EligibleCardInstanceIds.Contains(ChosenId))
-		{
-			return false;
-		}
+		if (!ChosenId.IsValid() || UniqueChosenIds.Contains(ChosenId)) return false;
+		if (!PendingDiscardChoice.EligibleCardInstanceIds.Contains(ChosenId)) return false;
 		const FTCGCardInstance* Card = FindCardInstance(ChosenId);
-		if (!Card || Card->OwnerPlayerIndex != PlayerIndex || Card->Location != ETCGCardLocation::Hand)
-		{
-			return false;
-		}
+		if (!Card || Card->OwnerPlayerIndex != PlayerIndex || Card->Location != ETCGCardLocation::Hand) return false;
 		UniqueChosenIds.Add(ChosenId);
 	}
 
@@ -463,10 +447,7 @@ void ATCG_GameState::ClearPendingDiscardChoice()
 
 int32 ATCG_GameState::DiscardCardsFromHand(int32 PlayerIndex, int32 Count)
 {
-	if (!IsValidPlayerIndex(PlayerIndex) || Count <= 0)
-	{
-		return 0;
-	}
+	if (!IsValidPlayerIndex(PlayerIndex) || Count <= 0) return 0;
 
 	TArray<FTCGCardInstance*> HandCards;
 	for (FTCGCardInstance& Card : MatchCards)
