@@ -73,6 +73,7 @@ void ATCG_GameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ATCG_GameState, MatchResult);
 	DOREPLIFETIME(ATCG_GameState, MatchCards);
 	DOREPLIFETIME(ATCG_GameState, PendingDiscardChoice);
+	DOREPLIFETIME(ATCG_GameState, PendingGraveyardToDeckChoice);
 }
 
 FName ATCG_GameState::GetFieldZoneId(int32 PlayerIndex, int32 FieldIndex)
@@ -91,6 +92,7 @@ void ATCG_GameState::StartMatch()
 	CurrentPhase = ETCGMatchPhase::RoundStart;
 	MatchResult = ETCGMatchResult::None;
 	ClearPendingDiscardChoice();
+	ClearPendingGraveyardToDeckChoice();
 }
 
 void ATCG_GameState::SetPhase(ETCGMatchPhase NewPhase)
