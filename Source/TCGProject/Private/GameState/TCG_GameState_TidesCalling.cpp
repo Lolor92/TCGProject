@@ -4,18 +4,17 @@
 namespace
 {
 	const FName DebugCard_TidesCalling = "Debug_Water_TidesCalling";
+	const FName DebugCard_DreampoolMirechant = "Dreampool_Mirechant";
 
 	FTCGCardEffectRef MakeTidesCallingFromDeckToGraveyardEffect()
 	{
 		FTCGCardEffectRef EffectRef;
 		EffectRef.Trigger = ETCGEffectTrigger::OnSentToGraveyard;
 		EffectRef.bOptional = true;
-
 		FTCGEffectStep PlayStep;
 		PlayStep.StepType = ETCGEffectStepType::PlaySourceToEmptyZone;
 		PlayStep.TargetMode = ETCGEffectTargetMode::SourceCard;
 		EffectRef.Steps.Add(PlayStep);
-
 		return EffectRef;
 	}
 
@@ -24,16 +23,13 @@ namespace
 		FTCGCardEffectRef EffectRef;
 		EffectRef.Trigger = ETCGEffectTrigger::OnPlay;
 		EffectRef.bOptional = true;
-
 		FTCGEffectStep MillStep;
 		MillStep.StepType = ETCGEffectStepType::SendTopDeckCardToGraveyard;
 		MillStep.TargetMode = ETCGEffectTargetMode::Controller;
 		EffectRef.Steps.Add(MillStep);
-
 		FTCGEffectStep ThenStep;
 		ThenStep.StepType = ETCGEffectStepType::Then;
 		EffectRef.Steps.Add(ThenStep);
-
 		FTCGEffectStep RecycleStep;
 		RecycleStep.StepType = ETCGEffectStepType::MoveGraveyardCardToBottomDeck;
 		RecycleStep.TargetMode = ETCGEffectTargetMode::Controller;
@@ -41,7 +37,19 @@ namespace
 		RecycleStep.Value = 1;
 		RecycleStep.bRequiresPreviousStepSuccess = true;
 		EffectRef.Steps.Add(RecycleStep);
+		return EffectRef;
+	}
 
+	FTCGCardEffectRef MakeMirechantFromDeckToGraveyardEffect()
+	{
+		FTCGCardEffectRef EffectRef;
+		EffectRef.Trigger = ETCGEffectTrigger::OnSentToGraveyard;
+		EffectRef.bOptional = true;
+		FTCGEffectStep AttachStep;
+		AttachStep.StepType = ETCGEffectStepType::AttachSourceToWaterUnitMaterial;
+		AttachStep.TargetMode = ETCGEffectTargetMode::Controller;
+		AttachStep.SelectionMode = ETCGEffectSelectionMode::PlayerChoice;
+		EffectRef.Steps.Add(AttachStep);
 		return EffectRef;
 	}
 
@@ -50,31 +58,55 @@ namespace
 		return Card && Card->CardDefinitionId == DebugCard_TidesCalling;
 	}
 
+	bool IsMirechantCard(const FTCGCardInstance* Card)
+	{
+		return Card && Card->CardDefinitionId == DebugCard_DreampoolMirechant;
+	}
+
+	void ApplyMirechantPassiveAttackBonusIfNeeded(ATCG_GameState* GameState, const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId)
+	{
+		if (!GameState) return;
+		const FTCGCardInstance* SourceCard = GameState->FindCardInstance(SourceCardInstanceId);
+		FTCGCardInstance* TargetCard = GameState->FindCardInstance(TargetCardInstanceId);
+		if (!SourceCard || !TargetCard || SourceCard->OwnerPlayerIndex != TargetCard->OwnerPlayerIndex) return;
+
+		bool bHasMirechantPassive = IsMirechantCard(SourceCard);
+		TArray<FTCGCardEffectRef> EffectRefs;
+		GameState->GetPrintedEffectRefsForCard(*SourceCard, EffectRefs);
+		for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+		{
+			if (EffectRef.Trigger != ETCGEffectTrigger::None) continue;
+			for (const FTCGEffectStep& Step : EffectRef.Steps)
+			{
+				if (Step.StepType == ETCGEffectStepType::ModifyAttack && Step.ValueMode == ETCGEffectValueMode::WaterCardsInControllerGraveyard)
+				{
+					bHasMirechantPassive = true;
+					break;
+				}
+			}
+		}
+
+		if (!bHasMirechantPassive) return;
+		const int32 Bonus = GameState->CountCardsInLocationByElement(TargetCard->OwnerPlayerIndex, ETCGCardLocation::Graveyard, ETCGCardElement::Water);
+		TargetCard->AttackModifier += Bonus;
+		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Mirechant passive inherited Target=%s Bonus=%d"), *TargetCard->CardDefinitionId.ToString(), Bonus);
+	}
+
 	void StartQueuedOnPlayChain(ATCG_GameState* GameState, const FGuid& SourceCardInstanceId)
 	{
 		if (!GameState) return;
-
 		const FTCGCardInstance* SourceCard = GameState->FindCardInstance(SourceCardInstanceId);
-		if (!SourceCard || SourceCard->Location != ETCGCardLocation::Board)
-		{
-			return;
-		}
-
+		if (!SourceCard || SourceCard->Location != ETCGCardLocation::Board) return;
 		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Starting queued OnPlay chain Source=%s"), *SourceCard->CardDefinitionId.ToString());
-
 		TArray<FTCGEffectChainEntry> Chain;
 		GameState->BuildStackOnPlayEffectChain(SourceCardInstanceId, Chain);
-		if (Chain.Num() <= 0 && IsTidesCallingCard(SourceCard))
-		{
-			GameState->AddCardEffectRefToChain(Chain, SourceCardInstanceId, SourceCardInstanceId, MakeTidesCallingOnPlayEffect());
-		}
+		if (Chain.Num() <= 0 && IsTidesCallingCard(SourceCard)) GameState->AddCardEffectRefToChain(Chain, SourceCardInstanceId, SourceCardInstanceId, MakeTidesCallingOnPlayEffect());
 		GameState->ResolveEffectChain(Chain);
 	}
 
 	void QueueOnPlayChainAfterCurrentChain(ATCG_GameState* GameState, const FGuid& SourceCardInstanceId)
 	{
 		if (!GameState || !SourceCardInstanceId.IsValid()) return;
-
 		const FTCGCardInstance* SourceCard = GameState->FindCardInstance(SourceCardInstanceId);
 		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Queued OnPlay chain after current chain Source=%s"), SourceCard ? *SourceCard->CardDefinitionId.ToString() : TEXT("None"));
 		GameState->GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(GameState, [GameState, SourceCardInstanceId]()
@@ -82,58 +114,28 @@ namespace
 			StartQueuedOnPlayChain(GameState, SourceCardInstanceId);
 		}));
 	}
+}
 
-	void LogTidesCallingFinalSummary(ATCG_GameState* GameState, bool bSentTopDeck)
+int32 ATCG_GameState::CountCardsInLocationByElement(int32 PlayerIndex, ETCGCardLocation Location, ETCGCardElement Element) const
+{
+	if (!IsValidPlayerIndex(PlayerIndex)) return 0;
+	int32 Count = 0;
+	for (const FTCGCardInstance& Card : MatchCards)
 	{
-		if (!GameState) return;
-
-		const bool bTidesOnBoard = GameState->DoesPlayerHaveAnyCardOnBoard(0);
-		TArray<FTCGCardInstance> Player0Deck;
-		TArray<FTCGCardInstance> Player0Graveyard;
-		GameState->GetCardsInDeck(0, Player0Deck);
-		GameState->GetCardsInLocation(0, ETCGCardLocation::Graveyard, Player0Graveyard);
-
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Tide's Calling scenario final summary SentTopDeck=%s TidesOnBoard=%s Deck=%d Graveyard=%d"),
-			bSentTopDeck ? TEXT("true") : TEXT("false"),
-			bTidesOnBoard ? TEXT("true") : TEXT("false"),
-			Player0Deck.Num(),
-			Player0Graveyard.Num());
+		if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == Location && Card.Element == Element) Count++;
 	}
-
-	void ScheduleTidesCallingFinalSummary(ATCG_GameState* GameState, bool bSentTopDeck)
-	{
-		if (!GameState) return;
-
-		// Temporary debug-only delay: Tide's OnPlay chain is currently started on the next tick.
-		// Long term, final debug summaries should be printed only after the real queued-trigger drain finishes.
-		GameState->GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(GameState, [GameState, bSentTopDeck]()
-		{
-			GameState->GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(GameState, [GameState, bSentTopDeck]()
-			{
-				LogTidesCallingFinalSummary(GameState, bSentTopDeck);
-				GameState->EndMatch(ETCGMatchResult::Draw);
-			}));
-		}));
-	}
+	return Count;
 }
 
 bool ATCG_GameState::MoveCardToBottomOfDeck(const FGuid& CardInstanceId)
 {
 	FTCGCardInstance* CardToMove = FindCardInstance(CardInstanceId);
-	if (!CardToMove || !IsValidPlayerIndex(CardToMove->OwnerPlayerIndex))
-	{
-		return false;
-	}
-
+	if (!CardToMove || !IsValidPlayerIndex(CardToMove->OwnerPlayerIndex)) return false;
 	const int32 PlayerIndex = CardToMove->OwnerPlayerIndex;
 	for (FTCGCardInstance& Card : MatchCards)
 	{
-		if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == ETCGCardLocation::Deck)
-		{
-			Card.LocationIndex += 1;
-		}
+		if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == ETCGCardLocation::Deck) Card.LocationIndex += 1;
 	}
-
 	CardToMove->Location = ETCGCardLocation::Deck;
 	CardToMove->LocationIndex = 0;
 	CardToMove->ZoneId = NAME_None;
@@ -142,25 +144,40 @@ bool ATCG_GameState::MoveCardToBottomOfDeck(const FGuid& CardInstanceId)
 	return true;
 }
 
+bool ATCG_GameState::AttachSourceCardUnderWaterUnit(const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId)
+{
+	FTCGCardInstance* SourceCard = FindCardInstance(SourceCardInstanceId);
+	FTCGCardInstance* TargetCard = FindCardInstance(TargetCardInstanceId);
+	if (!SourceCard || !TargetCard) return false;
+	if (SourceCard->Location != ETCGCardLocation::Graveyard) return false;
+	if (TargetCard->Location != ETCGCardLocation::Board || TargetCard->Element != ETCGCardElement::Water || !TargetCard->StackId.IsValid()) return false;
+	if (SourceCard->OwnerPlayerIndex != TargetCard->OwnerPlayerIndex) return false;
+
+	const FGuid TargetStackId = TargetCard->StackId;
+	const FName TargetZoneId = TargetCard->ZoneId;
+	for (FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.Location == ETCGCardLocation::Board && Card.StackId == TargetStackId) Card.StackIndex += 1;
+	}
+
+	SourceCard->Location = ETCGCardLocation::Board;
+	SourceCard->LocationIndex = INDEX_NONE;
+	SourceCard->ZoneId = TargetZoneId;
+	SourceCard->StackId = TargetStackId;
+	SourceCard->StackIndex = 0;
+
+	ApplyMirechantPassiveAttackBonusIfNeeded(this, SourceCardInstanceId, TargetCardInstanceId);
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Attached source as Water material Source=%s Target=%s Zone=%s"), *SourceCard->CardDefinitionId.ToString(), *TargetCard->CardDefinitionId.ToString(), *TargetZoneId.ToString());
+	return true;
+}
+
 bool ATCG_GameState::PlaySourceCardToEmptyZone(const FGuid& SourceCardInstanceId, FName ZoneId)
 {
 	FTCGCardInstance* SourceCard = FindCardInstance(SourceCardInstanceId);
-	if (!SourceCard || !IsValidPlayerIndex(SourceCard->OwnerPlayerIndex) || ZoneId.IsNone())
-	{
-		return false;
-	}
-
-	if (!IsFieldZoneForPlayer(ZoneId, SourceCard->OwnerPlayerIndex))
-	{
-		return false;
-	}
-
+	if (!SourceCard || !IsValidPlayerIndex(SourceCard->OwnerPlayerIndex) || ZoneId.IsNone()) return false;
+	if (!IsFieldZoneForPlayer(ZoneId, SourceCard->OwnerPlayerIndex)) return false;
 	FGuid ExistingStackId;
-	if (FindStackIdInZone(ZoneId, ExistingStackId))
-	{
-		return false;
-	}
-
+	if (FindStackIdInZone(ZoneId, ExistingStackId)) return false;
 	const bool bPlayed = PlaceCardAsNewStack(SourceCardInstanceId, ZoneId);
 	if (bPlayed)
 	{
@@ -174,54 +191,31 @@ bool ATCG_GameState::PlaySourceCardToEmptyZone(const FGuid& SourceCardInstanceId
 bool ATCG_GameState::PlaySourceCardToFirstEmptyZone(const FGuid& SourceCardInstanceId)
 {
 	FTCGCardInstance* SourceCard = FindCardInstance(SourceCardInstanceId);
-	if (!SourceCard || !IsValidPlayerIndex(SourceCard->OwnerPlayerIndex))
-	{
-		return false;
-	}
-
-	const int32 PlayerIndex = SourceCard->OwnerPlayerIndex;
+	if (!SourceCard || !IsValidPlayerIndex(SourceCard->OwnerPlayerIndex)) return false;
 	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
 	{
-		const FName ZoneId = GetFieldZoneId(PlayerIndex, FieldIndex);
+		const FName ZoneId = GetFieldZoneId(SourceCard->OwnerPlayerIndex, FieldIndex);
 		FGuid ExistingStackId;
 		if (FindStackIdInZone(ZoneId, ExistingStackId)) continue;
-
 		return PlaySourceCardToEmptyZone(SourceCardInstanceId, ZoneId);
 	}
-
 	return false;
 }
 
 bool ATCG_GameState::SendTopDeckCardToGraveyard(int32 PlayerIndex)
 {
-	if (!IsValidPlayerIndex(PlayerIndex))
-	{
-		return false;
-	}
-
+	if (!IsValidPlayerIndex(PlayerIndex)) return false;
 	FTCGCardInstance* TopDeckCard = nullptr;
 	for (FTCGCardInstance& Card : MatchCards)
 	{
 		if (Card.OwnerPlayerIndex != PlayerIndex || Card.Location != ETCGCardLocation::Deck) continue;
-		if (!TopDeckCard || Card.LocationIndex > TopDeckCard->LocationIndex)
-		{
-			TopDeckCard = &Card;
-		}
+		if (!TopDeckCard || Card.LocationIndex > TopDeckCard->LocationIndex) TopDeckCard = &Card;
 	}
-
-	if (!TopDeckCard)
-	{
-		return false;
-	}
-
+	if (!TopDeckCard) return false;
 	const FGuid SentCardId = TopDeckCard->CardInstanceId;
 	const FName SentCardDefinitionId = TopDeckCard->CardDefinitionId;
 	const bool bMoved = MoveCardToLocation(SentCardId, ETCGCardLocation::Graveyard);
-	if (!bMoved)
-	{
-		return false;
-	}
-
+	if (!bMoved) return false;
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Sent top deck card to graveyard Player=%d Card=%s"), PlayerIndex, *SentCardDefinitionId.ToString());
 
 	const FTCGCardInstance* SentCard = FindCardInstance(SentCardId);
@@ -232,17 +226,10 @@ bool ATCG_GameState::SendTopDeckCardToGraveyard(int32 PlayerIndex)
 		GetPrintedEffectRefsForCard(*SentCard, EffectRefs);
 		for (const FTCGCardEffectRef& EffectRef : EffectRefs)
 		{
-			if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnSentToGraveyard))
-			{
-				AddCardEffectRefToChain(Chain, SentCardId, SentCardId, EffectRef);
-			}
+			if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnSentToGraveyard)) AddCardEffectRefToChain(Chain, SentCardId, SentCardId, EffectRef);
 		}
-
-		if (Chain.Num() <= 0 && IsTidesCallingCard(SentCard))
-		{
-			AddCardEffectRefToChain(Chain, SentCardId, SentCardId, MakeTidesCallingFromDeckToGraveyardEffect());
-		}
-
+		if (Chain.Num() <= 0 && IsTidesCallingCard(SentCard)) AddCardEffectRefToChain(Chain, SentCardId, SentCardId, MakeTidesCallingFromDeckToGraveyardEffect());
+		if (Chain.Num() <= 0 && IsMirechantCard(SentCard)) AddCardEffectRefToChain(Chain, SentCardId, SentCardId, MakeMirechantFromDeckToGraveyardEffect());
 		for (FTCGEffectChainEntry& Entry : Chain)
 		{
 			Entry.bRequiresSourceOnBoard = false;
@@ -250,55 +237,68 @@ bool ATCG_GameState::SendTopDeckCardToGraveyard(int32 PlayerIndex)
 		}
 		ResolveEffectChain(Chain);
 	}
-
 	return true;
 }
 
 bool ATCG_GameState::MoveFirstGraveyardCardToBottomDeck(int32 PlayerIndex)
 {
-	if (!IsValidPlayerIndex(PlayerIndex))
-	{
-		return false;
-	}
-
+	if (!IsValidPlayerIndex(PlayerIndex)) return false;
 	FTCGCardInstance* GraveyardCard = nullptr;
 	for (FTCGCardInstance& Card : MatchCards)
 	{
 		if (Card.OwnerPlayerIndex != PlayerIndex || Card.Location != ETCGCardLocation::Graveyard) continue;
-		if (!GraveyardCard || Card.LocationIndex < GraveyardCard->LocationIndex)
-		{
-			GraveyardCard = &Card;
-		}
+		if (!GraveyardCard || Card.LocationIndex < GraveyardCard->LocationIndex) GraveyardCard = &Card;
 	}
-
-	if (!GraveyardCard)
-	{
-		return false;
-	}
-
+	if (!GraveyardCard) return false;
 	const FName CardDefinitionId = GraveyardCard->CardDefinitionId;
 	const bool bMoved = MoveCardToBottomOfDeck(GraveyardCard->CardInstanceId);
-	if (bMoved)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Moved graveyard card to bottom deck Player=%d Card=%s"), PlayerIndex, *CardDefinitionId.ToString());
-	}
+	if (bMoved) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Moved graveyard card to bottom deck Player=%d Card=%s"), PlayerIndex, *CardDefinitionId.ToString());
 	return bMoved;
 }
 
 void ATCG_GameState::RunDebugTidesCallingScenario()
 {
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Tide's Calling scenario start"));
+	MatchCards.Empty();
+	StartMatch();
+	SetPhase(ETCGMatchPhase::Placement);
+	SetCurrentTurnPlayer(0);
+	AddCardInstance("Debug_Water_Filler_A", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Deck);
+	AddCardInstance("Debug_Water_Filler_B", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Deck);
+	AddCardInstance(DebugCard_TidesCalling, ETCGCardElement::Water, 2, 0, ETCGCardLocation::Deck);
+	AddCardInstance("Debug_Water_GraveyardSeed", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
+	const bool bSentTopDeck = SendTopDeckCardToGraveyard(0);
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Tide's Calling scenario final summary SentTopDeck=%s"), bSentTopDeck ? TEXT("true") : TEXT("false"));
+	EndMatch(ETCGMatchResult::Draw);
+}
 
+void ATCG_GameState::RunDebugDreampoolMirechantScenario()
+{
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Dreampool Mirechant scenario start"));
 	MatchCards.Empty();
 	StartMatch();
 	SetPhase(ETCGMatchPhase::Placement);
 	SetCurrentTurnPlayer(0);
 
-	AddCardInstance("Debug_Water_Filler_A", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Deck);
-	AddCardInstance("Debug_Water_Filler_B", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Deck);
-	AddCardInstance(DebugCard_TidesCalling, ETCGCardElement::Water, 2, 0, ETCGCardLocation::Deck);
-	AddCardInstance("Debug_Water_GraveyardSeed", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
+	FTCGCardInstance& WaterUnit = AddCardInstance("Debug_Water_TargetUnit", ETCGCardElement::Water, 3, 0, ETCGCardLocation::Board);
+	WaterUnit.ZoneId = GetFieldZoneId(0, 0);
+	WaterUnit.StackId = FGuid::NewGuid();
+	WaterUnit.StackIndex = 0;
+	AddCardInstance("Debug_Water_Grave_A", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
+	AddCardInstance("Debug_Water_Grave_B", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
+	AddCardInstance("Debug_Fire_Grave_C", ETCGCardElement::Fire, 1, 0, ETCGCardLocation::Graveyard);
+	AddCardInstance(DebugCard_DreampoolMirechant, ETCGCardElement::Water, 3, 0, ETCGCardLocation::Deck);
 
+	const int32 BeforeAttack = GetFinalAttack(WaterUnit.CardInstanceId);
 	const bool bSentTopDeck = SendTopDeckCardToGraveyard(0);
-	ScheduleTidesCallingFinalSummary(this, bSentTopDeck);
+	const int32 AfterAttack = GetFinalAttack(WaterUnit.CardInstanceId);
+	TArray<FTCGCardInstance> StackCards;
+	GetCardsInStack(WaterUnit.StackId, StackCards);
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Dreampool Mirechant summary SentTopDeck=%s StackCount=%d WaterGY=%d BeforeATK=%d AfterATK=%d"),
+		bSentTopDeck ? TEXT("true") : TEXT("false"),
+		StackCards.Num(),
+		CountCardsInLocationByElement(0, ETCGCardLocation::Graveyard, ETCGCardElement::Water),
+		BeforeAttack,
+		AfterAttack);
+	EndMatch(ETCGMatchResult::Draw);
 }
