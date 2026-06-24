@@ -79,6 +79,12 @@ void UTCG_EffectResolver::ApplyDebugEffectChainEntryRequirements(ATCG_GameState*
 		ChainEntry.bRequiresTargetOnBoard = false;
 	}
 
+	if (ChainEntry.Trigger == ETCGEffectTrigger::OnYourUnitDestroyedByBattle)
+	{
+		ChainEntry.bRequiresSourceOnBoard = false;
+		ChainEntry.bRequiresTargetOnBoard = true;
+	}
+
 	if (ChainEntry.EffectId == ResolverLegacyDebugEffect_Draw1 && SourceCard->CardInstanceId != TargetCard->CardInstanceId)
 	{
 		ChainEntry.bRequiresSourceInTargetStack = true;
@@ -123,6 +129,11 @@ bool UTCG_EffectResolver::AddCardEffectRefToChain(ATCG_GameState* GameState, TAr
 	NewEntry.ControllerPlayerIndex = SourceCard->OwnerPlayerIndex;
 	ApplyDebugEffectChainEntryRequirements(GameState, NewEntry);
 	if (NewEntry.Trigger == ETCGEffectTrigger::OnDestroyed)
+	{
+		NewEntry.bRequiresSourceOnBoard = false;
+		NewEntry.bRequiresTargetOnBoard = true;
+	}
+	if (NewEntry.Trigger == ETCGEffectTrigger::OnYourUnitDestroyedByBattle)
 	{
 		NewEntry.bRequiresSourceOnBoard = false;
 		NewEntry.bRequiresTargetOnBoard = true;
