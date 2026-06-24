@@ -13,6 +13,7 @@ A card effect is built from reusable pieces:
 * target piece
 * action piece
 * value piece
+* selection piece
 * flow piece
 
 Example card text:
@@ -27,7 +28,7 @@ Trigger: OnPlay
 Steps:
   1. DrawCards, Controller, Value 2
   2. Then
-  3. DiscardCards, Controller, Value 1, RequiresPreviousStepSuccess
+  3. DiscardCards, Controller, Value 1, SelectionMode PlayerChoice, RequiresPreviousStepSuccess
   4. Then
   5. ModifyAttack, SourceCard, ValueMode Fixed, Value 2, RequiresPreviousStepSuccess
 
@@ -47,13 +48,11 @@ Steps:
 * `Steps`
 * `bOptional`
 
-`EffectId` stays for now as a stable debug/fallback id because the overlay-removal debug fizzle test still uses a special hardcoded action.
+`EffectId` is now only a temporary migration/debug field. Existing old debug ids are converted into modular steps before they enter the chain.
 
 For real card effects going forward, the preferred path is modular `Steps`.
 
-If an effect has modular `Steps`, the resolver uses the modular step sequence.
-
-If `Steps` is empty, the resolver can still use the remaining hardcoded/debug `EffectId` behavior.
+Effects with no modular steps should not resolve.
 
 ## Step Types
 
@@ -64,6 +63,7 @@ Initial reusable step types:
 * `DiscardCards`
 * `ModifyAttack`
 * `SelectTarget`
+* `MoveBottomOverlayToGraveyard`
 
 `Then` is a flow step. It does not perform a gameplay action by itself.
 
@@ -78,6 +78,33 @@ Draw 2 cards, then discard 1.
 ```
 
 If the draw step fails, the discard step can be skipped.
+
+## Selection Modes
+
+Some steps can either happen automatically or ask the player.
+
+Implemented selection modes:
+
+* `Automatic`
+* `PlayerChoice`
+
+For `DiscardCards`:
+
+```text
+SelectionMode Automatic
+```
+
+means the system discards cards from hand using the current automatic order.
+
+```text
+SelectionMode PlayerChoice
+```
+
+means the resolver creates `PendingDiscardChoice` on the GameState. UI/Blueprint can read the available card instance ids through `GetPendingDiscardChoiceOptions` and complete the choice with `SubmitPendingDiscardChoice`.
+
+Current limitation:
+
+A pending discard choice does not yet resume later chain steps after the choice is submitted. For effects ending at discard, such as `Draw 2, then choose and discard 1`, this is enough to test the player-choice path. Later chain-resume support should store the paused chain entry and next step index.
 
 ## Value Modes
 
@@ -174,6 +201,8 @@ Log these moments:
 * chain entry fizzles
 * modular effect starts resolving
 * each used step succeeds/fails
+* player choice is requested
+* player choice is submitted
 * step skipped because a previous required step failed
 
 Do not log every passive scan, every card in every zone, or every tick-like check.
@@ -187,11 +216,13 @@ Implemented data:
 * `ETCGEffectStepType`
 * `ETCGEffectTargetMode`
 * `ETCGEffectValueMode`
+* `ETCGEffectSelectionMode`
 * `FTCGEffectTargetFilter`
 * `FTCGEffectStep`
 * `FTCGCardEffectRef::Steps`
 * `FTCGCardEffectRef::bOptional`
 * `FTCGEffectChainEntry::EffectRef`
+* `FTCGPendingDiscardChoice`
 
 Implemented resolver helpers:
 
@@ -200,6 +231,9 @@ Implemented resolver helpers:
 * `ResolveModularEffectChainEntry`
 * `ResolveEffectStep`
 * `DiscardCardsFromHand`
+* `BeginPendingDiscardChoice`
+* `SubmitPendingDiscardChoice`
+* `MoveBottomOverlayToGraveyard`
 
 Implemented first modular steps:
 
@@ -207,15 +241,17 @@ Implemented first modular steps:
 * DiscardCards
 * ModifyAttack
 * SelectTarget scaffold
+* MoveBottomOverlayToGraveyard
 
 Implemented chain hook:
 
 * `BuildStackOnPlayEffectChain` uses `GetPrintedEffectRefsForCard` and `AddCardEffectRefToChain`.
-* `ResolveEffectChain` calls `ResolveEffectChainEntry`, which chooses modular `Steps` first and falls back to debug `EffectId` when needed.
+* `ResolveEffectChain` calls `ResolveEffectChainEntry`, which now expects modular steps.
 
 Legacy cleanup status:
 
 * `Debug_Draw1` is auto-converted to modular `DrawCards 1` when added to the chain.
 * `Debug_GainAttackForCardsUnderneath` is auto-converted to modular `ModifyAttack` with `CardsUnderneathTarget` when added to the chain.
-* `EffectId` is not removed yet because `Debug_RemoveBottomOverlay` remains a special hardcoded debug/fizzle action.
-* After the overlay-removal test is replaced by a modular remove-overlay step, `EffectId` and the hardcoded debug fallback can be removed.
+* `Debug_RemoveBottomOverlay` is auto-converted to modular `MoveBottomOverlayToGraveyard` when added to the chain.
+* The old resolver path is no longer used by active chain resolution.
+* Some deprecated compatibility declarations remain because old definitions still exist in `TCG_GameState.cpp`; they should be removed in a future file cleanup pass.
