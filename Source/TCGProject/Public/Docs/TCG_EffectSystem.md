@@ -39,6 +39,38 @@ Steps:
   2. ModifyAttack, SelectedTarget, ValueMode Fixed, Value 2, RequiresPreviousStepSuccess
 ```
 
+## Tide's Calling Test Card
+
+Current polished card text:
+
+```text
+Tide's Calling
+Water Unit
+ATK 2
+
+Effect
+When this card is sent from your Deck to the Graveyard, you may play it to an empty field zone.
+
+When this card is played, you may send the top card of your Deck to the Graveyard. Then, you may place 1 card from your Graveyard on the bottom of your Deck.
+
+Flavor Text
+"A whisper from the water's edge pulls the waking mind into its depths."
+```
+
+Dedicated debug id:
+
+```text
+Debug_Water_TidesCalling
+```
+
+Dedicated debug scenario:
+
+```cpp
+RunDebugTidesCallingScenario()
+```
+
+GameMode temporarily runs this Tide's Calling scenario instead of the normal round-flow scenario.
+
 ## Data Shape
 
 `FTCGCardEffectRef` has:
@@ -64,6 +96,9 @@ Initial reusable step types:
 * `ModifyAttack`
 * `SelectTarget`
 * `MoveBottomOverlayToGraveyard`
+* `PlaySourceToEmptyZone`
+* `SendTopDeckCardToGraveyard`
+* `MoveGraveyardCardToBottomDeck`
 
 `Then` is a flow step. It does not perform a gameplay action by itself.
 
@@ -242,6 +277,10 @@ Implemented resolver helpers:
 * `BeginPendingDiscardChoice`
 * `SubmitPendingDiscardChoice`
 * `MoveBottomOverlayToGraveyard`
+* `PlaySourceCardToFirstEmptyZone`
+* `SendTopDeckCardToGraveyard`
+* `MoveFirstGraveyardCardToBottomDeck`
+* `MoveCardToBottomOfDeck`
 
 Implemented first modular steps:
 
@@ -250,6 +289,9 @@ Implemented first modular steps:
 * ModifyAttack
 * SelectTarget scaffold
 * MoveBottomOverlayToGraveyard
+* PlaySourceToEmptyZone
+* SendTopDeckCardToGraveyard
+* MoveGraveyardCardToBottomDeck
 
 Implemented chain hook:
 
