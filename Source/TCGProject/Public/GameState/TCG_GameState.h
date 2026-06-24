@@ -139,6 +139,37 @@ public:
 	}
 };
 
+USTRUCT(BlueprintType)
+struct FTCGPendingPlayToEmptyZoneChoice
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	bool bIsPending = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	int32 PlayerIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	FGuid SourceCardInstanceId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	int32 ChainIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	TArray<FName> EligibleZoneIds;
+
+	void Reset()
+	{
+		bIsPending = false;
+		PlayerIndex = INDEX_NONE;
+		SourceCardInstanceId.Invalidate();
+		ChainIndex = INDEX_NONE;
+		EligibleZoneIds.Reset();
+	}
+};
+
 UCLASS()
 class TCGPROJECT_API ATCG_GameState : public AGameState
 {
@@ -193,6 +224,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Choice")
 	FTCGPendingGraveyardToDeckChoice PendingGraveyardToDeckChoice;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	FTCGPendingPlayToEmptyZoneChoice PendingPlayToEmptyZoneChoice;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Debug")
 	TArray<TObjectPtr<UTCG_CardDefinition>> DebugCardDefinitions;
@@ -282,11 +316,21 @@ public:
 	void GetPendingGraveyardToDeckChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const;
 	void ClearPendingGraveyardToDeckChoice();
 
+	bool BeginPendingPlayToEmptyZoneChoice(int32 PlayerIndex, const FTCGEffectChainEntry& ChainEntry);
+	UFUNCTION(BlueprintCallable, Category = "TCG|Choice")
+	bool SubmitPendingPlayToEmptyZoneChoice(int32 PlayerIndex, FName ChosenZoneId);
+	UFUNCTION(BlueprintPure, Category = "TCG|Choice")
+	bool HasPendingPlayToEmptyZoneChoice() const;
+	UFUNCTION(BlueprintPure, Category = "TCG|Choice")
+	void GetPendingPlayToEmptyZoneChoiceOptions(TArray<FName>& OutZoneIds) const;
+	void ClearPendingPlayToEmptyZoneChoice();
+
 	bool MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLocation NewLocation);
 	bool MoveCardToBottomOfDeck(const FGuid& CardInstanceId);
 	bool MoveStackToLocation(const FGuid& StackId, ETCGCardLocation NewLocation);
 	bool MoveBottomOverlayToGraveyard(const FGuid& TargetCardInstanceId);
 	bool PlaySourceCardToFirstEmptyZone(const FGuid& SourceCardInstanceId);
+	bool PlaySourceCardToEmptyZone(const FGuid& SourceCardInstanceId, FName ZoneId);
 	bool SendTopDeckCardToGraveyard(int32 PlayerIndex);
 	bool MoveFirstGraveyardCardToBottomDeck(int32 PlayerIndex);
 	bool DoesPlayerHaveAnyCardOnBoard(int32 PlayerIndex) const;
