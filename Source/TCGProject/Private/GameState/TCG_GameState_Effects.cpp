@@ -38,8 +38,9 @@ namespace
 		case ETCGEffectStepType::BoostAllOwnUnitsThisRound: return TEXT("BoostAllOwnUnitsThisRound");
 		case ETCGEffectStepType::RevealTopDeckCardsAddElementToHand: return TEXT("RevealTopDeckCardsAddElementToHand");
 		case ETCGEffectStepType::PlayGraveyardCardToEmptyZone: return TEXT("PlayGraveyardCardToEmptyZone");
-		case ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck: return TEXT("MoveGraveyardCardsToHandAndTopDeckDeprecated");
+		case ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck: return TEXT("MoveGraveyardCardsToHandAndTopDeck");
 		case ETCGEffectStepType::RemoveMaterialFromTargetUnit: return TEXT("RemoveMaterialFromTargetUnit");
+		case ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit: return TEXT("AttackMillTwoWaterBounceBattlingUnit");
 		default: return TEXT("None");
 		}
 	}
@@ -369,7 +370,7 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 				bAutoSubmittedChoice = SubmitPendingGraveyardCardsToHandAndTopDeckChoice(ChainEntry.ControllerPlayerIndex, ChoiceOptions[0], ChoiceOptions[1]);
 			}
 		}
-		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveGraveyardCardsToHandAndTopDeck Deprecated Player=%d Pending=%s AutoSubmitted=%s"), ChainEntry.ControllerPlayerIndex, bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveGraveyardCardsToHandAndTopDeck Player=%d Pending=%s AutoSubmitted=%s"), ChainEntry.ControllerPlayerIndex, bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
 		bStepSucceeded = bAutoSubmittedChoice;
 		break;
 	}
@@ -389,6 +390,12 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		}
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step RemoveMaterialFromTargetUnit Player=%d Pending=%s AutoSubmitted=%s"), ChainEntry.ControllerPlayerIndex, bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
 		bStepSucceeded = bAutoSubmittedChoice;
+		break;
+	}
+	case ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit:
+	{
+		bStepSucceeded = ResolveAttackMillTwoWaterBounceBattlingUnit(ChainEntry.SourceCardInstanceId, ChainEntry.TargetCardInstanceId);
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step AttackMillTwoWaterBounceBattlingUnit Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
 	case ETCGEffectStepType::AttachSourceToWaterUnitMaterial:
