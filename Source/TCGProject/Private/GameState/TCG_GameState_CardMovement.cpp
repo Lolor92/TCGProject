@@ -23,3 +23,15 @@ bool ATCG_GameState::MoveBottomOverlayToGraveyard(const FGuid& TargetCardInstanc
 
 	return BottomOverlayCard && MoveCardToLocation(BottomOverlayCard->CardInstanceId, ETCGCardLocation::Graveyard);
 }
+
+bool ATCG_GameState::PlayGraveyardCardToEmptyZone(const FGuid& CardInstanceId, FName ZoneId)
+{
+	FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
+	if (!Card || Card->Location != ETCGCardLocation::Graveyard) return false;
+	if (ZoneId.IsNone()) return false;
+
+	FGuid ExistingStackId;
+	if (FindStackIdInZone(ZoneId, ExistingStackId)) return false;
+
+	return PlaceCardAsNewStack(CardInstanceId, ZoneId);
+}
