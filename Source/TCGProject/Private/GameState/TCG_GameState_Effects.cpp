@@ -262,6 +262,90 @@ namespace
 
 		return bReturnedUnit;
 	}
+
+	static bool EffectRefHasStep(const FTCGCardEffectRef& EffectRef, ETCGEffectStepType StepType)
+	{
+		for (const FTCGEffectStep& Step : EffectRef.Steps)
+		{
+			if (Step.StepType == StepType)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	static bool TryHandSaveReplacementForCardEffect(ATCG_GameState* GameState, const FGuid& TargetTopCardInstanceId)
+	{
+		if (!GameState) return false;
+
+		const FTCGCardInstance* TargetCard = GameState->FindCardInstance(TargetTopCardInstanceId);
+		if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board)
+		{
+			return false;
+		}
+
+		TArray<FTCGCardInstance> HandCards;
+		GameState->GetCardsInHand(TargetCard->OwnerPlayerIndex, HandCards);
+
+		for (const FTCGCardInstance& HandCard : HandCards)
+		{
+			TArray<FTCGCardEffectRef> EffectRefs;
+			GameState->GetPrintedEffectRefsForCard(HandCard, EffectRefs);
+
+			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+			{
+				if (!GameState->DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnYourUnitWouldBeDestroyedByCardEffect))
+				{
+					continue;
+				}
+
+				if (!EffectRefHasStep(EffectRef, ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials))
+				{
+					continue;
+				}
+
+				FTCGEffectChainEntry ReplacementEntry;
+				ReplacementEntry.ChainIndex = 1;
+				ReplacementEntry.SourceCardInstanceId = HandCard.CardInstanceId;
+				ReplacementEntry.TargetCardInstanceId = TargetTopCardInstanceId;
+				ReplacementEntry.SourceCardDefinitionId = HandCard.CardDefinitionId;
+				ReplacementEntry.Trigger = ETCGEffectTrigger::OnYourUnitWouldBeDestroyedByCardEffect;
+				ReplacementEntry.EffectRef = EffectRef;
+				ReplacementEntry.ControllerPlayerIndex = HandCard.OwnerPlayerIndex;
+				ReplacementEntry.bRequiresSourceOnBoard = false;
+				ReplacementEntry.bRequiresTargetOnBoard = true;
+
+				return DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials(GameState, ReplacementEntry);
+			}
+		}
+
+		return false;
+	}
+
+	static bool DestroyTargetUnitByCardEffect(ATCG_GameState* GameState, const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step)
+	{
+		if (!GameState) return false;
+
+		const FGuid TargetCardInstanceId =
+			Step.TargetMode == ETCGEffectTargetMode::SourceCard
+				? ChainEntry.SourceCardInstanceId
+				: ChainEntry.TargetCardInstanceId;
+
+		const FTCGCardInstance* TargetCard = GameState->FindCardInstance(TargetCardInstanceId);
+		if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board || !TargetCard->StackId.IsValid())
+		{
+			return false;
+		}
+
+		if (TryHandSaveReplacementForCardEffect(GameState, TargetCardInstanceId))
+		{
+			return true;
+		}
+
+		return GameState->MoveStackToLocation(TargetCard->StackId, ETCGCardLocation::Graveyard);
+	}
 }
 
 bool ATCG_GameState::AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId, const FTCGCardEffectRef& EffectRef)
@@ -494,6 +578,17 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 	{
 		bStepSucceeded = DiscardSourceDetachUpToTwoMaterialsFromTarget(this, ChainEntry);
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardSourceDetachUpToTwoMaterialsFromTarget Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
+		break;
+	}
+	case ETCGEffectStepType::DestroyTargetUnitByCardEffect:
+	{
+		bStepSucceeded = DestroyTargetUnitByCardEffect(this, ChainEntry, Step);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DestroyTargetUnitByCardEffect Player=%d Success=%s"),
+				ChainEntry.ControllerPlayerIndex,
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
 		break;
 	}
 	case ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials:
