@@ -4,6 +4,9 @@ namespace
 {
 	constexpr bool bLogEffectResolution = true;
 
+	const FName LegacyDebugEffect_Draw1 = "Debug_Draw1";
+	const FName LegacyDebugEffect_GainAttackForCardsUnderneath = "Debug_GainAttackForCardsUnderneath";
+
 	static const TCHAR* GetTCGEffectStepDebugName(ETCGEffectStepType StepType)
 	{
 		switch (StepType)
@@ -29,6 +32,48 @@ namespace
 		default: return TEXT("None");
 		}
 	}
+
+	static const TCHAR* GetTCGEffectValueModeDebugName(ETCGEffectValueMode ValueMode)
+	{
+		switch (ValueMode)
+		{
+		case ETCGEffectValueMode::CardsUnderneathSource: return TEXT("CardsUnderneathSource");
+		case ETCGEffectValueMode::CardsUnderneathTarget: return TEXT("CardsUnderneathTarget");
+		default: return TEXT("Fixed");
+		}
+	}
+
+	static bool ConvertLegacyDebugEffectToSteps(FTCGCardEffectRef& EffectRef)
+	{
+		if (EffectRef.Steps.Num() > 0 || EffectRef.EffectId.IsNone())
+		{
+			return false;
+		}
+
+		if (EffectRef.EffectId == LegacyDebugEffect_Draw1)
+		{
+			FTCGEffectStep DrawStep;
+			DrawStep.StepType = ETCGEffectStepType::DrawCards;
+			DrawStep.TargetMode = ETCGEffectTargetMode::Controller;
+			DrawStep.Value = 1;
+			DrawStep.ValueMode = ETCGEffectValueMode::Fixed;
+			EffectRef.Steps.Add(DrawStep);
+			return true;
+		}
+
+		if (EffectRef.EffectId == LegacyDebugEffect_GainAttackForCardsUnderneath)
+		{
+			FTCGEffectStep GainAttackStep;
+			GainAttackStep.StepType = ETCGEffectStepType::ModifyAttack;
+			GainAttackStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+			GainAttackStep.Value = 0;
+			GainAttackStep.ValueMode = ETCGEffectValueMode::CardsUnderneathTarget;
+			EffectRef.Steps.Add(GainAttackStep);
+			return true;
+		}
+
+		return false;
+	}
 }
 
 bool ATCG_GameState::AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId,
@@ -40,7 +85,10 @@ bool ATCG_GameState::AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain
 		return false;
 	}
 
-	if (EffectRef.EffectId.IsNone() && EffectRef.Steps.Num() <= 0)
+	FTCGCardEffectRef ResolvedEffectRef = EffectRef;
+	const bool bConvertedLegacyEffect = ConvertLegacyDebugEffectToSteps(ResolvedEffectRef);
+
+	if (ResolvedEffectRef.EffectId.IsNone() && ResolvedEffectRef.Steps.Num() <= 0)
 	{
 		return false;
 	}
@@ -50,21 +98,22 @@ bool ATCG_GameState::AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain
 	NewEntry.SourceCardInstanceId = SourceCardInstanceId;
 	NewEntry.TargetCardInstanceId = TargetCardInstanceId;
 	NewEntry.SourceCardDefinitionId = SourceCard->CardDefinitionId;
-	NewEntry.Trigger = EffectRef.Trigger;
-	NewEntry.EffectId = EffectRef.EffectId;
-	NewEntry.EffectRef = EffectRef;
+	NewEntry.Trigger = ResolvedEffectRef.Trigger;
+	NewEntry.EffectId = ResolvedEffectRef.EffectId;
+	NewEntry.EffectRef = ResolvedEffectRef;
 	NewEntry.ControllerPlayerIndex = SourceCard->OwnerPlayerIndex;
 	ApplyDebugEffectChainEntryRequirements(NewEntry);
 	Chain.Add(NewEntry);
 
 	if (bLogEffectResolution)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Chain add %d Source=%s EffectId=%s Steps=%d Optional=%s"),
+		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Chain add %d Source=%s EffectId=%s Steps=%d Optional=%s ConvertedLegacy=%s"),
 			NewEntry.ChainIndex,
 			*NewEntry.SourceCardDefinitionId.ToString(),
 			NewEntry.EffectId.IsNone() ? TEXT("None") : *NewEntry.EffectId.ToString(),
 			NewEntry.EffectRef.Steps.Num(),
-			NewEntry.EffectRef.bOptional ? TEXT("true") : TEXT("false"));
+			NewEntry.EffectRef.bOptional ? TEXT("true") : TEXT("false"),
+			bConvertedLegacyEffect ? TEXT("true") : TEXT("false"));
 	}
 
 	return true;
@@ -182,18 +231,29 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 			TargetCardInstanceId = ChainEntry.TargetCardInstanceId;
 		}
 
+		int32 AttackDelta = Step.Value;
+		if (Step.ValueMode == ETCGEffectValueMode::CardsUnderneathSource)
+		{
+			AttackDelta = GetCardsUnderneathCount(ChainEntry.SourceCardInstanceId);
+		}
+		else if (Step.ValueMode == ETCGEffectValueMode::CardsUnderneathTarget)
+		{
+			AttackDelta = GetCardsUnderneathCount(ChainEntry.TargetCardInstanceId);
+		}
+
 		FTCGCardInstance* TargetCard = FindCardInstance(TargetCardInstanceId);
 		if (TargetCard && TargetCard->Location == ETCGCardLocation::Board)
 		{
-			TargetCard->AttackModifier += Step.Value;
+			TargetCard->AttackModifier += AttackDelta;
 			bStepSucceeded = true;
 		}
 
 		if (bLogEffectResolution)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step ModifyAttack TargetMode=%s Amount=%d Success=%s"),
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step ModifyAttack TargetMode=%s ValueMode=%s Amount=%d Success=%s"),
 				GetTCGEffectTargetModeDebugName(Step.TargetMode),
-				Step.Value,
+				GetTCGEffectValueModeDebugName(Step.ValueMode),
+				AttackDelta,
 				bStepSucceeded ? TEXT("true") : TEXT("false"));
 		}
 		break;
