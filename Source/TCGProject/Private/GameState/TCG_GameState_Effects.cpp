@@ -310,12 +310,64 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		break;
 	}
 	case ETCGEffectStepType::RevealTopDeckCardsAddElementToHand:
-	{
-		const int32 RevealCount = FMath::Max(1, Step.Value <= 0 ? 2 : Step.Value);
-		bStepSucceeded = RevealTopDeckCardsAddElementToHand(ChainEntry.ControllerPlayerIndex, RevealCount, Step.TargetFilter);
-		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step RevealTopDeckCardsAddElementToHand Player=%d Reveal=%d Success=%s"), ChainEntry.ControllerPlayerIndex, RevealCount, bStepSucceeded ? TEXT("true") : TEXT("false"));
-		break;
-	}
+		{
+			const int32 RevealCount = FMath::Max(1, Step.Value <= 0 ? 2 : Step.Value);
+
+			if (Step.SelectionMode == ETCGEffectSelectionMode::PlayerChoice)
+			{
+				const bool bChoiceStarted = BeginPendingRevealDeckChoice(
+					ChainEntry.ControllerPlayerIndex,
+					RevealCount,
+					Step.TargetFilter,
+					ChainEntry);
+
+				bool bAutoSubmittedChoice = false;
+
+				if (bChoiceStarted)
+				{
+					TArray<FGuid> ChoiceOptions;
+					GetPendingRevealDeckChoiceOptions(ChoiceOptions);
+
+					// Debug auto-submit for now, until UI submits the real chosen card.
+					if (ChoiceOptions.Num() > 0)
+					{
+						bAutoSubmittedChoice = SubmitPendingRevealDeckChoice(
+							ChainEntry.ControllerPlayerIndex,
+							ChoiceOptions[0]);
+					}
+				}
+
+				if (bLogEffectResolution)
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("TCG Effect: Step RevealTopDeckCardsAddElementToHand Player=%d Reveal=%d Mode=%s Pending=%s AutoSubmitted=%s"),
+						ChainEntry.ControllerPlayerIndex,
+						RevealCount,
+						GetTCGEffectSelectionModeDebugName(Step.SelectionMode),
+						bChoiceStarted ? TEXT("true") : TEXT("false"),
+						bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
+				}
+
+				bStepSucceeded = bAutoSubmittedChoice;
+				break;
+			}
+
+			bStepSucceeded = RevealTopDeckCardsAddElementToHand(
+				ChainEntry.ControllerPlayerIndex,
+				RevealCount,
+				Step.TargetFilter);
+
+			if (bLogEffectResolution)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("TCG Effect: Step RevealTopDeckCardsAddElementToHand Player=%d Reveal=%d Success=%s"),
+					ChainEntry.ControllerPlayerIndex,
+					RevealCount,
+					bStepSucceeded ? TEXT("true") : TEXT("false"));
+			}
+
+			break;
+		}
 	case ETCGEffectStepType::MoveGraveyardCardToBottomDeck:
 	{
 		const int32 MoveCount = FMath::Max(1, Step.Value <= 0 ? 1 : Step.Value);
