@@ -41,7 +41,7 @@ namespace
 	}
 }
 
-bool ATCG_GameState::RevealTopDeckCardsAddWaterToHand(int32 PlayerIndex, int32 Count, const FTCGEffectTargetFilter& TargetFilter)
+bool ATCG_GameState::RevealTopDeckCardsAddElementToHand(int32 PlayerIndex, int32 Count, const FTCGEffectTargetFilter& TargetFilter)
 {
 	if (!IsValidPlayerIndex(PlayerIndex) || Count <= 0) return false;
 
@@ -119,7 +119,7 @@ namespace
 			FTCGEffectTargetFilter WaterFilter;
 			WaterFilter.bRequireElement = true;
 			WaterFilter.RequiredElement = ETCGCardElement::Water;
-			GameState->RevealTopDeckCardsAddWaterToHand(PlayerIndex, 2, WaterFilter);
+			GameState->RevealTopDeckCardsAddElementToHand(PlayerIndex, 2, WaterFilter);
 		}
 		return true;
 	}

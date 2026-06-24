@@ -289,7 +289,11 @@ bool ATCG_GameState::SendTopDeckCardToGraveyard(int32 PlayerIndex)
 		GetPrintedEffectRefsForCard(*SentCard, EffectRefs);
 		for (const FTCGCardEffectRef& EffectRef : EffectRefs)
 		{
-			if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnSentToGraveyard)) AddCardEffectRefToChain(Chain, SentCardId, SentCardId, EffectRef);
+			if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnSentToGraveyard)
+				|| DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnSentFromDeckToGraveyard))
+			{
+				AddCardEffectRefToChain(Chain, SentCardId, SentCardId, EffectRef);
+			}
 		}
 		if (Chain.Num() <= 0 && IsTidesCallingCard(SentCard)) AddCardEffectRefToChain(Chain, SentCardId, SentCardId, MakeTidesCallingFromDeckToGraveyardEffect());
 		if (Chain.Num() <= 0 && IsMirechantCard(SentCard)) AddCardEffectRefToChain(Chain, SentCardId, SentCardId, MakeMirechantFromDeckToGraveyardEffect());

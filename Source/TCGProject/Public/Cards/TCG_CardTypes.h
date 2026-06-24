@@ -32,6 +32,10 @@ enum class ETCGEffectTrigger : uint8
 	OnPlay                    UMETA(DisplayName = "On Play"),
 	OnDestroyed               UMETA(DisplayName = "On Destroyed"),
 	OnSentToGraveyard         UMETA(DisplayName = "On Sent To Graveyard"),
+	OnSentFromDeckToGraveyard     UMETA(DisplayName = "On Sent From Deck To Graveyard"),
+	OnSentFromHandToGraveyard     UMETA(DisplayName = "On Sent From Hand To Graveyard"),
+	OnSentFromBoardToGraveyard    UMETA(DisplayName = "On Sent From Board To Graveyard"),
+	OnSentFromMaterialToGraveyard UMETA(DisplayName = "On Sent From Material To Graveyard"),
 	OnBanished                UMETA(DisplayName = "On Banished"),
 	OnBattleStart             UMETA(DisplayName = "On Battle Start"),
 	OnBattleEnd               UMETA(DisplayName = "On Battle End"),
@@ -39,7 +43,8 @@ enum class ETCGEffectTrigger : uint8
 	OnBecomingTopCard         UMETA(DisplayName = "On Becoming Top Card"),
 	OnAttack                  UMETA(DisplayName = "On Attack"),
 	OnCardSentToYourGraveyard UMETA(DisplayName = "On Card Sent To Your Graveyard"),
-	OnBattleDestroy           UMETA(DisplayName = "On Battle Destroy")
+	OnDestroyedUnitByBattle   UMETA(DisplayName = "On Destroyed Unit By Battle"),
+	OnDestroyedByBattle       UMETA(DisplayName = "On Destroyed By Battle")
 };
 
 UENUM(BlueprintType)
@@ -61,7 +66,7 @@ enum class ETCGEffectStepType : uint8
 	AttachGraveyardCardToSourceMaterial UMETA(DisplayName = "Attach Graveyard Card To Source Material"),
 	SendTopDeckCardsToGraveyard         UMETA(DisplayName = "Send Top Deck Cards To Graveyard"),
 	BoostAllOwnUnitsThisRound           UMETA(DisplayName = "Boost All Own Units This Round"),
-	RevealTopDeckCardsAddWaterToHand    UMETA(DisplayName = "Reveal Top Deck Cards Add Water To Hand")
+	RevealTopDeckCardsAddElementToHand  UMETA(DisplayName = "Reveal Top Deck Cards Add Element To Hand")
 };
 
 UENUM(BlueprintType)

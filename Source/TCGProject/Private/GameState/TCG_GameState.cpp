@@ -872,7 +872,7 @@ bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player
 
 			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
 			{
-				if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnBattleDestroy))
+				if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnDestroyedUnitByBattle))
 				{
 					AddCardEffectRefToChain(Chain, Player0WinnerId, Player0WinnerId, EffectRef);
 				}
@@ -893,7 +893,7 @@ bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player
 
 			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
 			{
-				if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnBattleDestroy))
+				if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnDestroyedUnitByBattle))
 				{
 					AddCardEffectRefToChain(Chain, Player1WinnerId, Player1WinnerId, EffectRef);
 				}
