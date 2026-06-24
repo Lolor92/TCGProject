@@ -191,7 +191,7 @@ public:
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Choice")
 	FTCGPendingDiscardChoice PendingDiscardChoice;
 
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice")
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Choice")
 	FTCGPendingGraveyardToDeckChoice PendingGraveyardToDeckChoice;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Debug")
