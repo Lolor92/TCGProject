@@ -6,10 +6,11 @@ namespace
 	enum class ETCGDebugScenario : uint8
 	{
 		NormalRoundFlow,
-		WraparoundBattle
+		WraparoundBattle,
+		RoundLimitTiebreak
 	};
 
-	constexpr ETCGDebugScenario DebugScenario = ETCGDebugScenario::NormalRoundFlow;
+	constexpr ETCGDebugScenario DebugScenario = ETCGDebugScenario::RoundLimitTiebreak;
 	constexpr bool bEnableDebugOverlayRemovalFizzleTest = false;
 	constexpr bool bLogDebugSetup = true;
 	constexpr bool bLogRoundFlow = true;
@@ -982,7 +983,14 @@ void ATCG_GameState::RunDebugTurnFlow()
 		return ETCGMatchResult::Draw;
 	};
 
-	auto RunWraparoundBattleScenario = [this, &AddDebugBoardUnit]()
+	auto LogMatchResult = [](ETCGMatchResult Result)
+	{
+		return Result == ETCGMatchResult::Player0Wins ? TEXT("Player 0 wins") :
+			Result == ETCGMatchResult::Player1Wins ? TEXT("Player 1 wins") :
+			Result == ETCGMatchResult::Draw ? TEXT("Draw") : TEXT("None");
+	};
+
+	auto RunWraparoundBattleScenario = [this, &AddDebugBoardUnit, &LogMatchResult]()
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Wraparound battle scenario start"));
 		MatchCards.Empty();
@@ -998,15 +1006,56 @@ void ATCG_GameState::RunDebugTurnFlow()
 			bResolved ? TEXT("true") : TEXT("false"),
 			DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"),
 			DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"),
-			ScenarioResult == ETCGMatchResult::Player0Wins ? TEXT("Player 0 wins") :
-			ScenarioResult == ETCGMatchResult::Player1Wins ? TEXT("Player 1 wins") :
-			ScenarioResult == ETCGMatchResult::Draw ? TEXT("Draw") : TEXT("None"));
+			LogMatchResult(ScenarioResult));
+		EndMatch(ScenarioResult);
+	};
+
+	auto RunRoundLimitTiebreakScenario = [this, &AddDebugBoardUnit, &CountBoardUnits, &GetRoundLimitResult, &LogMatchResult]()
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit tiebreak scenario start Max=%d"), MaxRoundNumber);
+		MatchCards.Empty();
+		SetMatchResult(ETCGMatchResult::None);
+		SetPhase(ETCGMatchPhase::Battle);
+		RoundNumber = FMath::Max(1, MaxRoundNumber);
+		TurnNumber = RoundNumber;
+
+		AddDebugBoardUnit("Limit_P0_Field0", ETCGCardElement::Fire, 6, 0, 0);
+		AddDebugBoardUnit("Limit_P0_Field1", ETCGCardElement::Earth, 6, 0, 1);
+		AddDebugBoardUnit("Limit_P0_Field2", ETCGCardElement::Light, 6, 0, 2);
+		AddDebugBoardUnit("Limit_P1_Field0", ETCGCardElement::Dark, 1, 1, 0);
+		AddDebugBoardUnit("Limit_P1_Field1", ETCGCardElement::Water, 10, 1, 1);
+		AddDebugBoardUnit("Limit_P1_Field2", ETCGCardElement::Wind, 1, 1, 2);
+
+		const bool bResolved = ResolveBattlePhase();
+		ETCGMatchResult ScenarioResult = CheckLoseConditionAfterBattle();
+		if (ScenarioResult == ETCGMatchResult::None && RoundNumber >= FMath::Max(1, MaxRoundNumber))
+		{
+			ScenarioResult = GetRoundLimitResult();
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit reached R%d Max=%d P0Units=%d P1Units=%d Result=%s"),
+				RoundNumber,
+				MaxRoundNumber,
+				CountBoardUnits(0),
+				CountBoardUnits(1),
+				LogMatchResult(ScenarioResult));
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit tiebreak scenario summary Resolved=%s P0Board=%s P1Board=%s Result=%s"),
+			bResolved ? TEXT("true") : TEXT("false"),
+			DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"),
+			DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"),
+			LogMatchResult(ScenarioResult));
 		EndMatch(ScenarioResult);
 	};
 
 	if (DebugScenario == ETCGDebugScenario::WraparoundBattle)
 	{
 		RunWraparoundBattleScenario();
+		return;
+	}
+
+	if (DebugScenario == ETCGDebugScenario::RoundLimitTiebreak)
+	{
+		RunRoundLimitTiebreakScenario();
 		return;
 	}
 
@@ -1056,8 +1105,7 @@ void ATCG_GameState::RunDebugTurnFlow()
 				MaxRoundNumber,
 				CountBoardUnits(0),
 				CountBoardUnits(1),
-				BattleMatchResult == ETCGMatchResult::Player0Wins ? TEXT("Player 0 wins") :
-				BattleMatchResult == ETCGMatchResult::Player1Wins ? TEXT("Player 1 wins") : TEXT("Draw"));
+				LogMatchResult(BattleMatchResult));
 		}
 
 		if (bLogRoundFlow)
@@ -1067,9 +1115,7 @@ void ATCG_GameState::RunDebugTurnFlow()
 				bBattleResolved ? TEXT("true") : TEXT("false"),
 				DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"),
 				DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"),
-				BattleMatchResult == ETCGMatchResult::Player0Wins ? TEXT("Player 0 wins") :
-				BattleMatchResult == ETCGMatchResult::Player1Wins ? TEXT("Player 1 wins") :
-				BattleMatchResult == ETCGMatchResult::Draw ? TEXT("Draw") : TEXT("None"));
+				LogMatchResult(BattleMatchResult));
 		}
 
 		if (BattleMatchResult != ETCGMatchResult::None)
