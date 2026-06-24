@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "TCG_CardTypes.generated.h"
@@ -39,9 +39,6 @@ enum class ETCGCardLocation : uint8
 
 /**
  * Effect trigger timing.
- *
- * We are not implementing effects yet.
- * This enum only gives the data model the correct shape for later.
  */
 UENUM(BlueprintType)
 enum class ETCGEffectTrigger : uint8
@@ -58,10 +55,97 @@ enum class ETCGEffectTrigger : uint8
 };
 
 /**
- * Lightweight effect reference.
+ * Reusable effect step kind.
  *
- * Later, EffectId can point to a data asset, gameplay effect, script object,
- * or custom effect resolver.
+ * A card effect is now built from small pieces: draw, discard, modify attack,
+ * selection, and flow-control steps such as Then.
+ */
+UENUM(BlueprintType)
+enum class ETCGEffectStepType : uint8
+{
+	None         UMETA(DisplayName = "None"),
+	Then         UMETA(DisplayName = "Then"),
+	DrawCards    UMETA(DisplayName = "Draw Cards"),
+	DiscardCards UMETA(DisplayName = "Discard Cards"),
+	ModifyAttack UMETA(DisplayName = "Modify Attack"),
+	SelectTarget UMETA(DisplayName = "Select Target")
+};
+
+/**
+ * What an effect step acts on.
+ */
+UENUM(BlueprintType)
+enum class ETCGEffectTargetMode : uint8
+{
+	None             UMETA(DisplayName = "None"),
+	Controller       UMETA(DisplayName = "Controller"),
+	Opponent         UMETA(DisplayName = "Opponent"),
+	SourceCard       UMETA(DisplayName = "Source Card"),
+	TriggerTarget    UMETA(DisplayName = "Trigger Target"),
+	SelectedTarget   UMETA(DisplayName = "Selected Target")
+};
+
+/**
+ * Basic target filter for selection steps.
+ *
+ * This is intentionally small for now. It gives us a data shape that can grow
+ * into player choice, enemy units, overlays, graveyard cards, and so on.
+ */
+USTRUCT(BlueprintType)
+struct FTCGEffectTargetFilter
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	ETCGEffectTargetMode OwnerMode = ETCGEffectTargetMode::Controller;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	ETCGCardLocation RequiredLocation = ETCGCardLocation::Board;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	bool bRequireTopCard = true;
+};
+
+/**
+ * One reusable piece of an effect.
+ *
+ * Examples:
+ * - DrawCards, TargetMode Controller, Value 2
+ * - DiscardCards, TargetMode Controller, Value 1, bRequiresPreviousStepSuccess true
+ * - ModifyAttack, TargetMode SourceCard, Value 2, bRequiresPreviousStepSuccess true
+ */
+USTRUCT(BlueprintType)
+struct FTCGEffectStep
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	ETCGEffectStepType StepType = ETCGEffectStepType::None;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	ETCGEffectTargetMode TargetMode = ETCGEffectTargetMode::None;
+
+	// Generic number used by the step.
+	// DrawCards: number to draw. DiscardCards: number to discard. ModifyAttack: amount to add.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	int32 Value = 0;
+
+	// If true, this step only resolves when the previous meaningful step succeeded.
+	// This is the data version of "then".
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	bool bRequiresPreviousStepSuccess = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	FTCGEffectTargetFilter TargetFilter;
+};
+
+/**
+ * Effect reference and optional inline modular effect.
+ *
+ * EffectId stays as a legacy/debug fallback. If Steps has entries, the resolver
+ * uses the modular steps. If Steps is empty, old EffectId logic still works.
  */
 USTRUCT(BlueprintType)
 struct FTCGCardEffectRef
@@ -73,10 +157,16 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	ETCGEffectTrigger Trigger = ETCGEffectTrigger::None;
 
-	// Stable ID for the actual effect logic later.
-	// Example: "DrawOneCard", "DestroyWeakestEnemy", "GainAttack".
+	// Stable ID for legacy/debug effect logic.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	FName EffectId = NAME_None;
+
+	// Modular effect pieces. Preferred for real cards going forward.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	TArray<FTCGEffectStep> Steps;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	bool bOptional = false;
 };
 
 /**
