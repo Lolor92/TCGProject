@@ -15,7 +15,7 @@ namespace
 	constexpr bool bLogDebugSetup = true;
 	constexpr bool bLogCardSetupDetails = false;
 	constexpr bool bLogRoundFlow = true;
-	constexpr bool bLogPlacementFlow = false;
+	constexpr bool bLogPlacementFlow = true;
 	constexpr bool bLogBattleFlow = false;
 	constexpr bool bLogEffectChains = false;
 	constexpr bool bLogVerboseCardTriggers = false;
@@ -1082,6 +1082,8 @@ void ATCG_GameState::RunDebugTurnFlow()
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Starting hand draw P0=%d P1=%d Target=%d"), Player0StartingHandDrawn, Player1StartingHandDrawn, InitialHandSize);
 	}
 
+	const int32 DebugPlacementFieldOrder[FieldZoneCount] = {2, 0, 3, 1};
+
 	while (!IsMatchOver())
 	{
 		SetPhase(ETCGMatchPhase::RoundStart);
@@ -1103,8 +1105,9 @@ void ATCG_GameState::RunDebugTurnFlow()
 			TArray<FTCGCardInstance> HandCards;
 			GetCardsInHand(ActivePlayer, HandCards);
 
-			for (int32 CandidateFieldIndex = 0; CandidateFieldIndex < FieldZoneCount; ++CandidateFieldIndex)
+			for (int32 CandidateOrderIndex = 0; CandidateOrderIndex < FieldZoneCount; ++CandidateOrderIndex)
 			{
+				const int32 CandidateFieldIndex = DebugPlacementFieldOrder[CandidateOrderIndex];
 				const FName CandidateZoneId = GetFieldZoneId(ActivePlayer, CandidateFieldIndex);
 				for (const FTCGCardInstance& HandCard : HandCards)
 				{
@@ -1127,10 +1130,20 @@ void ATCG_GameState::RunDebugTurnFlow()
 			}
 
 			const FName ZoneId = GetFieldZoneId(ActivePlayer, FieldIndex);
+			const bool bWasOverlayPlacement = FindTopCardInZone(ZoneId) != nullptr;
 			const bool bPlayedCard = PlayerPlayCardToZone(ActivePlayer, CardToPlay, ZoneId);
 			if (bLogPlacementFlow)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement R%d Step=%d P%d Draw=%d Field=%d Success=%s"), RoundNumber, LogStepNumber, ActivePlayer, DrawnForStep, FieldIndex, bPlayedCard ? TEXT("true") : TEXT("false"));
+				const TArray<int32>& UsedZones = ActivePlayer == 0 ? Player0PlacementFieldZonesUsedThisRound : Player1PlacementFieldZonesUsedThisRound;
+				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement R%d Step=%d P%d Draw=%d Field=%d Type=%s UsedZones=%d Success=%s"),
+					RoundNumber,
+					LogStepNumber,
+					ActivePlayer,
+					DrawnForStep,
+					FieldIndex,
+					bWasOverlayPlacement ? TEXT("Overlay") : TEXT("NewStack"),
+					UsedZones.Num(),
+					bPlayedCard ? TEXT("true") : TEXT("false"));
 			}
 			if (!bPlayedCard) AdvancePlacementStep();
 		}
