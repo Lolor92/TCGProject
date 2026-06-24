@@ -358,6 +358,112 @@ namespace
 
 		GameState->EndMatch(ETCGMatchResult::Draw);
 	}
+
+	void RunDebugCardEffectSaveReplacementScenario(ATCG_GameState* GameState)
+	{
+		if (!GameState) return;
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: CardEffectSaveReplacement scenario start"));
+
+		GameState->MatchCards.Empty();
+		GameState->StartMatch();
+		GameState->SetPhase(ETCGMatchPhase::Battle);
+		GameState->SetMatchResult(ETCGMatchResult::None);
+
+		const FGuid SavedStackId = FGuid::NewGuid();
+		const FName SavedZoneId = ATCG_GameState::GetFieldZoneId(0, 0);
+
+		const FGuid MaterialAId = GameState->AddCardInstance("Debug_SaveReplacement_MaterialA", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Board).CardInstanceId;
+		if (FTCGCardInstance* MaterialA = GameState->FindCardInstance(MaterialAId))
+		{
+			MaterialA->ZoneId = SavedZoneId;
+			MaterialA->StackId = SavedStackId;
+			MaterialA->StackIndex = 0;
+		}
+
+		const FGuid MaterialBId = GameState->AddCardInstance("Debug_SaveReplacement_MaterialB", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Board).CardInstanceId;
+		if (FTCGCardInstance* MaterialB = GameState->FindCardInstance(MaterialBId))
+		{
+			MaterialB->ZoneId = SavedZoneId;
+			MaterialB->StackId = SavedStackId;
+			MaterialB->StackIndex = 1;
+		}
+
+		const FGuid SavedUnitId = GameState->AddCardInstance("Debug_SaveReplacement_SavedUnit", ETCGCardElement::Light, 5, 0, ETCGCardLocation::Board).CardInstanceId;
+		if (FTCGCardInstance* SavedUnit = GameState->FindCardInstance(SavedUnitId))
+		{
+			SavedUnit->ZoneId = SavedZoneId;
+			SavedUnit->StackId = SavedStackId;
+			SavedUnit->StackIndex = 2;
+		}
+
+		const FGuid DrawCardId = GameState->AddCardInstance("Debug_SaveReplacement_DrawCard", ETCGCardElement::Wind, 1, 0, ETCGCardLocation::Deck).CardInstanceId;
+
+		UTCG_CardDefinition* ResponseDefinition = NewObject<UTCG_CardDefinition>(GameState);
+		ResponseDefinition->CardDefinitionId = "Debug_SaveReplacement_Response";
+		ResponseDefinition->Element = ETCGCardElement::Wind;
+		ResponseDefinition->BaseAttack = 1;
+
+		FTCGCardEffectRef ResponseEffect;
+		ResponseEffect.Trigger = ETCGEffectTrigger::OnYourUnitWouldBeDestroyedByCardEffect;
+		ResponseEffect.bOptional = true;
+
+		FTCGEffectStep ResponseStep;
+		ResponseStep.StepType = ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials;
+		ResponseEffect.Steps.Add(ResponseStep);
+
+		ResponseDefinition->Effects.Add(ResponseEffect);
+		GameState->DebugCardDefinitions.Add(ResponseDefinition);
+
+		FTCGCardInstance* ResponseCard = GameState->AddCardInstanceFromDefinition(ResponseDefinition, 0, ETCGCardLocation::Hand);
+		const FGuid ResponseId = ResponseCard ? ResponseCard->CardInstanceId : FGuid();
+
+		const FGuid DestroyerId = GameState->AddCardInstance("Debug_SaveReplacement_Destroyer", ETCGCardElement::Dark, 1, 1, ETCGCardLocation::Board).CardInstanceId;
+		if (FTCGCardInstance* Destroyer = GameState->FindCardInstance(DestroyerId))
+		{
+			Destroyer->ZoneId = ATCG_GameState::GetFieldZoneId(1, 0);
+			Destroyer->StackId = FGuid::NewGuid();
+			Destroyer->StackIndex = 0;
+		}
+
+		FTCGCardEffectRef DestroyEffect;
+		DestroyEffect.Trigger = ETCGEffectTrigger::OnPlay;
+
+		FTCGEffectStep DestroyStep;
+		DestroyStep.StepType = ETCGEffectStepType::DestroyTargetUnitByCardEffect;
+		DestroyStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+		DestroyEffect.Steps.Add(DestroyStep);
+
+		TArray<FTCGEffectChainEntry> Chain;
+		const bool bChainAdded = GameState->AddCardEffectRefToChain(Chain, DestroyerId, SavedUnitId, DestroyEffect);
+		const bool bChainResolved = GameState->ResolveEffectChain(Chain);
+
+		const FTCGCardInstance* SavedUnitAfter = GameState->FindCardInstance(SavedUnitId);
+		const FTCGCardInstance* MaterialAAfter = GameState->FindCardInstance(MaterialAId);
+		const FTCGCardInstance* MaterialBAfter = GameState->FindCardInstance(MaterialBId);
+		const FTCGCardInstance* ResponseAfter = GameState->FindCardInstance(ResponseId);
+		const FTCGCardInstance* DrawCardAfter = GameState->FindCardInstance(DrawCardId);
+
+		const bool bResponseDiscarded = ResponseAfter && ResponseAfter->Location == ETCGCardLocation::Graveyard;
+		const bool bSavedUnitToHand = SavedUnitAfter && SavedUnitAfter->Location == ETCGCardLocation::Hand;
+		const bool bMaterialAToGraveyard = MaterialAAfter && MaterialAAfter->Location == ETCGCardLocation::Graveyard;
+		const bool bMaterialBToGraveyard = MaterialBAfter && MaterialBAfter->Location == ETCGCardLocation::Graveyard;
+		const int32 MaterialsToGraveyard = (bMaterialAToGraveyard ? 1 : 0) + (bMaterialBToGraveyard ? 1 : 0);
+		const bool bDrawnOne = DrawCardAfter && DrawCardAfter->Location == ETCGCardLocation::Hand;
+		const bool bUnitNotDestroyed = SavedUnitAfter && SavedUnitAfter->Location != ETCGCardLocation::Graveyard;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: CardEffectSaveReplacement summary ChainAdded=%s ChainResolved=%s ResponseDiscarded=%s SavedUnitToHand=%s MaterialsToGraveyard=%d DrawnOne=%s UnitNotDestroyed=%s"),
+			bChainAdded ? TEXT("true") : TEXT("false"),
+			bChainResolved ? TEXT("true") : TEXT("false"),
+			bResponseDiscarded ? TEXT("true") : TEXT("false"),
+			bSavedUnitToHand ? TEXT("true") : TEXT("false"),
+			MaterialsToGraveyard,
+			bDrawnOne ? TEXT("true") : TEXT("false"),
+			bUnitNotDestroyed ? TEXT("true") : TEXT("false"));
+
+		GameState->EndMatch(ETCGMatchResult::Draw);
+	}
 }
 
 void ATCG_GameState::RunDebugMaterialRebirthScenario()
@@ -449,4 +555,5 @@ void ATCG_GameState::RunDebugMaterialRebirthScenario()
 	RunDebugAttackMillBounceScenario(this);
 	RunDebugHandDetachResponseScenario(this);
 	RunDebugGraveyardNegateOpponentAttackScenario(this);
+	RunDebugCardEffectSaveReplacementScenario(this);
 }
