@@ -3,6 +3,7 @@
 namespace
 {
 	constexpr bool bLogEffectResolution = true;
+	constexpr bool bAutoSubmitDebugDiscardChoice = true;
 
 	const FName LegacyDebugEffect_Draw1 = "Debug_Draw1";
 	const FName LegacyDebugEffect_GainAttackForCardsUnderneath = "Debug_GainAttackForCardsUnderneath";
@@ -236,15 +237,32 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		if (Step.SelectionMode == ETCGEffectSelectionMode::PlayerChoice)
 		{
 			const bool bChoiceStarted = BeginPendingDiscardChoice(ChainEntry.ControllerPlayerIndex, DiscardCount, ChainEntry);
+			bool bAutoSubmittedChoice = false;
+
+			if (bChoiceStarted && bAutoSubmitDebugDiscardChoice)
+			{
+				TArray<FGuid> ChoiceOptions;
+				GetPendingDiscardChoiceOptions(ChoiceOptions);
+
+				TArray<FGuid> DebugChosenCards;
+				for (int32 Index = 0; Index < ChoiceOptions.Num() && DebugChosenCards.Num() < DiscardCount; ++Index)
+				{
+					DebugChosenCards.Add(ChoiceOptions[Index]);
+				}
+
+				bAutoSubmittedChoice = SubmitPendingDiscardChoice(ChainEntry.ControllerPlayerIndex, DebugChosenCards);
+			}
+
 			if (bLogEffectResolution)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardCards Player=%d Requested=%d Mode=%s Pending=%s"),
+				UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardCards Player=%d Requested=%d Mode=%s Pending=%s AutoSubmitted=%s"),
 					ChainEntry.ControllerPlayerIndex,
 					DiscardCount,
 					GetTCGEffectSelectionModeDebugName(Step.SelectionMode),
-					bChoiceStarted ? TEXT("true") : TEXT("false"));
+					bChoiceStarted ? TEXT("true") : TEXT("false"),
+					bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
 			}
-			bStepSucceeded = false;
+			bStepSucceeded = bAutoSubmittedChoice;
 			break;
 		}
 
