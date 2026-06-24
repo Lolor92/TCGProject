@@ -46,9 +46,14 @@ namespace
 		EffectRef.Trigger = ETCGEffectTrigger::OnSentToGraveyard;
 		EffectRef.bOptional = true;
 		FTCGEffectStep AttachStep;
-		AttachStep.StepType = ETCGEffectStepType::AttachSourceToWaterUnitMaterial;
+		AttachStep.StepType = ETCGEffectStepType::AttachSourceToUnitMaterial;
 		AttachStep.TargetMode = ETCGEffectTargetMode::Controller;
 		AttachStep.SelectionMode = ETCGEffectSelectionMode::PlayerChoice;
+		AttachStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		AttachStep.TargetFilter.RequiredLocation = ETCGCardLocation::Board;
+		AttachStep.TargetFilter.bRequireTopCard = true;
+		AttachStep.TargetFilter.bRequireElement = true;
+		AttachStep.TargetFilter.RequiredElement = ETCGCardElement::Water;
 		EffectRef.Steps.Add(AttachStep);
 		return EffectRef;
 	}
@@ -63,33 +68,58 @@ namespace
 		return Card && Card->CardDefinitionId == DebugCard_DreampoolMirechant;
 	}
 
-	void ApplyMirechantPassiveAttackBonusIfNeeded(ATCG_GameState* GameState, const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId)
+	int32 GetContinuousAttackBonusForStack(ATCG_GameState* GameState, const FTCGCardInstance& TopCard)
 	{
-		if (!GameState) return;
-		const FTCGCardInstance* SourceCard = GameState->FindCardInstance(SourceCardInstanceId);
-		FTCGCardInstance* TargetCard = GameState->FindCardInstance(TargetCardInstanceId);
-		if (!SourceCard || !TargetCard || SourceCard->OwnerPlayerIndex != TargetCard->OwnerPlayerIndex) return;
+		if (!GameState || !TopCard.StackId.IsValid()) return 0;
 
-		bool bHasMirechantPassive = IsMirechantCard(SourceCard);
-		TArray<FTCGCardEffectRef> EffectRefs;
-		GameState->GetPrintedEffectRefsForCard(*SourceCard, EffectRefs);
-		for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+		int32 Bonus = 0;
+		TArray<FTCGCardInstance> StackCards;
+		GameState->GetCardsInStack(TopCard.StackId, StackCards);
+		for (const FTCGCardInstance& StackCard : StackCards)
 		{
-			if (EffectRef.Trigger != ETCGEffectTrigger::None) continue;
-			for (const FTCGEffectStep& Step : EffectRef.Steps)
+			if (StackCard.StackIndex > TopCard.StackIndex) continue;
+
+			TArray<FTCGCardEffectRef> EffectRefs;
+			GameState->GetPrintedEffectRefsForCard(StackCard, EffectRefs);
+			if (EffectRefs.Num() <= 0 && IsMirechantCard(&StackCard))
 			{
-				if (Step.StepType == ETCGEffectStepType::ModifyAttack && Step.ValueMode == ETCGEffectValueMode::WaterCardsInControllerGraveyard)
+				FTCGCardEffectRef MirechantPassive;
+				MirechantPassive.Trigger = ETCGEffectTrigger::None;
+				FTCGEffectStep PassiveStep;
+				PassiveStep.StepType = ETCGEffectStepType::ModifyAttack;
+				PassiveStep.TargetMode = ETCGEffectTargetMode::SourceCard;
+				PassiveStep.ValueMode = ETCGEffectValueMode::ElementCardsInControllerGraveyard;
+				PassiveStep.TargetFilter.bRequireElement = true;
+				PassiveStep.TargetFilter.RequiredElement = ETCGCardElement::Water;
+				MirechantPassive.Steps.Add(PassiveStep);
+				EffectRefs.Add(MirechantPassive);
+			}
+
+			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+			{
+				if (EffectRef.Trigger != ETCGEffectTrigger::None) continue;
+				for (const FTCGEffectStep& Step : EffectRef.Steps)
 				{
-					bHasMirechantPassive = true;
-					break;
+					if (Step.StepType != ETCGEffectStepType::ModifyAttack) continue;
+					if (Step.ValueMode == ETCGEffectValueMode::WaterCardsInControllerGraveyard)
+					{
+						Bonus += GameState->CountCardsInLocationByElement(TopCard.OwnerPlayerIndex, ETCGCardLocation::Graveyard, ETCGCardElement::Water);
+					}
+					else if (Step.ValueMode == ETCGEffectValueMode::ElementCardsInControllerGraveyard)
+					{
+						Bonus += GameState->CountCardsInLocationByElement(TopCard.OwnerPlayerIndex, ETCGCardLocation::Graveyard, Step.TargetFilter.RequiredElement);
+					}
 				}
 			}
 		}
+		return Bonus;
+	}
 
-		if (!bHasMirechantPassive) return;
-		const int32 Bonus = GameState->CountCardsInLocationByElement(TargetCard->OwnerPlayerIndex, ETCGCardLocation::Graveyard, ETCGCardElement::Water);
-		TargetCard->AttackModifier += Bonus;
-		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Mirechant passive inherited Target=%s Bonus=%d"), *TargetCard->CardDefinitionId.ToString(), Bonus);
+	int32 GetFinalAttackPreviewWithContinuousEffects(ATCG_GameState* GameState, const FGuid& CardInstanceId)
+	{
+		const FTCGCardInstance* Card = GameState ? GameState->FindCardInstance(CardInstanceId) : nullptr;
+		if (!Card) return 0;
+		return Card->BaseAttack + Card->AttackModifier + GameState->GetCardsUnderneathCount(CardInstanceId) + GetContinuousAttackBonusForStack(GameState, *Card);
 	}
 
 	void StartQueuedOnPlayChain(ATCG_GameState* GameState, const FGuid& SourceCardInstanceId)
@@ -150,7 +180,7 @@ bool ATCG_GameState::AttachSourceCardUnderWaterUnit(const FGuid& SourceCardInsta
 	FTCGCardInstance* TargetCard = FindCardInstance(TargetCardInstanceId);
 	if (!SourceCard || !TargetCard) return false;
 	if (SourceCard->Location != ETCGCardLocation::Graveyard) return false;
-	if (TargetCard->Location != ETCGCardLocation::Board || TargetCard->Element != ETCGCardElement::Water || !TargetCard->StackId.IsValid()) return false;
+	if (TargetCard->Location != ETCGCardLocation::Board || !TargetCard->StackId.IsValid()) return false;
 	if (SourceCard->OwnerPlayerIndex != TargetCard->OwnerPlayerIndex) return false;
 
 	const FGuid TargetStackId = TargetCard->StackId;
@@ -166,8 +196,7 @@ bool ATCG_GameState::AttachSourceCardUnderWaterUnit(const FGuid& SourceCardInsta
 	SourceCard->StackId = TargetStackId;
 	SourceCard->StackIndex = 0;
 
-	ApplyMirechantPassiveAttackBonusIfNeeded(this, SourceCardInstanceId, TargetCardInstanceId);
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Attached source as Water material Source=%s Target=%s Zone=%s"), *SourceCard->CardDefinitionId.ToString(), *TargetCard->CardDefinitionId.ToString(), *TargetZoneId.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Attached source as material Source=%s Target=%s Zone=%s"), *SourceCard->CardDefinitionId.ToString(), *TargetCard->CardDefinitionId.ToString(), *TargetZoneId.ToString());
 	return true;
 }
 
@@ -289,9 +318,9 @@ void ATCG_GameState::RunDebugDreampoolMirechantScenario()
 	AddCardInstance("Debug_Fire_Grave_C", ETCGCardElement::Fire, 1, 0, ETCGCardLocation::Graveyard);
 	AddCardInstance(DebugCard_DreampoolMirechant, ETCGCardElement::Water, 3, 0, ETCGCardLocation::Deck);
 
-	const int32 BeforeAttack = GetFinalAttack(WaterUnit.CardInstanceId);
+	const int32 BeforeAttack = GetFinalAttackPreviewWithContinuousEffects(this, WaterUnit.CardInstanceId);
 	const bool bSentTopDeck = SendTopDeckCardToGraveyard(0);
-	const int32 AfterAttack = GetFinalAttack(WaterUnit.CardInstanceId);
+	const int32 AfterAttack = GetFinalAttackPreviewWithContinuousEffects(this, WaterUnit.CardInstanceId);
 	TArray<FTCGCardInstance> StackCards;
 	GetCardsInStack(WaterUnit.StackId, StackCards);
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Dreampool Mirechant summary SentTopDeck=%s StackCount=%d WaterGY=%d BeforeATK=%d AfterATK=%d"),
