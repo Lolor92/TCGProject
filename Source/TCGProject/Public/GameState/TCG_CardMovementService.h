@@ -19,6 +19,7 @@ public:
 	static bool PlayGraveyardCardToEmptyZone(ATCG_GameState* GameState, const FGuid& CardInstanceId, FName ZoneId);
 	static bool ReturnUnitStackToBottomDeckMaterialsToGraveyard(ATCG_GameState* GameState, const FGuid& TargetTopCardInstanceId);
 	static bool ReturnUnitStackToHandMaterialsToGraveyard(ATCG_GameState* GameState, const FGuid& TargetTopCardInstanceId, int32& OutMaterialCount);
+	static bool ResolveCardEffectUnitRemovalWithReplacement(ATCG_GameState* GameState, const FGuid& TargetTopCardInstanceId);
 	static bool ResolveAttackMillTwoWaterBounceBattlingUnit(ATCG_GameState* GameState, const FGuid& SourceCardInstanceId, const FGuid& BattleTargetCardInstanceId);
 	static int32 DiscardCardsFromHand(ATCG_GameState* GameState, int32 PlayerIndex, int32 Count);
 	static bool MoveCardToTopOfDeck(ATCG_GameState* GameState, const FGuid& CardInstanceId);
