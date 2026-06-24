@@ -3,7 +3,7 @@
 
 namespace
 {
-	enum class ETCGDebugScenario : uint8
+	enum class ETCGDebugRunnerScenario : uint8
 	{
 		NormalRoundFlow,
 		WraparoundBattle,
@@ -11,15 +11,15 @@ namespace
 		OverlayPlacement
 	};
 
-	constexpr ETCGDebugScenario DebugScenario = ETCGDebugScenario::NormalRoundFlow;
-	constexpr bool bLogDebugSetup = false;
-	constexpr bool bLogRoundFlow = true;
-	constexpr bool bLogPlacementFlow = true;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::NormalRoundFlow;
+	constexpr bool bDebugRunnerLogDebugSetup = false;
+	constexpr bool bDebugRunnerLogRoundFlow = true;
+	constexpr bool bDebugRunnerLogPlacementFlow = true;
 
-	const FName DebugCard_FireDeckA = "Debug_Fire_Deck_A";
-	const FName DebugCard_FireDeckB = "Debug_Fire_Deck_B";
+	const FName DebugRunnerCard_FireDeckA = "Debug_Fire_Deck_A";
+	const FName DebugRunnerCard_FireDeckB = "Debug_Fire_Deck_B";
 
-	static const TCHAR* GetTCGMatchResultDebugName(ETCGMatchResult Result)
+	static const TCHAR* GetTCGDebugRunnerMatchResultDebugName(ETCGMatchResult Result)
 	{
 		switch (Result)
 		{
@@ -47,8 +47,8 @@ void UTCG_DebugScenarioRunner::SetupDebugMatch(ATCG_GameState* GameState)
 	{
 		GameState->AddDebugCardInstance("Debug_Earth_Deck_A", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
 		GameState->AddDebugCardInstance("Debug_Earth_Deck_B", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
-		GameState->AddDebugCardInstance(DebugCard_FireDeckA, ETCGCardElement::Fire, 2, 0, ETCGCardLocation::Deck);
-		GameState->AddDebugCardInstance(DebugCard_FireDeckB, ETCGCardElement::Fire, 3, 0, ETCGCardLocation::Deck);
+		GameState->AddDebugCardInstance(DebugRunnerCard_FireDeckA, ETCGCardElement::Fire, 2, 0, ETCGCardLocation::Deck);
+		GameState->AddDebugCardInstance(DebugRunnerCard_FireDeckB, ETCGCardElement::Fire, 3, 0, ETCGCardLocation::Deck);
 		GameState->AddDebugCardInstance("Debug_Dark_Deck_A", ETCGCardElement::Dark, 5, 1, ETCGCardLocation::Deck);
 		GameState->AddDebugCardInstance("Debug_Dark_Deck_B", ETCGCardElement::Dark, 2, 1, ETCGCardLocation::Deck);
 		GameState->AddDebugCardInstance("Debug_Light_Deck_A", ETCGCardElement::Light, 4, 1, ETCGCardLocation::Deck);
@@ -59,7 +59,7 @@ void UTCG_DebugScenarioRunner::SetupDebugMatch(ATCG_GameState* GameState)
 	TArray<FTCGCardInstance> Player1Deck;
 	GameState->GetCardsInDeck(0, Player0Deck);
 	GameState->GetCardsInDeck(1, Player1Deck);
-	if (bLogDebugSetup) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match decks P0=%d P1=%d"), Player0Deck.Num(), Player1Deck.Num());
+	if (bDebugRunnerLogDebugSetup) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Setup match decks P0=%d P1=%d"), Player0Deck.Num(), Player1Deck.Num());
 }
 
 void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
@@ -94,7 +94,7 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		return ETCGMatchResult::Draw;
 	};
 
-	if (DebugScenario == ETCGDebugScenario::WraparoundBattle)
+	if (DebugRunnerScenario == ETCGDebugRunnerScenario::WraparoundBattle)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Wraparound battle scenario start"));
 		GameState->MatchCards.Empty();
@@ -110,12 +110,12 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 			bResolved ? TEXT("true") : TEXT("false"),
 			GameState->DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"),
 			GameState->DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"),
-			GetTCGMatchResultDebugName(ScenarioResult));
+			GetTCGDebugRunnerMatchResultDebugName(ScenarioResult));
 		GameState->EndMatch(ScenarioResult);
 		return;
 	}
 
-	if (DebugScenario == ETCGDebugScenario::RoundLimitTiebreak)
+	if (DebugRunnerScenario == ETCGDebugRunnerScenario::RoundLimitTiebreak)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit tiebreak scenario start Max=%d"), GameState->MaxRoundNumber);
 		GameState->MatchCards.Empty();
@@ -134,18 +134,18 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		if (ScenarioResult == ETCGMatchResult::None && GameState->RoundNumber >= FMath::Max(1, GameState->MaxRoundNumber))
 		{
 			ScenarioResult = GetRoundLimitResult();
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit reached R%d Max=%d P0Units=%d P1Units=%d Result=%s"), GameState->RoundNumber, GameState->MaxRoundNumber, CountBoardUnits(0), CountBoardUnits(1), GetTCGMatchResultDebugName(ScenarioResult));
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit reached R%d Max=%d P0Units=%d P1Units=%d Result=%s"), GameState->RoundNumber, GameState->MaxRoundNumber, CountBoardUnits(0), CountBoardUnits(1), GetTCGDebugRunnerMatchResultDebugName(ScenarioResult));
 		}
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit tiebreak scenario summary Resolved=%s P0Board=%s P1Board=%s Result=%s"),
 			bResolved ? TEXT("true") : TEXT("false"),
 			GameState->DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"),
 			GameState->DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"),
-			GetTCGMatchResultDebugName(ScenarioResult));
+			GetTCGDebugRunnerMatchResultDebugName(ScenarioResult));
 		GameState->EndMatch(ScenarioResult);
 		return;
 	}
 
-	if (DebugScenario == ETCGDebugScenario::OverlayPlacement)
+	if (DebugRunnerScenario == ETCGDebugRunnerScenario::OverlayPlacement)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Overlay placement scenario start"));
 		GameState->MatchCards.Empty();
@@ -189,7 +189,7 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 
 	const int32 Player0InitialDraw = GameState->DrawCards(0, GameState->InitialHandSize);
 	const int32 Player1InitialDraw = GameState->DrawCards(1, GameState->InitialHandSize);
-	if (bLogRoundFlow)
+	if (bDebugRunnerLogRoundFlow)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Starting hand draw P0=%d P1=%d Target=%d"), Player0InitialDraw, Player1InitialDraw, GameState->InitialHandSize);
 	}
@@ -198,14 +198,14 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 	{
 		if (GameState->HasPendingDiscardChoice())
 		{
-			if (bLogRoundFlow)
+			if (bDebugRunnerLogRoundFlow)
 			{
 				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round flow paused PendingDiscard Player=%d Count=%d"), GameState->PendingDiscardChoice.PlayerIndex, GameState->PendingDiscardChoice.RequiredCount);
 			}
 			return;
 		}
 
-		if (bLogRoundFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round %d start"), GameState->RoundNumber);
+		if (bDebugRunnerLogRoundFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round %d start"), GameState->RoundNumber);
 
 		GameState->SetPhase(ETCGMatchPhase::Placement);
 		GameState->PlacementStepIndex = 0;
@@ -217,7 +217,7 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		{
 			if (GameState->HasPendingDiscardChoice())
 			{
-				if (bLogPlacementFlow)
+				if (bDebugRunnerLogPlacementFlow)
 				{
 					UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement loop paused PendingDiscard Player=%d Count=%d"), GameState->PendingDiscardChoice.PlayerIndex, GameState->PendingDiscardChoice.RequiredCount);
 				}
@@ -250,7 +250,7 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 
 			if (!bPlayed)
 			{
-				if (bLogPlacementFlow)
+				if (bDebugRunnerLogPlacementFlow)
 				{
 					UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement R%d Step=%d P%d Draw=%d skipped no legal placement"), GameState->RoundNumber, GameState->PlacementStepIndex + 1, PlayerIndex, DrawnCount);
 				}
@@ -258,7 +258,7 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 				continue;
 			}
 
-			if (bLogPlacementFlow)
+			if (bDebugRunnerLogPlacementFlow)
 			{
 				const TArray<int32>& UsedZones = PlayerIndex == 0 ? GameState->Player0PlacementFieldZonesUsedThisRound : GameState->Player1PlacementFieldZonesUsedThisRound;
 				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement R%d Step=%d P%d Draw=%d Field=%d Type=%s UsedZones=%d Success=true"),
@@ -273,7 +273,7 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 
 			if (GameState->HasPendingDiscardChoice())
 			{
-				if (bLogPlacementFlow)
+				if (bDebugRunnerLogPlacementFlow)
 				{
 					UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement loop paused after play PendingDiscard Player=%d Count=%d"), GameState->PendingDiscardChoice.PlayerIndex, GameState->PendingDiscardChoice.RequiredCount);
 				}
@@ -285,40 +285,40 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		{
 			if (GameState->HasPendingDiscardChoice())
 			{
-				if (bLogRoundFlow)
+				if (bDebugRunnerLogRoundFlow)
 				{
 					UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle start paused PendingDiscard Player=%d Count=%d"), GameState->PendingDiscardChoice.PlayerIndex, GameState->PendingDiscardChoice.RequiredCount);
 				}
 				return;
 			}
 
-			if (bLogRoundFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase started R%d"), GameState->RoundNumber);
+			if (bDebugRunnerLogRoundFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase started R%d"), GameState->RoundNumber);
 			const bool bResolved = GameState->ResolveBattlePhase();
 			ETCGMatchResult ResultAfterBattle = GameState->CheckLoseConditionAfterBattle();
 
 			if (ResultAfterBattle == ETCGMatchResult::None && GameState->RoundNumber >= FMath::Max(1, GameState->MaxRoundNumber))
 			{
 				ResultAfterBattle = GetRoundLimitResult();
-				if (bLogRoundFlow)
+				if (bDebugRunnerLogRoundFlow)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit reached R%d Max=%d P0Units=%d P1Units=%d Result=%s"), GameState->RoundNumber, GameState->MaxRoundNumber, CountBoardUnits(0), CountBoardUnits(1), GetTCGMatchResultDebugName(ResultAfterBattle));
+					UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit reached R%d Max=%d P0Units=%d P1Units=%d Result=%s"), GameState->RoundNumber, GameState->MaxRoundNumber, CountBoardUnits(0), CountBoardUnits(1), GetTCGDebugRunnerMatchResultDebugName(ResultAfterBattle));
 				}
 			}
 
-			if (bLogRoundFlow)
+			if (bDebugRunnerLogRoundFlow)
 			{
 				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle summary R%d Resolved=%s P0Board=%s P1Board=%s Result=%s"),
 					GameState->RoundNumber,
 					bResolved ? TEXT("true") : TEXT("false"),
 					GameState->DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"),
 					GameState->DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"),
-					GetTCGMatchResultDebugName(ResultAfterBattle));
+					GetTCGDebugRunnerMatchResultDebugName(ResultAfterBattle));
 			}
 
 			if (ResultAfterBattle != ETCGMatchResult::None)
 			{
 				GameState->EndMatch(ResultAfterBattle);
-				if (bLogRoundFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Match ended after battle"));
+				if (bDebugRunnerLogRoundFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Match ended after battle"));
 				return;
 			}
 		}
