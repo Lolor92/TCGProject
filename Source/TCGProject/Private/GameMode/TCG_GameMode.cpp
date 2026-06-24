@@ -30,8 +30,8 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		ATCG_GameState* TCGGameState = GetGameState<ATCG_GameState>();
 		if (TCGGameState)
 		{
-			// Dedicated attack mill, attach Water material debug scenario.
-			TCGGameState->RunDebugAttackMillAttachScenario();
+			// Dedicated Water graveyard round bonus debug scenario.
+			TCGGameState->RunDebugWaterGraveyardBoostScenario();
 		}
 	}
 }
