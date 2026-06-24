@@ -70,9 +70,9 @@ enum class ETCGEffectStepType : uint8
 	PlaySourceToEmptyZone           UMETA(DisplayName = "Play Source To Empty Zone"),
 	SendTopDeckCardToGraveyard      UMETA(DisplayName = "Send Top Deck Card To Graveyard"),
 	MoveGraveyardCardToBottomDeck   UMETA(DisplayName = "Move Graveyard Card To Bottom Deck"),
-	MoveHandCardToTopDeck           UMETA(DisplayName = "Move Hand Card To Top Deck"),
 	AttachSourceToWaterUnitMaterial UMETA(DisplayName = "Attach Source To Water Unit Material Legacy"),
-	AttachSourceToUnitMaterial      UMETA(DisplayName = "Attach Source To Unit Material")
+	AttachSourceToUnitMaterial      UMETA(DisplayName = "Attach Source To Unit Material"),
+	MoveHandCardToTopDeck           UMETA(DisplayName = "Move Hand Card To Top Deck")
 };
 
 /**
