@@ -736,7 +736,65 @@ int32 ATCG_GameState::GetFinalAttack(const FGuid& CardInstanceId) const
 {
 	const FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
 	if (!Card) return 0;
-	return Card->BaseAttack + Card->AttackModifier + GetCardsUnderneathCount(CardInstanceId);
+
+	int32 FinalAttack = Card->BaseAttack + Card->AttackModifier + GetCardsUnderneathCount(CardInstanceId);
+
+	if (!Card->StackId.IsValid())
+	{
+		return FinalAttack;
+	}
+
+	TArray<FTCGCardInstance> StackCards;
+	GetCardsInStack(Card->StackId, StackCards);
+
+	for (const FTCGCardInstance& StackCard : StackCards)
+	{
+		if (StackCard.StackIndex > Card->StackIndex)
+		{
+			continue;
+		}
+
+		TArray<FTCGCardEffectRef> EffectRefs;
+		GetPrintedEffectRefsForCard(StackCard, EffectRefs);
+
+		for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+		{
+			if (EffectRef.Trigger != ETCGEffectTrigger::None)
+			{
+				continue;
+			}
+
+			for (const FTCGEffectStep& Step : EffectRef.Steps)
+			{
+				if (Step.StepType != ETCGEffectStepType::ModifyAttack)
+				{
+					continue;
+				}
+
+				if (Step.ValueMode == ETCGEffectValueMode::Fixed)
+				{
+					FinalAttack += Step.Value;
+				}
+				else if (Step.ValueMode == ETCGEffectValueMode::CardsUnderneathSource)
+				{
+					FinalAttack += GetCardsUnderneathCount(StackCard.CardInstanceId);
+				}
+				else if (Step.ValueMode == ETCGEffectValueMode::CardsUnderneathTarget)
+				{
+					FinalAttack += GetCardsUnderneathCount(CardInstanceId);
+				}
+				else if (Step.ValueMode == ETCGEffectValueMode::ElementCardsInControllerGraveyard)
+				{
+					FinalAttack += CountCardsInLocationByElement(
+						Card->OwnerPlayerIndex,
+						ETCGCardLocation::Graveyard,
+						Step.TargetFilter.RequiredElement);
+				}
+			}
+		}
+	}
+
+	return FinalAttack;
 }
 
 bool ATCG_GameState::FindStackIdInZone(FName ZoneId, FGuid& OutStackId) const

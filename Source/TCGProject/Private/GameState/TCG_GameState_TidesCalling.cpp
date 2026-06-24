@@ -321,9 +321,9 @@ void ATCG_GameState::RunDebugDreampoolMirechantScenario()
 	AddCardInstance("Debug_Fire_Grave_C", ETCGCardElement::Fire, 1, 0, ETCGCardLocation::Graveyard);
 	AddCardInstance(DebugCard_DreampoolMirechant, ETCGCardElement::Water, 3, 0, ETCGCardLocation::Deck);
 
-	const int32 BeforeAttack = GetFinalAttackPreviewWithContinuousEffects(this, WaterUnitId);
+	const int32 BeforeAttack = GetFinalAttack(WaterUnitId);
 	const bool bSentTopDeck = SendTopDeckCardToGraveyard(0);
-	const int32 AfterAttack = GetFinalAttackPreviewWithContinuousEffects(this, WaterUnitId);
+	const int32 AfterAttack = GetFinalAttack(WaterUnitId);
 	TArray<FTCGCardInstance> StackCards;
 	GetCardsInStack(WaterStackId, StackCards);
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Dreampool Mirechant summary SentTopDeck=%s StackCount=%d WaterGY=%d BeforeATK=%d AfterATK=%d"),
