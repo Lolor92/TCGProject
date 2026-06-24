@@ -1,4 +1,4 @@
-﻿# TCG Project - Core Game Rules
+# TCG Project - Core Game Rules
 
 ## Game Identity
 
@@ -19,6 +19,86 @@ A player loses if they have no Units on their board after the battle phase.
 The lose condition is checked after battle resolution, not immediately when the board becomes empty during battle resolution.
 
 If both players have no Units on their board after battle resolution, the match result is a draw.
+
+## Round Structure
+
+The match is played in rounds.
+
+A round is one full cycle where both players place cards onto the board through alternating placement steps, then battle resolves.
+
+A round contains:
+
+* Round Start
+* Placement Phase
+* Battle Phase
+* Round End
+
+During the Placement Phase, players do not each take a full traditional turn. Instead, they alternate placement steps.
+
+## Placement Phase
+
+During the Placement Phase, players take turns placing cards onto their board.
+
+A placement step is one player's chance to place one card.
+
+By default, Player 0 takes the first placement step of the round.
+
+The placement order is:
+
+* Placement Step 1: Player 0 places 1 card.
+* Placement Step 2: Player 1 draws 1 card, then places 1 card.
+* Placement Step 3: Player 0 draws 1 card, then places 1 card.
+* Placement Step 4: Player 1 draws 1 card, then places 1 card.
+* This continues until both players have had 4 placement steps.
+
+After Player 1 completes the 8th total placement step of the round, the Placement Phase ends and the Battle Phase begins.
+
+The first player does not draw at the start of the first placement step of the round unless a card effect or future rule says otherwise.
+
+## Field Zones and Placement Order
+
+Each player has 4 field zones.
+
+By default, cards must be placed into field zones in order.
+
+The normal placement order is:
+
+* Field Zone 1
+* Field Zone 2
+* Field Zone 3
+* Field Zone 4
+
+A player cannot normally place a card into Field Zone 2 while Field Zone 1 is empty.
+
+A player cannot normally place a card into Field Zone 3 while Field Zone 1 or Field Zone 2 is empty.
+
+A player cannot normally place a card into Field Zone 4 while Field Zone 1, Field Zone 2, or Field Zone 3 is empty.
+
+Default normal placement should be into the next empty field zone in order.
+
+Stacking onto an already-filled earlier zone should not be allowed by normal placement once a later empty zone is next, unless a card effect or rule modifier allows it.
+
+Some card effects may allow exceptions to the normal placement order.
+
+Examples of possible future exceptions:
+
+* Place a card into any empty field zone.
+* Skip the next required field zone.
+* Place a card directly on top of a specific Unit.
+* Move a Unit to another field zone.
+* Open an extra placement zone for this round.
+
+These exceptions should be handled through card effects or explicit rule modifiers, not by changing the default placement rule.
+
+## Placement Step Completion
+
+A placement step normally ends after the active player places one card.
+
+If the active player cannot place a card, future rules must decide whether the player skips the placement step, loses, or performs another allowed action.
+
+For now, the default implementation should assume that the active player must place one legal card if possible.
+
+When both players have completed 4 placement steps each, the round proceeds to the Battle Phase.
 
 ## Card Elements
 
