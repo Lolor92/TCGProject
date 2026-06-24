@@ -54,6 +54,8 @@ void ATCG_GameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ATCG_GameState, TurnNumber);
 	DOREPLIFETIME(ATCG_GameState, RoundNumber);
 	DOREPLIFETIME(ATCG_GameState, PlacementStepIndex);
+	DOREPLIFETIME(ATCG_GameState, Player0PlacementFieldZonesUsedThisRound);
+	DOREPLIFETIME(ATCG_GameState, Player1PlacementFieldZonesUsedThisRound);
 	DOREPLIFETIME(ATCG_GameState, CurrentTurnPlayerIndex);
 	DOREPLIFETIME(ATCG_GameState, CurrentPhase);
 	DOREPLIFETIME(ATCG_GameState, MatchResult);
@@ -70,6 +72,8 @@ void ATCG_GameState::StartMatch()
 	TurnNumber = 1;
 	RoundNumber = 1;
 	PlacementStepIndex = 0;
+	Player0PlacementFieldZonesUsedThisRound.Reset();
+	Player1PlacementFieldZonesUsedThisRound.Reset();
 	CurrentTurnPlayerIndex = 0;
 	CurrentPhase = ETCGMatchPhase::RoundStart;
 	MatchResult = ETCGMatchResult::None;
@@ -147,7 +151,10 @@ int32 ATCG_GameState::GetNextRequiredFieldZoneIndex(int32 PlayerIndex) const
 
 bool ATCG_GameState::CanPlayerPlaceInFieldZone(int32 PlayerIndex, int32 FieldIndex) const
 {
-	return IsValidPlayerIndex(PlayerIndex) && FieldIndex >= 0 && FieldIndex < FieldZoneCount && FieldIndex == GetNextRequiredFieldZoneIndex(PlayerIndex);
+	if (!IsValidPlayerIndex(PlayerIndex) || FieldIndex < 0 || FieldIndex >= FieldZoneCount) return false;
+
+	const TArray<int32>& UsedZones = PlayerIndex == 0 ? Player0PlacementFieldZonesUsedThisRound : Player1PlacementFieldZonesUsedThisRound;
+	return !UsedZones.Contains(FieldIndex);
 }
 
 bool ATCG_GameState::AdvancePlacementStep()
@@ -353,7 +360,10 @@ bool ATCG_GameState::CanPlayerPlayCardToZone(int32 PlayerIndex, const FGuid& Car
 		if (!CanPlayerPlaceInFieldZone(PlayerIndex, FieldIndex)) return false;
 
 		FGuid ExistingStackId;
-		return !FindStackIdInZone(ZoneId, ExistingStackId);
+		if (!FindStackIdInZone(ZoneId, ExistingStackId)) return true;
+
+		const bool bPlayerHasAnyEmptyFieldZone = GetNextRequiredFieldZoneIndex(PlayerIndex) != INDEX_NONE;
+		return !bPlayerHasAnyEmptyFieldZone && CanPlaceCardOnStack(CardInstanceId, ExistingStackId);
 	}
 	return false;
 }
@@ -374,7 +384,19 @@ bool ATCG_GameState::PlayerPlayCardToZone(int32 PlayerIndex, const FGuid& CardIn
 	}
 
 	const bool bPlayed = PlayCardToZone(CardInstanceId, ZoneId);
-	if (bPlayed) AdvancePlacementStep();
+	if (bPlayed)
+	{
+		for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
+		{
+			if (ZoneId != GetFieldZoneId(PlayerIndex, FieldIndex)) continue;
+
+			TArray<int32>& UsedZones = PlayerIndex == 0 ? Player0PlacementFieldZonesUsedThisRound : Player1PlacementFieldZonesUsedThisRound;
+			UsedZones.AddUnique(FieldIndex);
+			break;
+		}
+
+		AdvancePlacementStep();
+	}
 	return bPlayed;
 }
 
@@ -1064,6 +1086,8 @@ void ATCG_GameState::RunDebugTurnFlow()
 	{
 		SetPhase(ETCGMatchPhase::RoundStart);
 		PlacementStepIndex = 0;
+		Player0PlacementFieldZonesUsedThisRound.Reset();
+		Player1PlacementFieldZonesUsedThisRound.Reset();
 		SetCurrentTurnPlayer(0);
 		if (bLogRoundFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round %d start"), RoundNumber);
 
@@ -1074,17 +1098,36 @@ void ATCG_GameState::RunDebugTurnFlow()
 			SetCurrentTurnPlayer(ActivePlayer);
 			const int32 DrawnForStep = DrawCards(ActivePlayer, CardsDrawnPerPlacementStep);
 
-			const int32 FieldIndex = GetNextRequiredFieldZoneIndex(ActivePlayer);
-			const int32 LogStepNumber = PlacementStepIndex + 1;
-			if (FieldIndex == INDEX_NONE)
+			FGuid CardToPlay;
+			int32 FieldIndex = INDEX_NONE;
+			TArray<FTCGCardInstance> HandCards;
+			GetCardsInHand(ActivePlayer, HandCards);
+
+			for (int32 CandidateFieldIndex = 0; CandidateFieldIndex < FieldZoneCount; ++CandidateFieldIndex)
 			{
-				if (bLogPlacementFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement R%d Step=%d P%d Draw=%d skipped no empty field"), RoundNumber, LogStepNumber, ActivePlayer, DrawnForStep);
+				const FName CandidateZoneId = GetFieldZoneId(ActivePlayer, CandidateFieldIndex);
+				for (const FTCGCardInstance& HandCard : HandCards)
+				{
+					if (!CanPlayerPlayCardToZone(ActivePlayer, HandCard.CardInstanceId, CandidateZoneId)) continue;
+
+					CardToPlay = HandCard.CardInstanceId;
+					FieldIndex = CandidateFieldIndex;
+					break;
+				}
+
+				if (CardToPlay.IsValid()) break;
+			}
+
+			const int32 LogStepNumber = PlacementStepIndex + 1;
+			if (!CardToPlay.IsValid() || FieldIndex == INDEX_NONE)
+			{
+				if (bLogPlacementFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement R%d Step=%d P%d Draw=%d skipped no legal placement"), RoundNumber, LogStepNumber, ActivePlayer, DrawnForStep);
 				AdvancePlacementStep();
 				continue;
 			}
 
 			const FName ZoneId = GetFieldZoneId(ActivePlayer, FieldIndex);
-			const bool bPlayedCard = PlayFirstCardFromHandToZone(ActivePlayer, ZoneId);
+			const bool bPlayedCard = PlayerPlayCardToZone(ActivePlayer, CardToPlay, ZoneId);
 			if (bLogPlacementFlow)
 			{
 				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement R%d Step=%d P%d Draw=%d Field=%d Success=%s"), RoundNumber, LogStepNumber, ActivePlayer, DrawnForStep, FieldIndex, bPlayedCard ? TEXT("true") : TEXT("false"));
