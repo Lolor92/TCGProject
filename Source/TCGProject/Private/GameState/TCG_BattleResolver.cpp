@@ -4,6 +4,60 @@
 namespace
 {
 	constexpr bool bLogBattleResolverFlow = false;
+
+	static void ResolveDestroyedUnitHandResponses(ATCG_GameState* GameState, int32 DestroyedUnitOwnerPlayerIndex, const FGuid& DestroyerCardInstanceId)
+	{
+		if (!GameState || !GameState->IsValidPlayerIndex(DestroyedUnitOwnerPlayerIndex) || !DestroyerCardInstanceId.IsValid()) return;
+
+		const FTCGCardInstance* DestroyerCard = GameState->FindCardInstance(DestroyerCardInstanceId);
+		if (!DestroyerCard || DestroyerCard->Location != ETCGCardLocation::Board) return;
+
+		TArray<FTCGCardInstance> HandCards;
+		GameState->GetCardsInHand(DestroyedUnitOwnerPlayerIndex, HandCards);
+		if (HandCards.Num() <= 0) return;
+
+		TArray<FTCGEffectChainEntry> Chain;
+		for (const FTCGCardInstance& HandCard : HandCards)
+		{
+			TArray<FTCGCardEffectRef> EffectRefs;
+			GameState->GetPrintedEffectRefsForCard(HandCard, EffectRefs);
+			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+			{
+				if (GameState->DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnYourUnitDestroyedByBattle))
+				{
+					GameState->AddCardEffectRefToChain(Chain, HandCard.CardInstanceId, DestroyerCardInstanceId, EffectRef);
+				}
+			}
+		}
+
+		if (Chain.Num() > 0)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Battle: Destroyed unit hand responses Player=%d Destroyer=%s Count=%d"), DestroyedUnitOwnerPlayerIndex, *DestroyerCard->CardDefinitionId.ToString(), Chain.Num());
+			GameState->ResolveEffectChain(Chain);
+		}
+	}
+
+	static void ResolveDestroyedUnitByBattleTriggers(ATCG_GameState* GameState, const FGuid& WinnerCardInstanceId)
+	{
+		if (!GameState || !WinnerCardInstanceId.IsValid()) return;
+
+		if (const FTCGCardInstance* WinnerCard = GameState->FindCardInstance(WinnerCardInstanceId))
+		{
+			TArray<FTCGEffectChainEntry> Chain;
+			TArray<FTCGCardEffectRef> EffectRefs;
+			GameState->GetPrintedEffectRefsForCard(*WinnerCard, EffectRefs);
+
+			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+			{
+				if (GameState->DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnDestroyedUnitByBattle))
+				{
+					GameState->AddCardEffectRefToChain(Chain, WinnerCardInstanceId, WinnerCardInstanceId, EffectRef);
+				}
+			}
+
+			GameState->ResolveEffectChain(Chain);
+		}
+	}
 }
 
 bool UTCG_BattleResolver::ResolveBattleBetweenZones(ATCG_GameState* GameState, FName Player0ZoneId, FName Player1ZoneId)
@@ -25,44 +79,14 @@ bool UTCG_BattleResolver::ResolveBattleBetweenZones(ATCG_GameState* GameState, F
 	if (Player0Attack > Player1Attack)
 	{
 		GameState->MoveStackToLocation(Player1LoserStackId, ETCGCardLocation::Graveyard);
-
-		if (const FTCGCardInstance* WinnerCard = GameState->FindCardInstance(Player0WinnerId))
-		{
-			TArray<FTCGEffectChainEntry> Chain;
-			TArray<FTCGCardEffectRef> EffectRefs;
-			GameState->GetPrintedEffectRefsForCard(*WinnerCard, EffectRefs);
-
-			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
-			{
-				if (GameState->DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnDestroyedUnitByBattle))
-				{
-					GameState->AddCardEffectRefToChain(Chain, Player0WinnerId, Player0WinnerId, EffectRef);
-				}
-			}
-
-			GameState->ResolveEffectChain(Chain);
-		}
+		ResolveDestroyedUnitHandResponses(GameState, 1, Player0WinnerId);
+		ResolveDestroyedUnitByBattleTriggers(GameState, Player0WinnerId);
 	}
 	else if (Player1Attack > Player0Attack)
 	{
 		GameState->MoveStackToLocation(Player0LoserStackId, ETCGCardLocation::Graveyard);
-
-		if (const FTCGCardInstance* WinnerCard = GameState->FindCardInstance(Player1WinnerId))
-		{
-			TArray<FTCGEffectChainEntry> Chain;
-			TArray<FTCGCardEffectRef> EffectRefs;
-			GameState->GetPrintedEffectRefsForCard(*WinnerCard, EffectRefs);
-
-			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
-			{
-				if (GameState->DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnDestroyedUnitByBattle))
-				{
-					GameState->AddCardEffectRefToChain(Chain, Player1WinnerId, Player1WinnerId, EffectRef);
-				}
-			}
-
-			GameState->ResolveEffectChain(Chain);
-		}
+		ResolveDestroyedUnitHandResponses(GameState, 0, Player1WinnerId);
+		ResolveDestroyedUnitByBattleTriggers(GameState, Player1WinnerId);
 	}
 	else
 	{
@@ -166,10 +190,14 @@ bool UTCG_BattleResolver::ResolveBattlePhase(ATCG_GameState* GameState)
 		if (AttackerAttack > DefenderAttack)
 		{
 			GameState->MoveStackToLocation(DefenderStackId, ETCGCardLocation::Graveyard);
+			ResolveDestroyedUnitHandResponses(GameState, DefenderPlayerIndex, AttackerCardId);
+			ResolveDestroyedUnitByBattleTriggers(GameState, AttackerCardId);
 		}
 		else if (DefenderAttack > AttackerAttack)
 		{
 			GameState->MoveStackToLocation(AttackerStackId, ETCGCardLocation::Graveyard);
+			ResolveDestroyedUnitHandResponses(GameState, AttackerPlayerIndex, DefenderCardId);
+			ResolveDestroyedUnitByBattleTriggers(GameState, DefenderCardId);
 		}
 		else
 		{
