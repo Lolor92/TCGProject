@@ -1,4 +1,5 @@
 #include "GameState/TCG_GameState.h"
+#include "Cards/TCG_CardDefinition.h"
 
 namespace
 {
@@ -172,6 +173,108 @@ namespace
 
 		GameState->EndMatch(ETCGMatchResult::Draw);
 	}
+
+	int32 CountDebugMaterialsUnderUnit(ATCG_GameState* GameState, const FGuid& TopCardId)
+	{
+		if (!GameState) return 0;
+
+		const FTCGCardInstance* TopCard = GameState->FindCardInstance(TopCardId);
+		if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid()) return 0;
+
+		int32 Count = 0;
+		for (const FTCGCardInstance& Card : GameState->MatchCards)
+		{
+			if (Card.Location == ETCGCardLocation::Board
+				&& Card.StackId == TopCard->StackId
+				&& Card.CardInstanceId != TopCard->CardInstanceId
+				&& Card.StackIndex < TopCard->StackIndex)
+			{
+				Count++;
+			}
+		}
+		return Count;
+	}
+
+	void RunDebugHandDetachResponseScenario(ATCG_GameState* GameState)
+	{
+		if (!GameState) return;
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: HandDetachResponse scenario start"));
+
+		GameState->MatchCards.Empty();
+		GameState->StartMatch();
+		GameState->SetPhase(ETCGMatchPhase::Battle);
+		GameState->SetMatchResult(ETCGMatchResult::None);
+
+		const FGuid VictimId = GameState->AddCardInstance("Debug_HandDetach_Victim", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Board).CardInstanceId;
+		if (FTCGCardInstance* Victim = GameState->FindCardInstance(VictimId))
+		{
+			Victim->ZoneId = ATCG_GameState::GetFieldZoneId(0, 0);
+			Victim->StackId = FGuid::NewGuid();
+			Victim->StackIndex = 0;
+		}
+
+		const FGuid DestroyerStackId = FGuid::NewGuid();
+		const FName DestroyerZoneId = ATCG_GameState::GetFieldZoneId(1, 0);
+		for (int32 MaterialIndex = 0; MaterialIndex < 3; ++MaterialIndex)
+		{
+			const FGuid MaterialId = GameState->AddCardInstance(FName(*FString::Printf(TEXT("Debug_HandDetach_DestroyerMaterial_%d"), MaterialIndex)), ETCGCardElement::Water, 1, 1, ETCGCardLocation::Board).CardInstanceId;
+			if (FTCGCardInstance* MaterialCard = GameState->FindCardInstance(MaterialId))
+			{
+				MaterialCard->ZoneId = DestroyerZoneId;
+				MaterialCard->StackId = DestroyerStackId;
+				MaterialCard->StackIndex = MaterialIndex;
+			}
+		}
+
+		const FGuid DestroyerId = GameState->AddCardInstance("Debug_HandDetach_Destroyer", ETCGCardElement::Dark, 10, 1, ETCGCardLocation::Board).CardInstanceId;
+		if (FTCGCardInstance* Destroyer = GameState->FindCardInstance(DestroyerId))
+		{
+			Destroyer->ZoneId = DestroyerZoneId;
+			Destroyer->StackId = DestroyerStackId;
+			Destroyer->StackIndex = 3;
+		}
+
+		UTCG_CardDefinition* ResponseCardDefinition = NewObject<UTCG_CardDefinition>(GameState);
+		ResponseCardDefinition->CardDefinitionId = "Debug_HandDetach_Response";
+		ResponseCardDefinition->Element = ETCGCardElement::Wind;
+		ResponseCardDefinition->BaseAttack = 1;
+
+		FTCGCardEffectRef ResponseEffect;
+		ResponseEffect.Trigger = ETCGEffectTrigger::OnYourUnitDestroyedByBattle;
+		ResponseEffect.bOptional = true;
+
+		FTCGEffectStep ResponseStep;
+		ResponseStep.StepType = ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget;
+		ResponseEffect.Steps.Add(ResponseStep);
+		ResponseCardDefinition->Effects.Add(ResponseEffect);
+		GameState->DebugCardDefinitions.Add(ResponseCardDefinition);
+
+		FTCGCardInstance* ResponseCard = GameState->AddCardInstanceFromDefinition(ResponseCardDefinition, 0, ETCGCardLocation::Hand);
+		const FGuid ResponseCardId = ResponseCard ? ResponseCard->CardInstanceId : FGuid();
+		const int32 MaterialsBefore = CountDebugMaterialsUnderUnit(GameState, DestroyerId);
+
+		const bool bBattleResolved = GameState->ResolveBattlePhase();
+
+		const FTCGCardInstance* VictimAfter = GameState->FindCardInstance(VictimId);
+		const FTCGCardInstance* ResponseAfter = GameState->FindCardInstance(ResponseCardId);
+		const int32 MaterialsAfter = CountDebugMaterialsUnderUnit(GameState, DestroyerId);
+
+		const bool bVictimGraveyard = VictimAfter && VictimAfter->Location == ETCGCardLocation::Graveyard;
+		const bool bResponseDiscarded = ResponseAfter && ResponseAfter->Location == ETCGCardLocation::Graveyard;
+		const int32 DetachedCount = MaterialsBefore - MaterialsAfter;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: HandDetachResponse summary Battle=%s VictimGraveyard=%s ResponseDiscarded=%s Materials=%d/%d Detached=%d Expected=2"),
+			bBattleResolved ? TEXT("true") : TEXT("false"),
+			bVictimGraveyard ? TEXT("true") : TEXT("false"),
+			bResponseDiscarded ? TEXT("true") : TEXT("false"),
+			MaterialsBefore,
+			MaterialsAfter,
+			DetachedCount);
+
+		GameState->EndMatch(ETCGMatchResult::Draw);
+	}
 }
 
 void ATCG_GameState::RunDebugMaterialRebirthScenario()
@@ -261,4 +364,5 @@ void ATCG_GameState::RunDebugMaterialRebirthScenario()
 
 	RunDebugAttackMillGraveyardSplitScenario(this);
 	RunDebugAttackMillBounceScenario(this);
+	RunDebugHandDetachResponseScenario(this);
 }
