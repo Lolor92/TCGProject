@@ -139,7 +139,7 @@ void ATCG_GameState::ClearPendingRemoveMaterialChoice() { PendingRemoveMaterialC
 
 void ATCG_GameState::RunDebugDestroyedRecoveryScenario()
 {
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: DestroyedRecovery scenario start"));
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: DestroyedRecoverySplit scenario start"));
 
 	MatchCards.Empty();
 	StartMatch();
@@ -183,29 +183,32 @@ void ATCG_GameState::RunDebugDestroyedRecoveryScenario()
 	GraveyardFilter.RequiredElement = ETCGCardElement::Water;
 	GraveyardFilter.bExcludeSourceCard = true;
 
-	FTCGEffectChainEntry ChainEntry;
-	ChainEntry.ChainIndex = 1;
-	ChainEntry.SourceCardInstanceId = DestroyedSourceId;
-	ChainEntry.TargetCardInstanceId = DestroyerTopId;
-	ChainEntry.SourceCardDefinitionId = "Debug_Water_DestroyedRecovery_Source";
-	ChainEntry.Trigger = ETCGEffectTrigger::OnDestroyed;
-	ChainEntry.ControllerPlayerIndex = 0;
-	ChainEntry.bRequiresSourceOnBoard = false;
-	ChainEntry.bRequiresTargetOnBoard = true;
+	FTCGCardEffectRef SplitEffect;
+	SplitEffect.Trigger = ETCGEffectTrigger::OnDestroyed;
+	SplitEffect.bOptional = true;
 
-	const bool bRecoveryChoiceStarted = BeginPendingGraveyardCardsToHandAndTopDeckChoice(0, GraveyardFilter, ChainEntry);
-	TArray<FGuid> RecoveryOptions;
-	GetPendingGraveyardCardsToHandAndTopDeckOptions(RecoveryOptions);
-	const bool bSourceExcluded = !RecoveryOptions.Contains(DestroyedSourceId);
-	const bool bEarthExcluded = !RecoveryOptions.Contains(EarthIgnoredId);
-	const bool bTwoWatersEligible = RecoveryOptions.Contains(WaterToHandId) && RecoveryOptions.Contains(WaterToDeckId);
-	const bool bRecoverySubmitted = SubmitPendingGraveyardCardsToHandAndTopDeckChoice(0, WaterToHandId, WaterToDeckId);
+	FTCGEffectStep MoveToHandStep;
+	MoveToHandStep.StepType = ETCGEffectStepType::MoveGraveyardCardToHand;
+	MoveToHandStep.SelectionMode = ETCGEffectSelectionMode::PlayerChoice;
+	MoveToHandStep.TargetFilter = GraveyardFilter;
+	SplitEffect.Steps.Add(MoveToHandStep);
 
-	const bool bMaterialChoiceStarted = BeginPendingRemoveMaterialChoice(0, DestroyerTopId, ChainEntry);
-	TArray<FGuid> MaterialOptions;
-	GetPendingRemoveMaterialChoiceOptions(MaterialOptions);
-	const bool bMaterialsEligible = MaterialOptions.Contains(DestroyerMaterialAId) && MaterialOptions.Contains(DestroyerMaterialBId);
-	const bool bMaterialRemoved = MaterialOptions.Num() > 0 && SubmitPendingRemoveMaterialChoice(0, MaterialOptions[0]);
+	FTCGEffectStep MoveToTopDeckStep;
+	MoveToTopDeckStep.StepType = ETCGEffectStepType::MoveGraveyardCardToTopDeck;
+	MoveToTopDeckStep.SelectionMode = ETCGEffectSelectionMode::PlayerChoice;
+	MoveToTopDeckStep.TargetFilter = GraveyardFilter;
+	MoveToTopDeckStep.bRequiresPreviousStepSuccess = true;
+	SplitEffect.Steps.Add(MoveToTopDeckStep);
+
+	FTCGEffectStep RemoveMaterialStep;
+	RemoveMaterialStep.StepType = ETCGEffectStepType::RemoveMaterialFromTargetUnit;
+	RemoveMaterialStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+	RemoveMaterialStep.SelectionMode = ETCGEffectSelectionMode::PlayerChoice;
+	SplitEffect.Steps.Add(RemoveMaterialStep);
+
+	TArray<FTCGEffectChainEntry> Chain;
+	const bool bChainAdded = AddCardEffectRefToChain(Chain, DestroyedSourceId, DestroyerTopId, SplitEffect);
+	const bool bChainResolved = ResolveEffectChain(Chain);
 
 	const FTCGCardInstance* SourceAfter = FindCardInstance(DestroyedSourceId);
 	const FTCGCardInstance* HandAfter = FindCardInstance(WaterToHandId);
@@ -221,19 +224,13 @@ void ATCG_GameState::RunDebugDestroyedRecoveryScenario()
 	const int32 RemainingMaterials = GetCardsUnderneathCount(DestroyerTopId);
 
 	UE_LOG(LogTemp, Warning,
-		TEXT("TCG Debug: DestroyedRecovery summary RecoveryChoice=%s RecoverySubmitted=%s SourceExcluded=%s TwoWatersEligible=%s EarthExcluded=%s SourceStillGraveyard=%s ChosenToHand=%s ChosenToDeck=%s EarthStillGraveyard=%s MaterialChoice=%s MaterialsEligible=%s MaterialRemoved=%s DestroyerStillBoard=%s RemainingMaterials=%d"),
-		bRecoveryChoiceStarted ? TEXT("true") : TEXT("false"),
-		bRecoverySubmitted ? TEXT("true") : TEXT("false"),
-		bSourceExcluded ? TEXT("true") : TEXT("false"),
-		bTwoWatersEligible ? TEXT("true") : TEXT("false"),
-		bEarthExcluded ? TEXT("true") : TEXT("false"),
+		TEXT("TCG Debug: DestroyedRecoverySplit summary ChainAdded=%s ChainResolved=%s SourceStillGraveyard=%s ChosenToHand=%s ChosenToDeck=%s EarthStillGraveyard=%s DestroyerStillBoard=%s RemainingMaterials=%d"),
+		bChainAdded ? TEXT("true") : TEXT("false"),
+		bChainResolved ? TEXT("true") : TEXT("false"),
 		bSourceStillGraveyard ? TEXT("true") : TEXT("false"),
 		bChosenToHand ? TEXT("true") : TEXT("false"),
 		bChosenToDeck ? TEXT("true") : TEXT("false"),
 		bEarthStillGraveyard ? TEXT("true") : TEXT("false"),
-		bMaterialChoiceStarted ? TEXT("true") : TEXT("false"),
-		bMaterialsEligible ? TEXT("true") : TEXT("false"),
-		bMaterialRemoved ? TEXT("true") : TEXT("false"),
 		bDestroyerStillBoard ? TEXT("true") : TEXT("false"),
 		RemainingMaterials);
 
