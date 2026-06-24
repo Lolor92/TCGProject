@@ -8,7 +8,7 @@ namespace
 	const FName ResolverLegacyDebugEffect_GainAttackForCardsUnderneath = "Debug_GainAttackForCardsUnderneath";
 	const FName ResolverLegacyDebugEffect_RemoveBottomOverlay = "Debug_RemoveBottomOverlay";
 
-	static bool ConvertLegacyDebugEffectToSteps(FTCGCardEffectRef& EffectRef)
+	static bool ConvertEffectResolverLegacyDebugEffectToSteps(FTCGCardEffectRef& EffectRef)
 	{
 		if (EffectRef.Steps.Num() > 0 || EffectRef.EffectId.IsNone()) return false;
 		if (EffectRef.EffectId == ResolverLegacyDebugEffect_Draw1)
@@ -109,7 +109,7 @@ bool UTCG_EffectResolver::AddCardEffectRefToChain(ATCG_GameState* GameState, TAr
 	if (!SourceCard || EffectRef.Trigger == ETCGEffectTrigger::None) return false;
 
 	FTCGCardEffectRef ResolvedEffectRef = EffectRef;
-	const bool bConvertedLegacyEffect = ConvertLegacyDebugEffectToSteps(ResolvedEffectRef);
+	const bool bConvertedLegacyEffect = ConvertEffectResolverLegacyDebugEffectToSteps(ResolvedEffectRef);
 	if (ResolvedEffectRef.Steps.Num() <= 0) return false;
 
 	FTCGEffectChainEntry NewEntry;
