@@ -95,8 +95,13 @@ public:
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
 	int32 PlacementStepIndex = 0;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Rules")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Rules", meta = (ClampMin = "1", UIMin = "1"))
 	int32 PlacementStepsPerPlayer = 4;
+
+	// If the match reaches this round and both players still have Units after battle,
+	// the player with the most board Units wins. Equal Unit counts means draw.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Rules", meta = (ClampMin = "1", UIMin = "1"))
+	int32 MaxRoundNumber = 10;
 
 	// Which player is currently taking actions.
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
