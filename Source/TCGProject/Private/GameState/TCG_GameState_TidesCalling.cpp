@@ -142,8 +142,15 @@ bool ATCG_GameState::SendTopDeckCardToGraveyard(int32 PlayerIndex)
 	if (IsTidesCallingCard(SentCard))
 	{
 		TArray<FTCGEffectChainEntry> Chain;
-		AddCardEffectRefToChain(Chain, SentCardId, SentCardId, MakeTidesCallingFromDeckToGraveyardEffect());
-		ResolveEffectChain(Chain);
+		if (AddCardEffectRefToChain(Chain, SentCardId, SentCardId, MakeTidesCallingFromDeckToGraveyardEffect()))
+		{
+			for (FTCGEffectChainEntry& Entry : Chain)
+			{
+				Entry.bRequiresSourceOnBoard = false;
+				Entry.bRequiresTargetOnBoard = false;
+			}
+			ResolveEffectChain(Chain);
+		}
 	}
 
 	return true;
@@ -190,8 +197,8 @@ void ATCG_GameState::RunDebugTidesCallingScenario()
 	SetCurrentTurnPlayer(0);
 
 	AddCardInstance("Debug_Water_Filler_A", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Deck);
-	AddCardInstance(DebugCard_TidesCalling, ETCGCardElement::Water, 2, 0, ETCGCardLocation::Deck);
 	AddCardInstance("Debug_Water_Filler_B", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Deck);
+	AddCardInstance(DebugCard_TidesCalling, ETCGCardElement::Water, 2, 0, ETCGCardLocation::Deck);
 	AddCardInstance("Debug_Water_GraveyardSeed", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
 
 	const bool bSentTopDeck = SendTopDeckCardToGraveyard(0);
