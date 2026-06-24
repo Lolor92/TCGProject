@@ -63,16 +63,17 @@ enum class ETCGEffectTrigger : uint8
 UENUM(BlueprintType)
 enum class ETCGEffectStepType : uint8
 {
-	None                         UMETA(DisplayName = "None"),
-	Then                         UMETA(DisplayName = "Then"),
-	DrawCards                    UMETA(DisplayName = "Draw Cards"),
-	DiscardCards                 UMETA(DisplayName = "Discard Cards"),
-	ModifyAttack                 UMETA(DisplayName = "Modify Attack"),
-	SelectTarget                 UMETA(DisplayName = "Select Target"),
-	MoveBottomOverlayToGraveyard UMETA(DisplayName = "Move Bottom Overlay To Graveyard"),
-	PlaySourceToEmptyZone        UMETA(DisplayName = "Play Source To Empty Zone"),
-	SendTopDeckCardToGraveyard   UMETA(DisplayName = "Send Top Deck Card To Graveyard"),
-	MoveGraveyardCardToBottomDeck UMETA(DisplayName = "Move Graveyard Card To Bottom Deck")
+	None                           UMETA(DisplayName = "None"),
+	Then                           UMETA(DisplayName = "Then"),
+	DrawCards                      UMETA(DisplayName = "Draw Cards"),
+	DiscardCards                   UMETA(DisplayName = "Discard Cards"),
+	ModifyAttack                   UMETA(DisplayName = "Modify Attack"),
+	SelectTarget                   UMETA(DisplayName = "Select Target"),
+	MoveBottomOverlayToGraveyard   UMETA(DisplayName = "Move Bottom Overlay To Graveyard"),
+	PlaySourceToEmptyZone          UMETA(DisplayName = "Play Source To Empty Zone"),
+	SendTopDeckCardToGraveyard     UMETA(DisplayName = "Send Top Deck Card To Graveyard"),
+	MoveGraveyardCardToBottomDeck  UMETA(DisplayName = "Move Graveyard Card To Bottom Deck"),
+	AttachSourceToWaterUnitMaterial UMETA(DisplayName = "Attach Source To Water Unit Material")
 };
 
 /**
@@ -95,9 +96,10 @@ enum class ETCGEffectTargetMode : uint8
 UENUM(BlueprintType)
 enum class ETCGEffectValueMode : uint8
 {
-	Fixed                  UMETA(DisplayName = "Fixed"),
-	CardsUnderneathSource  UMETA(DisplayName = "Cards Underneath Source"),
-	CardsUnderneathTarget  UMETA(DisplayName = "Cards Underneath Target")
+	Fixed                       UMETA(DisplayName = "Fixed"),
+	CardsUnderneathSource       UMETA(DisplayName = "Cards Underneath Source"),
+	CardsUnderneathTarget       UMETA(DisplayName = "Cards Underneath Target"),
+	WaterCardsInControllerGraveyard UMETA(DisplayName = "Water Cards In Controller Graveyard")
 };
 
 /**
