@@ -57,18 +57,19 @@ enum class ETCGEffectTrigger : uint8
 /**
  * Reusable effect step kind.
  *
- * A card effect is now built from small pieces: draw, discard, modify attack,
- * selection, and flow-control steps such as Then.
+ * A card effect is built from small pieces: draw, discard, modify attack,
+ * selection, card movement, and flow-control steps such as Then.
  */
 UENUM(BlueprintType)
 enum class ETCGEffectStepType : uint8
 {
-	None         UMETA(DisplayName = "None"),
-	Then         UMETA(DisplayName = "Then"),
-	DrawCards    UMETA(DisplayName = "Draw Cards"),
-	DiscardCards UMETA(DisplayName = "Discard Cards"),
-	ModifyAttack UMETA(DisplayName = "Modify Attack"),
-	SelectTarget UMETA(DisplayName = "Select Target")
+	None                         UMETA(DisplayName = "None"),
+	Then                         UMETA(DisplayName = "Then"),
+	DrawCards                    UMETA(DisplayName = "Draw Cards"),
+	DiscardCards                 UMETA(DisplayName = "Discard Cards"),
+	ModifyAttack                 UMETA(DisplayName = "Modify Attack"),
+	SelectTarget                 UMETA(DisplayName = "Select Target"),
+	MoveBottomOverlayToGraveyard UMETA(DisplayName = "Move Bottom Overlay To Graveyard")
 };
 
 /**
@@ -94,6 +95,16 @@ enum class ETCGEffectValueMode : uint8
 	Fixed                  UMETA(DisplayName = "Fixed"),
 	CardsUnderneathSource  UMETA(DisplayName = "Cards Underneath Source"),
 	CardsUnderneathTarget  UMETA(DisplayName = "Cards Underneath Target")
+};
+
+/**
+ * Whether a step chooses its affected cards automatically or asks the player.
+ */
+UENUM(BlueprintType)
+enum class ETCGEffectSelectionMode : uint8
+{
+	Automatic    UMETA(DisplayName = "Automatic"),
+	PlayerChoice UMETA(DisplayName = "Player Choice")
 };
 
 /**
@@ -123,7 +134,7 @@ public:
  *
  * Examples:
  * - DrawCards, TargetMode Controller, Value 2
- * - DiscardCards, TargetMode Controller, Value 1, bRequiresPreviousStepSuccess true
+ * - DiscardCards, TargetMode Controller, Value 1, SelectionMode PlayerChoice, bRequiresPreviousStepSuccess true
  * - ModifyAttack, TargetMode SourceCard, Value 2, ValueMode Fixed
  * - ModifyAttack, TargetMode TriggerTarget, ValueMode CardsUnderneathTarget
  */
@@ -148,6 +159,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	ETCGEffectValueMode ValueMode = ETCGEffectValueMode::Fixed;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	ETCGEffectSelectionMode SelectionMode = ETCGEffectSelectionMode::Automatic;
+
 	// If true, this step only resolves when the previous meaningful step succeeded.
 	// This is the data version of "then".
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
@@ -160,8 +174,8 @@ public:
 /**
  * Effect reference and optional inline modular effect.
  *
- * EffectId stays as a legacy/debug fallback. If Steps has entries, the resolver
- * uses the modular steps. If Steps is empty, old EffectId logic still works.
+ * EffectId remains only as a temporary migration field for existing debug assets.
+ * Real effects should use modular Steps.
  */
 USTRUCT(BlueprintType)
 struct FTCGCardEffectRef
@@ -173,7 +187,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	ETCGEffectTrigger Trigger = ETCGEffectTrigger::None;
 
-	// Stable ID for legacy/debug effect logic.
+	// Temporary migration ID for old/debug data. Do not use for new real card effects.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	FName EffectId = NAME_None;
 
