@@ -24,6 +24,30 @@ The match does not end because a player has no cards in hand or deck.
 
 If a player has no card to place during placement, that placement step is skipped for now.
 
+## Round Limit Win Condition
+
+A match has a maximum round number.
+
+By default, the maximum round number is 10.
+
+The maximum round number is a game rule setting and can be changed in Blueprint through the GameState defaults.
+
+This allows different game modes to use different round limits.
+
+After the battle phase of the maximum round, if both players still have Units on the board, the winner is decided by board Unit count.
+
+A board Unit means one stack on the board. A stacked Unit still counts as one Unit, even if it contains multiple cards.
+
+Round-limit result:
+
+* If Player 0 has more board Units, Player 0 wins.
+* If Player 1 has more board Units, Player 1 wins.
+* If both players have the same number of board Units, the match is a draw.
+
+The normal no-Units lose condition is still checked first after battle.
+
+The round-limit Unit-count rule only applies if both players still have at least one Unit after the battle phase.
+
 ## Round Structure
 
 The match is played in rounds.
@@ -39,7 +63,7 @@ A round contains:
 
 During the Placement Phase, players do not each take a full traditional turn. Instead, they alternate placement steps.
 
-If no player loses after the Battle Phase, the match proceeds to the next round.
+If no player loses after the Battle Phase and the maximum round has not been reached, the match proceeds to the next round.
 
 ## Placement Phase
 
@@ -65,7 +89,7 @@ If a player cannot draw because their deck is empty, the placement step still co
 
 If a player cannot place because they have no legal card or no legal empty field zone, that placement step is skipped for now.
 
-The match still only checks the lose condition after the Battle Phase.
+The match still only checks win/loss conditions after the Battle Phase.
 
 ## Field Zones and Placement Order
 
@@ -138,6 +162,8 @@ Only the top card of a stack is treated as the active Unit on the board.
 Cards underneath the top card are overlay cards/materials.
 
 They contribute to the top card, but they do not count as separate Units on the board.
+
+For win/loss checks and round-limit Unit counting, one stack on the board counts as one Unit.
 
 ## Card Stacking / Overlay Rules
 
@@ -219,7 +245,7 @@ Battle comparison:
 * Lower final Attack loses and its whole stack is sent to the Graveyard.
 * If both final Attack values are equal, both stacks are sent to the Graveyard.
 
-After all battle resolution is finished, the lose condition is checked.
+After all battle resolution is finished, win/loss conditions are checked.
 
 ## Battle Effect Timing
 
@@ -544,6 +570,7 @@ The current goal is to prove:
 * ordered placement
 * battle declaration order
 * fallback battle target selection
+* round-limit Unit-count result
 * trigger timing
 * stack chain build order
 * reverse chain resolution order
