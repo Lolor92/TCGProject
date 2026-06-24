@@ -20,6 +20,10 @@ The lose condition is checked after battle resolution, not immediately when the 
 
 If both players have no Units on their board after battle resolution, the match result is a draw.
 
+The match does not end because a player has no cards in hand or deck.
+
+If a player has no card to place during placement, that placement step is skipped for now.
+
 ## Round Structure
 
 The match is played in rounds.
@@ -34,6 +38,8 @@ A round contains:
 * Round End
 
 During the Placement Phase, players do not each take a full traditional turn. Instead, they alternate placement steps.
+
+If no player loses after the Battle Phase, the match proceeds to the next round.
 
 ## Placement Phase
 
@@ -54,6 +60,12 @@ The placement order is:
 After Player 1 completes the 8th total placement step of the round, the Placement Phase ends and the Battle Phase begins.
 
 The first player does not draw at the start of the first placement step of the round unless a card effect or future rule says otherwise.
+
+If a player cannot draw because their deck is empty, the placement step still continues.
+
+If a player cannot place because they have no legal card or no legal empty field zone, that placement step is skipped for now.
+
+The match still only checks the lose condition after the Battle Phase.
 
 ## Field Zones and Placement Order
 
@@ -94,11 +106,9 @@ These exceptions should be handled through card effects or explicit rule modifie
 
 A placement step normally ends after the active player places one card.
 
-If the active player cannot place a card, future rules must decide whether the player skips the placement step, loses, or performs another allowed action.
+If the active player cannot place a card, the placement step is skipped for now.
 
-For now, the default implementation should assume that the active player must place one legal card if possible.
-
-When both players have completed 4 placement steps each, the round proceeds to the Battle Phase.
+When both players have completed or skipped 4 placement steps each, the round proceeds to the Battle Phase.
 
 ## Card Elements
 
@@ -173,13 +183,35 @@ Cards underneath do not remain on the board after the top card leaves.
 
 ## Battle Rules
 
-During battle, opposing board zones can resolve against each other.
+During battle, Units attack in field-zone order.
 
 The top card of each stack is used as the battling Unit.
 
 Each battling Unit uses its final Attack value.
 
 Final Attack includes the stack attack bonus from cards underneath it.
+
+The attacking player alternates by zone:
+
+* Field Zone 1: Player 0's Unit declares the attack.
+* Field Zone 2: Player 1's Unit declares the attack.
+* Field Zone 3: Player 0's Unit declares the attack.
+* Field Zone 4: Player 1's Unit declares the attack.
+
+If the expected attacking Unit is missing from that field zone, that attack declaration is skipped.
+
+When an attack is declared, the defending target is chosen from the opponent's board.
+
+The attack first checks the opposing field zone directly across from the attacking Unit.
+
+If there is no Unit directly across, the attack checks the next opponent field zone in order.
+
+If the search reaches the end of the opponent's field zones, it wraps back to Field Zone 1.
+
+Examples:
+
+* If Player 0's Field Zone 1 Unit attacks and Player 1 has no Unit in Field Zone 1, the attack checks Player 1 Field Zone 2, then Field Zone 3, then Field Zone 4.
+* If Player 0's Field Zone 3 Unit attacks and Player 1 has no Unit in Field Zone 3 or Field Zone 4, the attack checks Player 1 Field Zone 1, then Field Zone 2.
 
 Battle comparison:
 
@@ -188,6 +220,21 @@ Battle comparison:
 * If both final Attack values are equal, both stacks are sent to the Graveyard.
 
 After all battle resolution is finished, the lose condition is checked.
+
+## Battle Effect Timing
+
+When a Unit declares an attack, effects that trigger on attacking can be added to the chain.
+
+If the attacked Unit has effects that trigger when it is attacked, those effects can be added after the attacker's effects.
+
+Example:
+
+* Player 0 Field Zone 1 Unit declares an attack.
+* That Unit has an On Attack effect, so it can be added as Chain 1.
+* The attacked Unit has an On Attacked effect, so it can be added as Chain 2.
+* The chain resolves backward before the final battle comparison if the effect timing says it should resolve before damage/battle comparison.
+
+The exact attack-trigger effect system will be implemented later.
 
 ## Stack Visual Rule
 
@@ -222,6 +269,8 @@ Cards may have effects triggered by events such as:
 * On Battle End
 * On Stack Added
 * On Becoming Top Card
+* On Attack
+* On Attacked
 
 These are design notes for now.
 
@@ -231,7 +280,7 @@ Full effect logic will be implemented later.
 
 Effects do not always resolve immediately.
 
-When a gameplay event happens, such as playing a Unit, the game collects valid effects that trigger from that event and builds an effect chain.
+When a gameplay event happens, such as playing a Unit or declaring an attack, the game collects valid effects that trigger from that event and builds an effect chain.
 
 The chain is built in trigger order, then resolves backward from the newest chain entry to the oldest chain entry.
 
@@ -413,8 +462,7 @@ Adding an effect to the chain does not guarantee that the effect will resolve su
 When a chain entry tries to resolve, the game should re-check important requirements such as:
 
 * the source card still exists
-* the source card is still in the required location
-* the source card is still in the required stack, if the effect came from an overlay card
+* the source is still in the required place or state
 * the target still exists
 * the target is still a legal target
 * any other required condition is still true
@@ -492,6 +540,10 @@ The current implementation is still a debug skeleton.
 
 The current goal is to prove:
 
+* round flow
+* ordered placement
+* battle declaration order
+* fallback battle target selection
 * trigger timing
 * stack chain build order
 * reverse chain resolution order
