@@ -11,9 +11,9 @@ namespace
 		OverlayPlacement
 	};
 
-	constexpr ETCGDebugScenario DebugScenario = ETCGDebugScenario::OverlayPlacement;
+	constexpr ETCGDebugScenario DebugScenario = ETCGDebugScenario::NormalRoundFlow;
 	constexpr bool bEnableDebugOverlayRemovalFizzleTest = false;
-	constexpr bool bLogDebugSetup = true;
+	constexpr bool bLogDebugSetup = false;
 	constexpr bool bLogCardSetupDetails = false;
 	constexpr bool bLogRoundFlow = true;
 	constexpr bool bLogPlacementFlow = true;
