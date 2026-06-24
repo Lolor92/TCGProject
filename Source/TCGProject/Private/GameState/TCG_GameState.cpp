@@ -1,4 +1,4 @@
-﻿#include "GameState/TCG_GameState.h"
+#include "GameState/TCG_GameState.h"
 #include "Net/UnrealNetwork.h"
 
 namespace
@@ -39,6 +39,8 @@ void ATCG_GameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ATCG_GameState, TurnNumber);
+	DOREPLIFETIME(ATCG_GameState, RoundNumber);
+	DOREPLIFETIME(ATCG_GameState, PlacementStepIndex);
 	DOREPLIFETIME(ATCG_GameState, CurrentTurnPlayerIndex);
 	DOREPLIFETIME(ATCG_GameState, CurrentPhase);
 	DOREPLIFETIME(ATCG_GameState, MatchResult);
@@ -53,8 +55,10 @@ FName ATCG_GameState::GetFieldZoneId(int32 PlayerIndex, int32 FieldIndex)
 void ATCG_GameState::StartMatch()
 {
 	TurnNumber = 1;
+	RoundNumber = 1;
+	PlacementStepIndex = 0;
 	CurrentTurnPlayerIndex = 0;
-	CurrentPhase = ETCGMatchPhase::Draw;
+	CurrentPhase = ETCGMatchPhase::RoundStart;
 	MatchResult = ETCGMatchResult::None;
 }
 
@@ -82,6 +86,83 @@ bool ATCG_GameState::IsMatchOver() const
 void ATCG_GameState::SetCurrentTurnPlayer(int32 NewPlayerIndex)
 {
 	CurrentTurnPlayerIndex = NewPlayerIndex;
+}
+
+int32 ATCG_GameState::GetPlacementStepPlayer() const
+{
+	return PlacementStepIndex % 2;
+}
+
+int32 ATCG_GameState::GetMaxPlacementStepCount() const
+{
+	return PlacementStepsPerPlayer * 2;
+}
+
+bool ATCG_GameState::IsPlacementPhaseComplete() const
+{
+	return PlacementStepIndex >= GetMaxPlacementStepCount();
+}
+
+bool ATCG_GameState::CanPlayerActInPlacementStep(int32 PlayerIndex) const
+{
+	return IsValidPlayerIndex(PlayerIndex) && CurrentPhase == ETCGMatchPhase::Placement && !IsPlacementPhaseComplete() && GetPlacementStepPlayer() == PlayerIndex;
+}
+
+int32 ATCG_GameState::GetCompletedPlacementStepsForPlayer(int32 PlayerIndex) const
+{
+	if (!IsValidPlayerIndex(PlayerIndex)) return 0;
+
+	int32 CompletedSteps = 0;
+	for (int32 StepIndex = 0; StepIndex < PlacementStepIndex; ++StepIndex)
+	{
+		if (StepIndex % 2 == PlayerIndex)
+		{
+			CompletedSteps++;
+		}
+	}
+
+	return CompletedSteps;
+}
+
+int32 ATCG_GameState::GetNextRequiredFieldZoneIndex(int32 PlayerIndex) const
+{
+	if (!IsValidPlayerIndex(PlayerIndex)) return INDEX_NONE;
+
+	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
+	{
+		FGuid ExistingStackId;
+		if (!FindStackIdInZone(GetFieldZoneId(PlayerIndex, FieldIndex), ExistingStackId))
+		{
+			return FieldIndex;
+		}
+	}
+
+	return INDEX_NONE;
+}
+
+bool ATCG_GameState::CanPlayerPlaceInFieldZone(int32 PlayerIndex, int32 FieldIndex) const
+{
+	if (!IsValidPlayerIndex(PlayerIndex)) return false;
+	if (FieldIndex < 0 || FieldIndex >= FieldZoneCount) return false;
+
+	return FieldIndex == GetNextRequiredFieldZoneIndex(PlayerIndex);
+}
+
+bool ATCG_GameState::AdvancePlacementStep()
+{
+	if (CurrentPhase != ETCGMatchPhase::Placement || IsPlacementPhaseComplete()) return false;
+
+	PlacementStepIndex++;
+
+	if (IsPlacementPhaseComplete())
+	{
+		CurrentTurnPlayerIndex = INDEX_NONE;
+		SetPhase(ETCGMatchPhase::Battle);
+		return true;
+	}
+
+	SetCurrentTurnPlayer(GetPlacementStepPlayer());
+	return true;
 }
 
 FTCGCardInstance& ATCG_GameState::AddCardInstance(FName CardDefinitionId, ETCGCardElement Element, int32 BaseAttack,
@@ -124,10 +205,8 @@ FTCGCardInstance& ATCG_GameState::AddDebugCardInstance(FName CardDefinitionId, E
 
 	FTCGCardInstance& CardInstance = AddCardInstance(CardDefinitionId, FallbackElement, FallbackBaseAttack, OwnerPlayerIndex, StartingLocation);
 
-	UE_LOG(LogTemp, Warning,
-		TEXT("TCG Debug: Added card from fallback %s ATK %d"),
-		*CardInstance.CardDefinitionId.ToString(),
-		CardInstance.BaseAttack);
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Added card from fallback %s ATK %d"),
+		*CardInstance.CardDefinitionId.ToString(), CardInstance.BaseAttack);
 
 	return CardInstance;
 }
@@ -136,10 +215,7 @@ FTCGCardInstance* ATCG_GameState::FindCardInstance(const FGuid& CardInstanceId)
 {
 	for (FTCGCardInstance& Card : MatchCards)
 	{
-		if (Card.CardInstanceId == CardInstanceId)
-		{
-			return &Card;
-		}
+		if (Card.CardInstanceId == CardInstanceId) return &Card;
 	}
 
 	return nullptr;
@@ -149,10 +225,7 @@ const FTCGCardInstance* ATCG_GameState::FindCardInstance(const FGuid& CardInstan
 {
 	for (const FTCGCardInstance& Card : MatchCards)
 	{
-		if (Card.CardInstanceId == CardInstanceId)
-		{
-			return &Card;
-		}
+		if (Card.CardInstanceId == CardInstanceId) return &Card;
 	}
 
 	return nullptr;
@@ -163,7 +236,6 @@ FTCGCardInstance* ATCG_GameState::FindTopCardInStack(const FGuid& StackId)
 	if (!StackId.IsValid()) return nullptr;
 
 	FTCGCardInstance* TopCard = nullptr;
-
 	for (FTCGCardInstance& Card : MatchCards)
 	{
 		if (Card.StackId != StackId || Card.Location != ETCGCardLocation::Board) continue;
@@ -178,7 +250,6 @@ const FTCGCardInstance* ATCG_GameState::FindTopCardInStack(const FGuid& StackId)
 	if (!StackId.IsValid()) return nullptr;
 
 	const FTCGCardInstance* TopCard = nullptr;
-
 	for (const FTCGCardInstance& Card : MatchCards)
 	{
 		if (Card.StackId != StackId || Card.Location != ETCGCardLocation::Board) continue;
@@ -192,11 +263,8 @@ bool ATCG_GameState::CanPlaceCardOnStack(const FGuid& CardInstanceId, const FGui
 {
 	const FTCGCardInstance* CardToPlace = FindCardInstance(CardInstanceId);
 	const FTCGCardInstance* TopCard = FindTopCardInStack(TargetStackId);
-
 	if (!CardToPlace || !TopCard) return false;
 
-	// Core rule for now: same element can stack on same element.
-	// Exceptions will be added later through effects/rules.
 	return CardToPlace->Element == TopCard->Element;
 }
 
@@ -219,7 +287,6 @@ bool ATCG_GameState::PlaceCardOnStack(const FGuid& CardInstanceId, const FGuid& 
 
 	FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
 	FTCGCardInstance* TopCard = FindTopCardInStack(TargetStackId);
-
 	if (!Card || !TopCard) return false;
 
 	Card->Location = ETCGCardLocation::Board;
@@ -274,9 +341,7 @@ bool ATCG_GameState::IsCurrentTurnPlayer(int32 PlayerIndex) const
 bool ATCG_GameState::CanPlayerActInCurrentPhase(int32 PlayerIndex) const
 {
 	if (IsMatchOver()) return false;
-	if (!IsCurrentTurnPlayer(PlayerIndex)) return false;
-
-	return CurrentPhase == ETCGMatchPhase::Main;
+	return CanPlayerActInPlacementStep(PlayerIndex);
 }
 
 bool ATCG_GameState::IsFieldZoneForPlayer(FName ZoneId, int32 PlayerIndex) const
@@ -285,10 +350,7 @@ bool ATCG_GameState::IsFieldZoneForPlayer(FName ZoneId, int32 PlayerIndex) const
 
 	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
 	{
-		if (ZoneId == GetFieldZoneId(PlayerIndex, FieldIndex))
-		{
-			return true;
-		}
+		if (ZoneId == GetFieldZoneId(PlayerIndex, FieldIndex)) return true;
 	}
 
 	return false;
@@ -300,17 +362,18 @@ bool ATCG_GameState::CanPlayerPlayCardToZone(int32 PlayerIndex, const FGuid& Car
 	if (!IsFieldZoneForPlayer(ZoneId, PlayerIndex)) return false;
 
 	const FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
-	if (!Card) return false;
-	if (Card->OwnerPlayerIndex != PlayerIndex) return false;
-	if (Card->Location != ETCGCardLocation::Hand) return false;
+	if (!Card || Card->OwnerPlayerIndex != PlayerIndex || Card->Location != ETCGCardLocation::Hand) return false;
 
-	FGuid ExistingStackId;
-	if (FindStackIdInZone(ZoneId, ExistingStackId))
+	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
 	{
-		return CanPlaceCardOnStack(CardInstanceId, ExistingStackId);
+		if (ZoneId != GetFieldZoneId(PlayerIndex, FieldIndex)) continue;
+		if (!CanPlayerPlaceInFieldZone(PlayerIndex, FieldIndex)) return false;
+
+		FGuid ExistingStackId;
+		return !FindStackIdInZone(ZoneId, ExistingStackId);
 	}
 
-	return true;
+	return false;
 }
 
 bool ATCG_GameState::PlayerPlayCardToZone(int32 PlayerIndex, const FGuid& CardInstanceId, FName ZoneId)
@@ -320,17 +383,24 @@ bool ATCG_GameState::PlayerPlayCardToZone(int32 PlayerIndex, const FGuid& CardIn
 		const FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
 
 		UE_LOG(LogTemp, Warning,
-			TEXT("TCG Debug: PlayerPlayCardToZone rejected Player=%d Card=%s Zone=%s Phase=%d CurrentPlayer=%d"),
+			TEXT("TCG Debug: PlayerPlayCardToZone rejected Player=%d Card=%s Zone=%s Phase=%d PlacementStep=%d CurrentPlayer=%d"),
 			PlayerIndex,
 			Card ? *Card->CardDefinitionId.ToString() : TEXT("None"),
 			*ZoneId.ToString(),
 			static_cast<int32>(CurrentPhase),
+			PlacementStepIndex,
 			CurrentTurnPlayerIndex);
 
 		return false;
 	}
 
-	return PlayCardToZone(CardInstanceId, ZoneId);
+	const bool bPlayed = PlayCardToZone(CardInstanceId, ZoneId);
+	if (bPlayed)
+	{
+		AdvancePlacementStep();
+	}
+
+	return bPlayed;
 }
 
 bool ATCG_GameState::ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectTrigger Trigger)
@@ -339,7 +409,6 @@ bool ATCG_GameState::ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectT
 	if (!Card || Trigger == ETCGEffectTrigger::None) return false;
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Trigger %s on %s"), GetTCGEffectTriggerDebugName(Trigger), *Card->CardDefinitionId.ToString());
-
 	return true;
 }
 
@@ -369,8 +438,8 @@ bool ATCG_GameState::HasDebugCardDefinition(FName CardDefinitionId) const
 bool ATCG_GameState::ValidateDebugCardDefinitions() const
 {
 	bool bValid = true;
-
 	TSet<FName> SeenIds;
+
 	for (const TObjectPtr<UTCG_CardDefinition>& CardDefinition : DebugCardDefinitions)
 	{
 		if (!CardDefinition)
@@ -389,10 +458,7 @@ bool ATCG_GameState::ValidateDebugCardDefinitions() const
 
 		if (SeenIds.Contains(CardDefinition->CardDefinitionId))
 		{
-			UE_LOG(LogTemp, Warning,
-				TEXT("TCG Debug: Duplicate debug card definition asset id %s"),
-				*CardDefinition->CardDefinitionId.ToString());
-
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Duplicate debug card definition asset id %s"), *CardDefinition->CardDefinitionId.ToString());
 			bValid = false;
 			continue;
 		}
@@ -415,18 +481,13 @@ bool ATCG_GameState::ValidateDebugCardDefinitions() const
 	{
 		if (!HasDebugCardDefinition(RequiredDebugCard))
 		{
-			UE_LOG(LogTemp, Warning,
-				TEXT("TCG Debug: Missing debug card definition asset %s"),
-				*RequiredDebugCard.ToString());
-
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Missing debug card definition asset %s"), *RequiredDebugCard.ToString());
 			bValid = false;
 		}
 	}
 
-	UE_LOG(LogTemp, Warning,
-		TEXT("TCG Debug: Debug card definition validation: %s assigned: %d"),
-		bValid ? TEXT("valid") : TEXT("invalid"),
-		DebugCardDefinitions.Num());
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Debug card definition validation: %s assigned: %d"),
+		bValid ? TEXT("valid") : TEXT("invalid"), DebugCardDefinitions.Num());
 
 	return bValid;
 }
@@ -453,9 +514,7 @@ int32 ATCG_GameState::GetPrintedEffectsForCardTrigger(const FTCGCardInstance& Ca
 
 	if (EffectRefs.Num() <= 0 && (Card.CardDefinitionId == DebugCard_FireDeckA || Card.CardDefinitionId == DebugCard_FireDeckB))
 	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("TCG Debug: Expected printed effects for %s but none were found"),
-			*Card.CardDefinitionId.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Expected printed effects for %s but none were found"), *Card.CardDefinitionId.ToString());
 	}
 
 	for (const FTCGCardEffectRef& EffectRef : EffectRefs)
@@ -484,7 +543,6 @@ bool ATCG_GameState::AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, 
 	NewEntry.ControllerPlayerIndex = SourceCard->OwnerPlayerIndex;
 
 	ApplyDebugEffectChainEntryRequirements(NewEntry);
-
 	Chain.Add(NewEntry);
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain add %d Source=%s Trigger=%s Effect=%s"),
@@ -516,71 +574,11 @@ bool ATCG_GameState::CanResolveEffectChainEntry(const FTCGEffectChainEntry& Chai
 	const FTCGCardInstance* SourceCard = FindCardInstance(ChainEntry.SourceCardInstanceId);
 	const FTCGCardInstance* TargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
 
-	if (!SourceCard)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=MissingSource"),
-			ChainEntry.ChainIndex,
-			*ChainEntry.SourceCardDefinitionId.ToString(),
-			*ChainEntry.EffectId.ToString());
-
-		return false;
-	}
-
-	if (!TargetCard)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=MissingTarget"),
-			ChainEntry.ChainIndex,
-			*ChainEntry.SourceCardDefinitionId.ToString(),
-			*ChainEntry.EffectId.ToString());
-
-		return false;
-	}
-
-	if (ChainEntry.bRequiresSourceOnBoard && SourceCard->Location != ETCGCardLocation::Board)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=SourceNotOnBoard"),
-			ChainEntry.ChainIndex,
-			*ChainEntry.SourceCardDefinitionId.ToString(),
-			*ChainEntry.EffectId.ToString());
-
-		return false;
-	}
-
-	if (ChainEntry.bRequiresTargetOnBoard && TargetCard->Location != ETCGCardLocation::Board)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=TargetNotOnBoard"),
-			ChainEntry.ChainIndex,
-			*ChainEntry.SourceCardDefinitionId.ToString(),
-			*ChainEntry.EffectId.ToString());
-
-		return false;
-	}
-
-	if (ChainEntry.bRequiresSourceInTargetStack)
-	{
-		if (!SourceCard->StackId.IsValid() || SourceCard->StackId != TargetCard->StackId)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=SourceNotInTargetStack"),
-				ChainEntry.ChainIndex,
-				*ChainEntry.SourceCardDefinitionId.ToString(),
-				*ChainEntry.EffectId.ToString());
-
-			return false;
-		}
-	}
-
-	if (ChainEntry.bRequiresSourceUnderTarget)
-	{
-		if (SourceCard->CardInstanceId == TargetCard->CardInstanceId || SourceCard->StackIndex >= TargetCard->StackIndex)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain fizzle %d Source=%s Effect=%s Reason=SourceNotUnderTarget"),
-				ChainEntry.ChainIndex,
-				*ChainEntry.SourceCardDefinitionId.ToString(),
-				*ChainEntry.EffectId.ToString());
-
-			return false;
-		}
-	}
+	if (!SourceCard || !TargetCard) return false;
+	if (ChainEntry.bRequiresSourceOnBoard && SourceCard->Location != ETCGCardLocation::Board) return false;
+	if (ChainEntry.bRequiresTargetOnBoard && TargetCard->Location != ETCGCardLocation::Board) return false;
+	if (ChainEntry.bRequiresSourceInTargetStack && (!SourceCard->StackId.IsValid() || SourceCard->StackId != TargetCard->StackId)) return false;
+	if (ChainEntry.bRequiresSourceUnderTarget && (SourceCard->CardInstanceId == TargetCard->CardInstanceId || SourceCard->StackIndex >= TargetCard->StackIndex)) return false;
 
 	return true;
 }
@@ -624,7 +622,6 @@ bool ATCG_GameState::ResolveEffectChain(const TArray<FTCGEffectChainEntry>& Chai
 	if (Chain.Num() <= 0) return false;
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain resolving count: %d"), Chain.Num());
-
 	bool bResolvedAny = false;
 
 	for (int32 ChainIndex = Chain.Num() - 1; ChainIndex >= 0; --ChainIndex)
@@ -632,15 +629,9 @@ bool ATCG_GameState::ResolveEffectChain(const TArray<FTCGEffectChainEntry>& Chai
 		const FTCGEffectChainEntry& Entry = Chain[ChainIndex];
 
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain resolve %d Source=%s Effect=%s"),
-			Entry.ChainIndex,
-			*Entry.SourceCardDefinitionId.ToString(),
-			*Entry.EffectId.ToString());
+			Entry.ChainIndex, *Entry.SourceCardDefinitionId.ToString(), *Entry.EffectId.ToString());
 
-		if (!CanResolveEffectChainEntry(Entry))
-		{
-			continue;
-		}
-
+		if (!CanResolveEffectChainEntry(Entry)) continue;
 		bResolvedAny |= ResolveDebugEffectChainEntry(Entry);
 	}
 
@@ -656,11 +647,8 @@ bool ATCG_GameState::ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& Ch
 	if (ChainEntry.EffectId == DebugEffect_Draw1)
 	{
 		const bool bDrewCard = DrawCard(ChainEntry.ControllerPlayerIndex);
-
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect Draw 1 from %s success: %s"),
-			*SourceCard->CardDefinitionId.ToString(),
-			bDrewCard ? TEXT("true") : TEXT("false"));
-
+			*SourceCard->CardDefinitionId.ToString(), bDrewCard ? TEXT("true") : TEXT("false"));
 		return bDrewCard;
 	}
 
@@ -673,10 +661,7 @@ bool ATCG_GameState::ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& Ch
 		MutableTargetCard->AttackModifier += CardsUnderneath;
 
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect %s gained ATK from cards underneath: %d modifier now: %d"),
-			*MutableTargetCard->CardDefinitionId.ToString(),
-			CardsUnderneath,
-			MutableTargetCard->AttackModifier);
-
+			*MutableTargetCard->CardDefinitionId.ToString(), CardsUnderneath, MutableTargetCard->AttackModifier);
 		return true;
 	}
 
@@ -686,35 +671,22 @@ bool ATCG_GameState::ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& Ch
 		if (!MutableTargetCard || !MutableTargetCard->StackId.IsValid()) return false;
 
 		FTCGCardInstance* BottomOverlayCard = nullptr;
-
 		for (FTCGCardInstance& Card : MatchCards)
 		{
 			if (Card.Location != ETCGCardLocation::Board) continue;
 			if (Card.StackId != MutableTargetCard->StackId) continue;
 			if (Card.CardInstanceId == MutableTargetCard->CardInstanceId) continue;
 			if (Card.StackIndex >= MutableTargetCard->StackIndex) continue;
-
-			if (!BottomOverlayCard || Card.StackIndex < BottomOverlayCard->StackIndex)
-			{
-				BottomOverlayCard = &Card;
-			}
+			if (!BottomOverlayCard || Card.StackIndex < BottomOverlayCard->StackIndex) BottomOverlayCard = &Card;
 		}
 
-		if (!BottomOverlayCard)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect RemoveBottomOverlay found no overlay under %s"),
-				*MutableTargetCard->CardDefinitionId.ToString());
-
-			return false;
-		}
+		if (!BottomOverlayCard) return false;
 
 		const FName RemovedCardDefinitionId = BottomOverlayCard->CardDefinitionId;
 		const bool bMoved = MoveCardToLocation(BottomOverlayCard->CardInstanceId, ETCGCardLocation::Graveyard);
 
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Chain effect RemoveBottomOverlay moved %s to Graveyard success: %s"),
-			*RemovedCardDefinitionId.ToString(),
-			bMoved ? TEXT("true") : TEXT("false"));
-
+			*RemovedCardDefinitionId.ToString(), bMoved ? TEXT("true") : TEXT("false"));
 		return bMoved;
 	}
 
@@ -727,9 +699,6 @@ bool ATCG_GameState::MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLoc
 	if (!Card) return false;
 
 	Card->Location = NewLocation;
-
-	// If the card leaves the board, clear its board/stack info for now.
-	// Later, graveyard/banish effects can happen here or through a rules system.
 	if (NewLocation != ETCGCardLocation::Board)
 	{
 		Card->ZoneId = NAME_None;
@@ -742,13 +711,9 @@ bool ATCG_GameState::MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLoc
 
 bool ATCG_GameState::MoveStackToLocation(const FGuid& StackId, ETCGCardLocation NewLocation)
 {
-	if (!StackId.IsValid())
-	{
-		return false;
-	}
+	if (!StackId.IsValid()) return false;
 
 	TArray<FGuid> CardIdsInStack;
-
 	for (const FTCGCardInstance& Card : MatchCards)
 	{
 		if (Card.StackId == StackId && Card.Location == ETCGCardLocation::Board)
@@ -757,13 +722,9 @@ bool ATCG_GameState::MoveStackToLocation(const FGuid& StackId, ETCGCardLocation 
 		}
 	}
 
-	if (CardIdsInStack.Num() <= 0)
-	{
-		return false;
-	}
+	if (CardIdsInStack.Num() <= 0) return false;
 
 	bool bMovedAllCards = true;
-
 	for (const FGuid& CardId : CardIdsInStack)
 	{
 		bMovedAllCards &= MoveCardToLocation(CardId, NewLocation);
@@ -776,11 +737,7 @@ bool ATCG_GameState::DoesPlayerHaveAnyCardOnBoard(int32 PlayerIndex) const
 {
 	for (const FTCGCardInstance& Card : MatchCards)
 	{
-		if (Card.OwnerPlayerIndex == PlayerIndex &&
-			Card.Location == ETCGCardLocation::Board)
-		{
-			return true;
-		}
+		if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == ETCGCardLocation::Board) return true;
 	}
 
 	return false;
@@ -789,22 +746,12 @@ bool ATCG_GameState::DoesPlayerHaveAnyCardOnBoard(int32 PlayerIndex) const
 int32 ATCG_GameState::GetCardsUnderneathCount(const FGuid& CardInstanceId) const
 {
 	const FTCGCardInstance* TargetCard = FindCardInstance(CardInstanceId);
-	if (!TargetCard) return 0;
-
-	// Cards not in a stack have no cards underneath.
-	if (!TargetCard->StackId.IsValid() || TargetCard->StackIndex <= 0) return 0;
+	if (!TargetCard || !TargetCard->StackId.IsValid() || TargetCard->StackIndex <= 0) return 0;
 
 	int32 Count = 0;
-
 	for (const FTCGCardInstance& Card : MatchCards)
 	{
-		const bool bSameStack = Card.StackId == TargetCard->StackId;
-		const bool bUnderneath = Card.StackIndex < TargetCard->StackIndex;
-
-		if (bSameStack && bUnderneath)
-		{
-			Count++;
-		}
+		if (Card.StackId == TargetCard->StackId && Card.StackIndex < TargetCard->StackIndex) Count++;
 	}
 
 	return Count;
@@ -840,10 +787,7 @@ void ATCG_GameState::GetCardsInStack(const FGuid& StackId, TArray<FTCGCardInstan
 
 	for (const FTCGCardInstance& Card : MatchCards)
 	{
-		if (Card.Location == ETCGCardLocation::Board && Card.StackId == StackId)
-		{
-			OutCards.Add(Card);
-		}
+		if (Card.Location == ETCGCardLocation::Board && Card.StackId == StackId) OutCards.Add(Card);
 	}
 
 	OutCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
@@ -858,10 +802,7 @@ void ATCG_GameState::GetCardsInZone(FName ZoneId, TArray<FTCGCardInstance>& OutC
 
 	for (const FTCGCardInstance& Card : MatchCards)
 	{
-		if (Card.Location == ETCGCardLocation::Board && Card.ZoneId == ZoneId)
-		{
-			OutCards.Add(Card);
-		}
+		if (Card.Location == ETCGCardLocation::Board && Card.ZoneId == ZoneId) OutCards.Add(Card);
 	}
 
 	OutCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
@@ -893,23 +834,16 @@ bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle failed P0Card=%s P1Card=%s"),
 			Player0Card ? *Player0Card->CardDefinitionId.ToString() : TEXT("None"),
 			Player1Card ? *Player1Card->CardDefinitionId.ToString() : TEXT("None"));
-
 		return false;
 	}
 
-	const FGuid Player0CardId = Player0Card->CardInstanceId;
-	const FGuid Player1CardId = Player1Card->CardInstanceId;
 	const FGuid Player0StackId = Player0Card->StackId;
 	const FGuid Player1StackId = Player1Card->StackId;
-
-	const int32 Player0Attack = GetFinalAttack(Player0CardId);
-	const int32 Player1Attack = GetFinalAttack(Player1CardId);
+	const int32 Player0Attack = GetFinalAttack(Player0Card->CardInstanceId);
+	const int32 Player1Attack = GetFinalAttack(Player1Card->CardInstanceId);
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle %s ATK %d vs %s ATK %d"),
-		*Player0Card->CardDefinitionId.ToString(),
-		Player0Attack,
-		*Player1Card->CardDefinitionId.ToString(),
-		Player1Attack);
+		*Player0Card->CardDefinitionId.ToString(), Player0Attack, *Player1Card->CardDefinitionId.ToString(), Player1Attack);
 
 	if (Player0Attack > Player1Attack)
 	{
@@ -943,27 +877,17 @@ bool ATCG_GameState::ResolveBattlePhase()
 		const FTCGCardInstance* Player0Card = FindTopCardInZone(Player0ZoneId);
 		const FTCGCardInstance* Player1Card = FindTopCardInZone(Player1ZoneId);
 
-		if (!Player0Card && !Player1Card)
-		{
-			continue;
-		}
-
+		if (!Player0Card && !Player1Card) continue;
 		if (!Player0Card || !Player1Card)
 		{
-			UE_LOG(LogTemp, Warning,
-				TEXT("TCG Debug: Battle skipped %s vs %s P0Card=%s P1Card=%s"),
-				*Player0ZoneId.ToString(),
-				*Player1ZoneId.ToString(),
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle skipped %s vs %s P0Card=%s P1Card=%s"),
+				*Player0ZoneId.ToString(), *Player1ZoneId.ToString(),
 				Player0Card ? *Player0Card->CardDefinitionId.ToString() : TEXT("None"),
 				Player1Card ? *Player1Card->CardDefinitionId.ToString() : TEXT("None"));
-
 			continue;
 		}
 
-		if (ResolveBattleBetweenZones(Player0ZoneId, Player1ZoneId))
-		{
-			bResolvedAnyBattle = true;
-		}
+		bResolvedAnyBattle |= ResolveBattleBetweenZones(Player0ZoneId, Player1ZoneId);
 	}
 
 	return bResolvedAnyBattle;
@@ -974,21 +898,9 @@ ETCGMatchResult ATCG_GameState::CheckLoseConditionAfterBattle() const
 	const bool bPlayer0HasCardOnBoard = DoesPlayerHaveAnyCardOnBoard(0);
 	const bool bPlayer1HasCardOnBoard = DoesPlayerHaveAnyCardOnBoard(1);
 
-	if (!bPlayer0HasCardOnBoard && !bPlayer1HasCardOnBoard)
-	{
-		return ETCGMatchResult::Draw;
-	}
-
-	if (!bPlayer0HasCardOnBoard)
-	{
-		return ETCGMatchResult::Player1Wins;
-	}
-
-	if (!bPlayer1HasCardOnBoard)
-	{
-		return ETCGMatchResult::Player0Wins;
-	}
-
+	if (!bPlayer0HasCardOnBoard && !bPlayer1HasCardOnBoard) return ETCGMatchResult::Draw;
+	if (!bPlayer0HasCardOnBoard) return ETCGMatchResult::Player1Wins;
+	if (!bPlayer1HasCardOnBoard) return ETCGMatchResult::Player0Wins;
 	return ETCGMatchResult::None;
 }
 
@@ -998,10 +910,7 @@ void ATCG_GameState::GetCardsInLocation(int32 PlayerIndex, ETCGCardLocation Loca
 
 	for (const FTCGCardInstance& Card : MatchCards)
 	{
-		if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == Location)
-		{
-			OutCards.Add(Card);
-		}
+		if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == Location) OutCards.Add(Card);
 	}
 }
 
@@ -1073,11 +982,7 @@ bool ATCG_GameState::PlayFirstCardFromHandToZone(int32 PlayerIndex, FName ZoneId
 {
 	TArray<FTCGCardInstance> HandCards;
 	GetCardsInHand(PlayerIndex, HandCards);
-
-	if (HandCards.Num() <= 0)
-	{
-		return false;
-	}
+	if (HandCards.Num() <= 0) return false;
 
 	return PlayerPlayCardToZone(PlayerIndex, HandCards[0].CardInstanceId, ZoneId);
 }
@@ -1085,7 +990,6 @@ bool ATCG_GameState::PlayFirstCardFromHandToZone(int32 PlayerIndex, FName ZoneId
 void ATCG_GameState::SetupDebugMatch()
 {
 	MatchCards.Empty();
-	
 	ValidateDebugCardDefinitions();
 
 	AddDebugCardInstance("Debug_Earth_Deck_A", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
@@ -1095,6 +999,7 @@ void ATCG_GameState::SetupDebugMatch()
 	AddDebugCardInstance("Debug_Dark_Deck_A", ETCGCardElement::Dark, 5, 1, ETCGCardLocation::Deck);
 	AddDebugCardInstance("Debug_Dark_Deck_B", ETCGCardElement::Dark, 2, 1, ETCGCardLocation::Deck);
 	AddDebugCardInstance("Debug_Light_Deck_A", ETCGCardElement::Light, 4, 1, ETCGCardLocation::Deck);
+	AddDebugCardInstance("Debug_Wind_Deck_A", ETCGCardElement::Wind, 1, 1, ETCGCardLocation::Deck);
 
 	TArray<FTCGCardInstance> Player0Deck;
 	TArray<FTCGCardInstance> Player1Deck;
@@ -1107,125 +1012,62 @@ void ATCG_GameState::SetupDebugMatch()
 
 void ATCG_GameState::RunDebugTurnFlow()
 {
-	SetPhase(ETCGMatchPhase::Draw);
-
-	const int32 Player0Drawn = DrawCards(0, 2);
-	const int32 Player1Drawn = DrawCards(1, 2);
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P0 drawn: %d"), Player0Drawn);
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P1 drawn: %d"), Player1Drawn);
-	
-	TArray<FTCGCardInstance> Player0HandAfterDraw;
-	TArray<FTCGCardInstance> Player1HandAfterDraw;
-	TArray<FTCGCardInstance> Player0DeckAfterDraw;
-	TArray<FTCGCardInstance> Player1DeckAfterDraw;
-
-	GetCardsInHand(0, Player0HandAfterDraw);
-	GetCardsInHand(1, Player1HandAfterDraw);
-	GetCardsInDeck(0, Player0DeckAfterDraw);
-	GetCardsInDeck(1, Player1DeckAfterDraw);
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P0 hand: %d deck: %d"), Player0HandAfterDraw.Num(), Player0DeckAfterDraw.Num());
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw phase P1 hand: %d deck: %d"), Player1HandAfterDraw.Num(), Player1DeckAfterDraw.Num());
-
-	SetPhase(ETCGMatchPhase::Main);
-
-	const FName Player0FieldZone = GetFieldZoneId(0, 0);
-	const FName Player1FieldZone = GetFieldZoneId(1, 0);
-
-	SetCurrentTurnPlayer(0);
-	const bool bP0PlayedFirstCard = PlayFirstCardFromHandToZone(0, Player0FieldZone);
-	const bool bP0PlayedSecondCard = PlayFirstCardFromHandToZone(0, Player0FieldZone);
-
-	SetCurrentTurnPlayer(1);
-	const bool bP1PlayedFirstCard = PlayFirstCardFromHandToZone(1, Player1FieldZone);
-
+	SetPhase(ETCGMatchPhase::RoundStart);
+	RoundNumber = FMath::Max(RoundNumber, 1);
+	PlacementStepIndex = 0;
 	SetCurrentTurnPlayer(0);
 
-	UE_LOG(LogTemp, Warning,
-		TEXT("TCG Debug: Main phase P0 play first hand card to %s: %s"),
-		*Player0FieldZone.ToString(),
-		bP0PlayedFirstCard ? TEXT("true") : TEXT("false"));
+	const int32 Player0OpeningDraw = DrawCards(0, 1);
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round %d start P0 opening draw: %d"), RoundNumber, Player0OpeningDraw);
 
-	UE_LOG(LogTemp, Warning,
-		TEXT("TCG Debug: Main phase P0 play second hand card to %s: %s"),
-		*Player0FieldZone.ToString(),
-		bP0PlayedSecondCard ? TEXT("true") : TEXT("false"));
+	SetPhase(ETCGMatchPhase::Placement);
 
-	UE_LOG(LogTemp, Warning,
-		TEXT("TCG Debug: Main phase P1 play first hand card to %s: %s"),
-		*Player1FieldZone.ToString(),
-		bP1PlayedFirstCard ? TEXT("true") : TEXT("false"));
+	while (CurrentPhase == ETCGMatchPhase::Placement && !IsPlacementPhaseComplete())
+	{
+		const int32 ActivePlayer = GetPlacementStepPlayer();
+		SetCurrentTurnPlayer(ActivePlayer);
 
-	const FName Player0Field0 = GetFieldZoneId(0, 0);
-	const FName Player1Field0 = GetFieldZoneId(1, 0);
+		if (PlacementStepIndex > 0)
+		{
+			const bool bDrewCard = DrawCard(ActivePlayer);
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement step %d P%d draw: %s"),
+				PlacementStepIndex + 1, ActivePlayer, bDrewCard ? TEXT("true") : TEXT("false"));
+		}
 
-	const bool bPlayer0PlayedFirstCard = PlayFirstCardFromHandToZone(0, Player0Field0);
-	const bool bPlayer0PlayedSecondCard = PlayFirstCardFromHandToZone(0, Player0Field0);
-	const bool bPlayer1PlayedFirstCard = PlayFirstCardFromHandToZone(1, Player1Field0);
+		const int32 FieldIndex = GetNextRequiredFieldZoneIndex(ActivePlayer);
+		if (FieldIndex == INDEX_NONE)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement step %d P%d no legal field zone"), PlacementStepIndex + 1, ActivePlayer);
+			break;
+		}
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 play first hand card to %s: %s"),
-		*Player0Field0.ToString(),
-		bPlayer0PlayedFirstCard ? TEXT("true") : TEXT("false"));
+		const FName ZoneId = GetFieldZoneId(ActivePlayer, FieldIndex);
+		const bool bPlayedCard = PlayFirstCardFromHandToZone(ActivePlayer, ZoneId);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement step %d P%d play to %s: %s"),
+			PlacementStepIndex, ActivePlayer, *ZoneId.ToString(), bPlayedCard ? TEXT("true") : TEXT("false"));
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 play second hand card to %s: %s"),
-		*Player0Field0.ToString(),
-		bPlayer0PlayedSecondCard ? TEXT("true") : TEXT("false"));
+		if (!bPlayedCard) break;
+	}
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P1 play first hand card to %s: %s"),
-		*Player1Field0.ToString(),
-		bPlayer1PlayedFirstCard ? TEXT("true") : TEXT("false"));
-
-	const FTCGCardInstance* Player0TopCard = FindTopCardInZone(Player0Field0);
-	const FTCGCardInstance* Player1TopCard = FindTopCardInZone(Player1Field0);
-
-	TArray<FTCGCardInstance> Player0HandAfterPlay;
-	TArray<FTCGCardInstance> Player1HandAfterPlay;
-	GetCardsInHand(0, Player0HandAfterPlay);
-	GetCardsInHand(1, Player1HandAfterPlay);
-	
-	TArray<FTCGCardInstance> Player0DeckAfterPlay;
-	TArray<FTCGCardInstance> Player1DeckAfterPlay;
-	GetCardsInDeck(0, Player0DeckAfterPlay);
-	GetCardsInDeck(1, Player1DeckAfterPlay);
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 hand after play: %d deck: %d board has card: %s"),
-		Player0HandAfterPlay.Num(), Player0DeckAfterPlay.Num(), DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P1 hand after play: %d deck: %d board has card: %s"),
-		Player1HandAfterPlay.Num(), Player1DeckAfterPlay.Num(), DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P0 top card: %s stack underneath: %d final ATK: %d"),
-		Player0TopCard ? *Player0TopCard->CardDefinitionId.ToString() : TEXT("None"),
-		Player0TopCard ? GetCardsUnderneathCount(Player0TopCard->CardInstanceId) : 0,
-		Player0TopCard ? GetFinalAttack(Player0TopCard->CardInstanceId) : 0);
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Main phase P1 top card: %s stack underneath: %d final ATK: %d"),
-		Player1TopCard ? *Player1TopCard->CardDefinitionId.ToString() : TEXT("None"),
-		Player1TopCard ? GetCardsUnderneathCount(Player1TopCard->CardInstanceId) : 0,
-		Player1TopCard ? GetFinalAttack(Player1TopCard->CardInstanceId) : 0);
-
-	SetPhase(ETCGMatchPhase::Battle);
+	if (CurrentPhase != ETCGMatchPhase::Battle)
+	{
+		SetPhase(ETCGMatchPhase::Battle);
+	}
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase started"));
-
 	const bool bBattleResolved = ResolveBattlePhase();
 
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase resolved: %s"), bBattleResolved ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle after resolve P0 board has card: %s"),
 		DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
-
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle after resolve P1 board has card: %s"),
 		DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
 
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase resolved: %s"),
-		bBattleResolved ? TEXT("true") : TEXT("false"));
-
 	const ETCGMatchResult BattleMatchResult = CheckLoseConditionAfterBattle();
-
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle lose check result: %s"),
 		BattleMatchResult == ETCGMatchResult::Player0Wins ? TEXT("Player 0 wins") :
 		BattleMatchResult == ETCGMatchResult::Player1Wins ? TEXT("Player 1 wins") :
-		BattleMatchResult == ETCGMatchResult::Draw ? TEXT("Draw") :
-		TEXT("None"));
+		BattleMatchResult == ETCGMatchResult::Draw ? TEXT("Draw") : TEXT("None"));
 
 	if (BattleMatchResult != ETCGMatchResult::None)
 	{
@@ -1234,27 +1076,23 @@ void ATCG_GameState::RunDebugTurnFlow()
 		return;
 	}
 
-	SetPhase(ETCGMatchPhase::End);
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: End phase reached"));
+	SetPhase(ETCGMatchPhase::RoundEnd);
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round end reached"));
 }
 
 void ATCG_GameState::CreateDebugTestCards()
 {
 	MatchCards.Empty();
-	
 	AddCardInstance("Debug_Fire_Deck_A", ETCGCardElement::Fire, 1, 0, ETCGCardLocation::Deck);
 	AddCardInstance("Debug_Water_Deck_A", ETCGCardElement::Water, 2, 0, ETCGCardLocation::Deck);
 
 	TArray<FTCGCardInstance> Player0DeckBeforeDraw;
 	GetCardsInDeck(0, Player0DeckBeforeDraw);
-
 	const bool bDrawCard = DrawCard(0);
 
 	TArray<FTCGCardInstance> Player0DeckAfterDraw;
-	GetCardsInDeck(0, Player0DeckAfterDraw);
-
 	TArray<FTCGCardInstance> Player0HandAfterDraw;
+	GetCardsInDeck(0, Player0DeckAfterDraw);
 	GetCardsInHand(0, Player0HandAfterDraw);
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 0 deck before draw: %d"), Player0DeckBeforeDraw.Num());
@@ -1276,16 +1114,15 @@ void ATCG_GameState::CreateDebugTestCards()
 	const bool bFireOnFire = PlayCardToZone(FireBId, "Player0_Field_0");
 	const bool bWaterOnFire = PlayCardToZone(WaterId, "Player0_Field_0");
 	const bool bDarkNewStack = PlayCardToZone(DarkId, "Player1_Field_0");
-	
+
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Fire new stack success: %s"), bFireNewStack ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Dark new stack success: %s"), bDarkNewStack ? TEXT("true") : TEXT("false"));
-
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Fire on Fire success: %s"), bFireOnFire ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Water on Fire success: %s"), bWaterOnFire ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 0 has board card: %s"), DoesPlayerHaveAnyCardOnBoard(0) ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 1 has board card: %s"), DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: FireB final attack: %d"), GetFinalAttack(FireBId));
-	
+
 	FGuid StackInZone;
 	const bool bFoundStack = FindStackIdInZone("Player0_Field_0", StackInZone);
 
@@ -1297,11 +1134,10 @@ void ATCG_GameState::CreateDebugTestCards()
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Found stack in Player0_Field_0: %s"), bFoundStack ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Cards in Player0_Field_0: %d"), CardsInZone.Num());
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Top card in Player0_Field_0: %s"), TopCard ? *TopCard->CardDefinitionId.ToString() : TEXT("None"));
-	
-	TArray<FTCGCardInstance> Player0Hand;
-	GetCardsInHand(0, Player0Hand);
 
+	TArray<FTCGCardInstance> Player0Hand;
 	TArray<FTCGCardInstance> Player1Hand;
+	GetCardsInHand(0, Player0Hand);
 	GetCardsInHand(1, Player1Hand);
 
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Player 0 hand cards: %d"), Player0Hand.Num());
