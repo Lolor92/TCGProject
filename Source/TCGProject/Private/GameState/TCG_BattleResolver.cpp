@@ -5,6 +5,81 @@ namespace
 {
 	constexpr bool bLogBattleResolverFlow = false;
 
+	static void ReindexEffectChain(TArray<FTCGEffectChainEntry>& Chain)
+	{
+		for (int32 Index = 0; Index < Chain.Num(); ++Index)
+		{
+			Chain[Index].ChainIndex = Index + 1;
+		}
+	}
+
+	static int32 ResolveGraveyardNegatesForOpponentAttackEffects(ATCG_GameState* GameState, int32 AttackingPlayerIndex, TArray<FTCGEffectChainEntry>& Chain, const TArray<int32>& OpponentEffectEntryIndices)
+	{
+		if (!GameState || !GameState->IsValidPlayerIndex(AttackingPlayerIndex) || Chain.Num() <= 0 || OpponentEffectEntryIndices.Num() <= 0) return 0;
+
+		TArray<FTCGCardInstance> GraveyardCards;
+		GameState->GetCardsInLocation(AttackingPlayerIndex, ETCGCardLocation::Graveyard, GraveyardCards);
+		if (GraveyardCards.Num() <= 0) return 0;
+
+		TArray<int32> SortedEntryIndices = OpponentEffectEntryIndices;
+		SortedEntryIndices.Sort();
+
+		TSet<FGuid> UsedResponseCards;
+		int32 NegatedCount = 0;
+
+		for (int32 ReverseIndex = SortedEntryIndices.Num() - 1; ReverseIndex >= 0; --ReverseIndex)
+		{
+			const int32 ChainArrayIndex = SortedEntryIndices[ReverseIndex];
+			if (!Chain.IsValidIndex(ChainArrayIndex)) continue;
+
+			const FTCGEffectChainEntry TargetEntry = Chain[ChainArrayIndex];
+			const FTCGCardInstance* TargetSourceCard = GameState->FindCardInstance(TargetEntry.SourceCardInstanceId);
+			const FName TargetSourceDefinitionId = TargetSourceCard ? TargetSourceCard->CardDefinitionId : TargetEntry.SourceCardDefinitionId;
+
+			for (const FTCGCardInstance& GraveyardCard : GraveyardCards)
+			{
+				if (UsedResponseCards.Contains(GraveyardCard.CardInstanceId)) continue;
+				if (GraveyardCard.OwnerPlayerIndex != AttackingPlayerIndex || GraveyardCard.Location != ETCGCardLocation::Graveyard) continue;
+
+				TArray<FTCGCardEffectRef> ResponseEffects;
+				GameState->GetPrintedEffectRefsForCard(GraveyardCard, ResponseEffects);
+				bool bHasNegateResponse = false;
+				for (const FTCGCardEffectRef& ResponseEffect : ResponseEffects)
+				{
+					if (GameState->DoesCardEffectMatchTrigger(ResponseEffect, ETCGEffectTrigger::OnOpponentUnitEffectActivatedWhenYourUnitAttacks))
+					{
+						bHasNegateResponse = true;
+						break;
+					}
+				}
+
+				if (!bHasNegateResponse) continue;
+
+				const FName ResponseDefinitionId = GraveyardCard.CardDefinitionId;
+				const bool bBanishedResponse = GameState->MoveCardToLocation(GraveyardCard.CardInstanceId, ETCGCardLocation::Banish);
+				if (!bBanishedResponse) continue;
+
+				Chain.RemoveAt(ChainArrayIndex);
+				UsedResponseCards.Add(GraveyardCard.CardInstanceId);
+				NegatedCount++;
+
+				UE_LOG(LogTemp, Warning,
+					TEXT("TCG Battle: Graveyard negate Player=%d Source=%s Negated=%s"),
+					AttackingPlayerIndex,
+					*ResponseDefinitionId.ToString(),
+					TargetSourceDefinitionId.IsNone() ? TEXT("None") : *TargetSourceDefinitionId.ToString());
+				break;
+			}
+		}
+
+		if (NegatedCount > 0)
+		{
+			ReindexEffectChain(Chain);
+		}
+
+		return NegatedCount;
+	}
+
 	static void ResolveDestroyedUnitHandResponses(ATCG_GameState* GameState, int32 DestroyedUnitOwnerPlayerIndex, const FGuid& DestroyerCardInstanceId)
 	{
 		if (!GameState || !GameState->IsValidPlayerIndex(DestroyedUnitOwnerPlayerIndex) || !DestroyerCardInstanceId.IsValid()) return;
@@ -159,6 +234,22 @@ bool UTCG_BattleResolver::ResolveBattlePhase(ATCG_GameState* GameState)
 			}
 		}
 
+		TArray<int32> OpponentAttackEffectEntryIndices;
+		TArray<FTCGCardEffectRef> DefenderEffectRefs;
+		GameState->GetPrintedEffectRefsForCard(*DefenderCard, DefenderEffectRefs);
+		for (const FTCGCardEffectRef& EffectRef : DefenderEffectRefs)
+		{
+			if (GameState->DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnOpponentAttack))
+			{
+				const int32 BeforeChainCount = AttackChain.Num();
+				if (GameState->AddCardEffectRefToChain(AttackChain, DefenderCardId, AttackerCardId, EffectRef) && AttackChain.Num() > BeforeChainCount)
+				{
+					OpponentAttackEffectEntryIndices.Add(AttackChain.Num() - 1);
+				}
+			}
+		}
+
+		ResolveGraveyardNegatesForOpponentAttackEffects(GameState, AttackerPlayerIndex, AttackChain, OpponentAttackEffectEntryIndices);
 		const bool bAttackChainResolved = GameState->ResolveEffectChain(AttackChain);
 
 		const FTCGCardInstance* AttackerAfterAttackEffects = GameState->FindCardInstance(AttackerCardId);
