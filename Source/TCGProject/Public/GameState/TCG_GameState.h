@@ -217,6 +217,13 @@ public:
 	bool HasDebugCardDefinition(FName CardDefinitionId) const;
 	bool ValidateDebugCardDefinitions() const;
 	int32 GetPrintedEffectRefsForCard(const FTCGCardInstance& Card, TArray<FTCGCardEffectRef>& OutEffectRefs) const;
+
+	// Deprecated compatibility only. Active chain building no longer uses these.
+	int32 GetPrintedEffectsForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, TArray<FName>& OutEffectIds) const;
+	bool AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId,
+		const FGuid& TargetCardInstanceId, ETCGEffectTrigger Trigger, FName EffectId);
+	bool ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);
+
 	bool AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId,
 		const FGuid& TargetCardInstanceId, const FTCGCardEffectRef& EffectRef);
 	void ApplyDebugEffectChainEntryRequirements(FTCGEffectChainEntry& ChainEntry) const;
