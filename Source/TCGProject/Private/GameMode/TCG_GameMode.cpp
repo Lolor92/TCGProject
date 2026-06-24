@@ -30,8 +30,8 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		ATCG_GameState* TCGGameState = GetGameState<ATCG_GameState>();
 		if (TCGGameState)
 		{
-			// Dedicated Dreampool Mirechant debug scenario.
-			TCGGameState->RunDebugDreampoolMirechantScenario();
+			// Dedicated draw 2, return 1 to top deck debug scenario.
+			TCGGameState->RunDebugDraw2Return1Scenario();
 		}
 	}
 }
