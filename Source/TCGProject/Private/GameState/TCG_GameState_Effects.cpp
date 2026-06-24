@@ -1,4 +1,5 @@
 #include "GameState/TCG_GameState.h"
+#include "GameState/TCG_EffectResolver.h"
 
 namespace
 {
@@ -146,35 +147,7 @@ namespace
 
 bool ATCG_GameState::AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId, const FTCGCardEffectRef& EffectRef)
 {
-	const FTCGCardInstance* SourceCard = FindCardInstance(SourceCardInstanceId);
-	if (!SourceCard || EffectRef.Trigger == ETCGEffectTrigger::None) return false;
-
-	FTCGCardEffectRef ResolvedEffectRef = EffectRef;
-	const bool bConvertedLegacyEffect = ConvertLegacyDebugEffectToSteps(ResolvedEffectRef);
-	if (ResolvedEffectRef.Steps.Num() <= 0) return false;
-
-	FTCGEffectChainEntry NewEntry;
-	NewEntry.ChainIndex = Chain.Num() + 1;
-	NewEntry.SourceCardInstanceId = SourceCardInstanceId;
-	NewEntry.TargetCardInstanceId = TargetCardInstanceId;
-	NewEntry.SourceCardDefinitionId = SourceCard->CardDefinitionId;
-	NewEntry.Trigger = ResolvedEffectRef.Trigger;
-	NewEntry.EffectId = ResolvedEffectRef.EffectId;
-	NewEntry.EffectRef = ResolvedEffectRef;
-	NewEntry.ControllerPlayerIndex = SourceCard->OwnerPlayerIndex;
-	ApplyDebugEffectChainEntryRequirements(NewEntry);
-	if (NewEntry.Trigger == ETCGEffectTrigger::OnDestroyed)
-	{
-		NewEntry.bRequiresSourceOnBoard = false;
-		NewEntry.bRequiresTargetOnBoard = true;
-	}
-	Chain.Add(NewEntry);
-
-	if (bLogEffectResolution)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Chain add %d Source=%s EffectId=%s Steps=%d Optional=%s ConvertedLegacy=%s"), NewEntry.ChainIndex, *NewEntry.SourceCardDefinitionId.ToString(), NewEntry.EffectId.IsNone() ? TEXT("None") : *NewEntry.EffectId.ToString(), NewEntry.EffectRef.Steps.Num(), NewEntry.EffectRef.bOptional ? TEXT("true") : TEXT("false"), bConvertedLegacyEffect ? TEXT("true") : TEXT("false"));
-	}
-	return true;
+	return UTCG_EffectResolver::AddCardEffectRefToChain(this, Chain, SourceCardInstanceId, TargetCardInstanceId, EffectRef);
 }
 
 bool ATCG_GameState::ResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEntry)

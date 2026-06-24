@@ -3,6 +3,7 @@
 #include "GameState/TCG_DebugScenarioRunner.h"
 #include "GameState/TCG_CardMovementService.h"
 #include "GameState/TCG_CardQueryService.h"
+#include "GameState/TCG_EffectResolver.h"
 #include "Net/UnrealNetwork.h"
 
 namespace
@@ -442,9 +443,7 @@ bool ATCG_GameState::ExecuteCardTrigger(const FGuid& CardInstanceId, ETCGEffectT
 
 bool ATCG_GameState::DoesCardEffectMatchTrigger(const FTCGCardEffectRef& EffectRef, ETCGEffectTrigger Trigger) const
 {
-	return Trigger != ETCGEffectTrigger::None
-		&& EffectRef.Trigger == Trigger
-		&& (!EffectRef.EffectId.IsNone() || EffectRef.Steps.Num() > 0);
+	return UTCG_EffectResolver::DoesCardEffectMatchTrigger(EffectRef, Trigger);
 }
 
 const UTCG_CardDefinition* ATCG_GameState::FindDebugCardDefinitionById(FName CardDefinitionId) const
@@ -549,51 +548,17 @@ int32 ATCG_GameState::GetPrintedEffectsForCardTrigger(const FTCGCardInstance& Ca
 bool ATCG_GameState::AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId,
 	const FGuid& TargetCardInstanceId, ETCGEffectTrigger Trigger, FName EffectId)
 {
-	FTCGCardEffectRef LegacyEffectRef;
-	LegacyEffectRef.Trigger = Trigger;
-	LegacyEffectRef.EffectId = EffectId;
-	return AddCardEffectRefToChain(Chain, SourceCardInstanceId, TargetCardInstanceId, LegacyEffectRef);
+	return UTCG_EffectResolver::AddCardTriggerToChain(this, Chain, SourceCardInstanceId, TargetCardInstanceId, Trigger, EffectId);
 }
 
 void ATCG_GameState::ApplyDebugEffectChainEntryRequirements(FTCGEffectChainEntry& ChainEntry) const
 {
-	const FTCGCardInstance* SourceCard = FindCardInstance(ChainEntry.SourceCardInstanceId);
-	const FTCGCardInstance* TargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
-	if (!SourceCard || !TargetCard) return;
-
-	ChainEntry.bRequiresSourceOnBoard = true;
-	ChainEntry.bRequiresTargetOnBoard = true;
-	ChainEntry.bRequiresSourceInTargetStack = false;
-	ChainEntry.bRequiresSourceUnderTarget = false;
-
-	if (ChainEntry.Trigger == ETCGEffectTrigger::OnSentToGraveyard
-		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromDeckToGraveyard
-		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromHandToGraveyard
-		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromBoardToGraveyard
-		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromMaterialToGraveyard)
-	{
-		ChainEntry.bRequiresSourceOnBoard = false;
-		ChainEntry.bRequiresTargetOnBoard = false;
-	}
-
-	if (ChainEntry.EffectId == DebugEffect_Draw1 && SourceCard->CardInstanceId != TargetCard->CardInstanceId)
-	{
-		ChainEntry.bRequiresSourceInTargetStack = true;
-		ChainEntry.bRequiresSourceUnderTarget = true;
-	}
+	UTCG_EffectResolver::ApplyDebugEffectChainEntryRequirements(const_cast<ATCG_GameState*>(this), ChainEntry);
 }
 
 bool ATCG_GameState::CanResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEntry) const
 {
-	const FTCGCardInstance* SourceCard = FindCardInstance(ChainEntry.SourceCardInstanceId);
-	const FTCGCardInstance* TargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
-
-	if (!SourceCard || !TargetCard) return false;
-	if (ChainEntry.bRequiresSourceOnBoard && SourceCard->Location != ETCGCardLocation::Board) return false;
-	if (ChainEntry.bRequiresTargetOnBoard && TargetCard->Location != ETCGCardLocation::Board) return false;
-	if (ChainEntry.bRequiresSourceInTargetStack && (!SourceCard->StackId.IsValid() || SourceCard->StackId != TargetCard->StackId)) return false;
-	if (ChainEntry.bRequiresSourceUnderTarget && (SourceCard->CardInstanceId == TargetCard->CardInstanceId || SourceCard->StackIndex >= TargetCard->StackIndex)) return false;
-	return true;
+	return UTCG_EffectResolver::CanResolveEffectChainEntry(this, ChainEntry);
 }
 
 int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId, TArray<FTCGEffectChainEntry>& OutChain)
