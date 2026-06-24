@@ -181,6 +181,39 @@ bool UTCG_CardMovementService::ReturnUnitStackToBottomDeckMaterialsToGraveyard(A
 	return bMovedMaterials && bMovedTop;
 }
 
+bool UTCG_CardMovementService::ReturnUnitStackToHandMaterialsToGraveyard(ATCG_GameState* GameState, const FGuid& TargetTopCardInstanceId, int32& OutMaterialCount)
+{
+	OutMaterialCount = 0;
+	if (!GameState) return false;
+
+	const FTCGCardInstance* TargetTopCard = GameState->FindCardInstance(TargetTopCardInstanceId);
+	if (!TargetTopCard || TargetTopCard->Location != ETCGCardLocation::Board || !TargetTopCard->StackId.IsValid()) return false;
+
+	const FGuid StackId = TargetTopCard->StackId;
+	const FGuid TopCardId = TargetTopCard->CardInstanceId;
+
+	TArray<FGuid> MaterialIds;
+	for (const FTCGCardInstance& Card : GameState->MatchCards)
+	{
+		if (Card.Location != ETCGCardLocation::Board) continue;
+		if (Card.StackId != StackId) continue;
+		if (Card.CardInstanceId == TopCardId) continue;
+		if (Card.StackIndex >= TargetTopCard->StackIndex) continue;
+		MaterialIds.Add(Card.CardInstanceId);
+	}
+
+	OutMaterialCount = MaterialIds.Num();
+
+	bool bMovedMaterials = true;
+	for (const FGuid& MaterialId : MaterialIds)
+	{
+		bMovedMaterials &= MoveCardToLocation(GameState, MaterialId, ETCGCardLocation::Graveyard);
+	}
+
+	const bool bMovedTop = GameState->MoveCardToLocation(TopCardId, ETCGCardLocation::Hand);
+	return bMovedMaterials && bMovedTop;
+}
+
 bool UTCG_CardMovementService::ResolveAttackMillTwoWaterBounceBattlingUnit(ATCG_GameState* GameState, const FGuid& SourceCardInstanceId, const FGuid& BattleTargetCardInstanceId)
 {
 	if (!GameState) return false;
