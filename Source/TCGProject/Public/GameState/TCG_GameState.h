@@ -47,11 +47,9 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
 	ETCGEffectTrigger Trigger = ETCGEffectTrigger::None;
 
-	// Temporary migration/debug id captured from older card assets.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
 	FName EffectId = NAME_None;
 
-	// Full effect data captured when this chain entry is built.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
 	FTCGCardEffectRef EffectRef;
 
@@ -113,7 +111,6 @@ class TCGPROJECT_API ATCG_GameState : public AGameState
 
 public:
 	ATCG_GameState();
-
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 public:
@@ -163,7 +160,6 @@ public:
 	TArray<TObjectPtr<UTCG_CardDefinition>> DebugCardDefinitions;
 	
 	static constexpr int32 FieldZoneCount = 4;
-
 	static FName GetFieldZoneId(int32 PlayerIndex, int32 FieldIndex);
 
 public:
@@ -186,16 +182,13 @@ public:
 public:
 	FTCGCardInstance& AddCardInstance(FName CardDefinitionId, ETCGCardElement Element, int32 BaseAttack,
 		int32 OwnerPlayerIndex, ETCGCardLocation StartingLocation);
-	
 	FTCGCardInstance* AddCardInstanceFromDefinition(const UTCG_CardDefinition* CardDefinition, int32 OwnerPlayerIndex,
 		ETCGCardLocation StartingLocation);
-	
 	FTCGCardInstance& AddDebugCardInstance(FName CardDefinitionId, ETCGCardElement FallbackElement,
 		int32 FallbackBaseAttack, int32 OwnerPlayerIndex, ETCGCardLocation StartingLocation);
 
 	FTCGCardInstance* FindCardInstance(const FGuid& CardInstanceId);
 	const FTCGCardInstance* FindCardInstance(const FGuid& CardInstanceId) const;
-	
 	FTCGCardInstance* FindTopCardInStack(const FGuid& StackId);
 	const FTCGCardInstance* FindTopCardInStack(const FGuid& StackId) const;
 
@@ -218,7 +211,6 @@ public:
 	bool ValidateDebugCardDefinitions() const;
 	int32 GetPrintedEffectRefsForCard(const FTCGCardInstance& Card, TArray<FTCGCardEffectRef>& OutEffectRefs) const;
 
-	// Deprecated compatibility only. Active chain building no longer uses these.
 	int32 GetPrintedEffectsForCardTrigger(const FTCGCardInstance& Card, ETCGEffectTrigger Trigger, TArray<FName>& OutEffectIds) const;
 	bool AddCardTriggerToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId,
 		const FGuid& TargetCardInstanceId, ETCGEffectTrigger Trigger, FName EffectId);
@@ -244,8 +236,12 @@ public:
 	void ClearPendingDiscardChoice();
 
 	bool MoveCardToLocation(const FGuid& CardInstanceId, ETCGCardLocation NewLocation);
+	bool MoveCardToBottomOfDeck(const FGuid& CardInstanceId);
 	bool MoveStackToLocation(const FGuid& StackId, ETCGCardLocation NewLocation);
 	bool MoveBottomOverlayToGraveyard(const FGuid& TargetCardInstanceId);
+	bool PlaySourceCardToFirstEmptyZone(const FGuid& SourceCardInstanceId);
+	bool SendTopDeckCardToGraveyard(int32 PlayerIndex);
+	bool MoveFirstGraveyardCardToBottomDeck(int32 PlayerIndex);
 	bool DoesPlayerHaveAnyCardOnBoard(int32 PlayerIndex) const;
 	int32 GetCardsUnderneathCount(const FGuid& CardInstanceId) const;
 	int32 GetFinalAttack(const FGuid& CardInstanceId) const;
