@@ -50,12 +50,12 @@ namespace
 		return Card && Card->CardDefinitionId == DebugCard_TidesCalling;
 	}
 
-	void StartTidesCallingOnPlayChain(ATCG_GameState* GameState, const FGuid& SourceCardInstanceId)
+	void StartQueuedOnPlayChain(ATCG_GameState* GameState, const FGuid& SourceCardInstanceId)
 	{
 		if (!GameState) return;
 
 		const FTCGCardInstance* SourceCard = GameState->FindCardInstance(SourceCardInstanceId);
-		if (!IsTidesCallingCard(SourceCard) || SourceCard->Location != ETCGCardLocation::Board)
+		if (!SourceCard || SourceCard->Location != ETCGCardLocation::Board)
 		{
 			return;
 		}
@@ -63,8 +63,24 @@ namespace
 		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Starting queued OnPlay chain Source=%s"), *SourceCard->CardDefinitionId.ToString());
 
 		TArray<FTCGEffectChainEntry> Chain;
-		GameState->AddCardEffectRefToChain(Chain, SourceCardInstanceId, SourceCardInstanceId, MakeTidesCallingOnPlayEffect());
+		GameState->BuildStackOnPlayEffectChain(SourceCardInstanceId, Chain);
+		if (Chain.Num() <= 0 && IsTidesCallingCard(SourceCard))
+		{
+			GameState->AddCardEffectRefToChain(Chain, SourceCardInstanceId, SourceCardInstanceId, MakeTidesCallingOnPlayEffect());
+		}
 		GameState->ResolveEffectChain(Chain);
+	}
+
+	void QueueOnPlayChainAfterCurrentChain(ATCG_GameState* GameState, const FGuid& SourceCardInstanceId)
+	{
+		if (!GameState || !SourceCardInstanceId.IsValid()) return;
+
+		const FTCGCardInstance* SourceCard = GameState->FindCardInstance(SourceCardInstanceId);
+		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Queued OnPlay chain after current chain Source=%s"), SourceCard ? *SourceCard->CardDefinitionId.ToString() : TEXT("None"));
+		GameState->GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(GameState, [GameState, SourceCardInstanceId]()
+		{
+			StartQueuedOnPlayChain(GameState, SourceCardInstanceId);
+		}));
 	}
 
 	void LogTidesCallingFinalSummary(ATCG_GameState* GameState, bool bSentTopDeck)
@@ -126,6 +142,35 @@ bool ATCG_GameState::MoveCardToBottomOfDeck(const FGuid& CardInstanceId)
 	return true;
 }
 
+bool ATCG_GameState::PlaySourceCardToEmptyZone(const FGuid& SourceCardInstanceId, FName ZoneId)
+{
+	FTCGCardInstance* SourceCard = FindCardInstance(SourceCardInstanceId);
+	if (!SourceCard || !IsValidPlayerIndex(SourceCard->OwnerPlayerIndex) || ZoneId.IsNone())
+	{
+		return false;
+	}
+
+	if (!IsFieldZoneForPlayer(ZoneId, SourceCard->OwnerPlayerIndex))
+	{
+		return false;
+	}
+
+	FGuid ExistingStackId;
+	if (FindStackIdInZone(ZoneId, ExistingStackId))
+	{
+		return false;
+	}
+
+	const bool bPlayed = PlaceCardAsNewStack(SourceCardInstanceId, ZoneId);
+	if (bPlayed)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Source played to empty zone Player=%d Zone=%s"), SourceCard->OwnerPlayerIndex, *ZoneId.ToString());
+		ExecuteCardTrigger(SourceCardInstanceId, ETCGEffectTrigger::OnBecomingTopCard);
+		QueueOnPlayChainAfterCurrentChain(this, SourceCardInstanceId);
+	}
+	return bPlayed;
+}
+
 bool ATCG_GameState::PlaySourceCardToFirstEmptyZone(const FGuid& SourceCardInstanceId)
 {
 	FTCGCardInstance* SourceCard = FindCardInstance(SourceCardInstanceId);
@@ -141,21 +186,7 @@ bool ATCG_GameState::PlaySourceCardToFirstEmptyZone(const FGuid& SourceCardInsta
 		FGuid ExistingStackId;
 		if (FindStackIdInZone(ZoneId, ExistingStackId)) continue;
 
-		const bool bPlayed = PlaceCardAsNewStack(SourceCardInstanceId, ZoneId);
-		if (bPlayed)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Tide's Calling played from graveyard Player=%d Field=%d"), PlayerIndex, FieldIndex);
-
-			if (IsTidesCallingCard(SourceCard))
-			{
-				UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Queued OnPlay chain after current chain Source=%s"), *SourceCard->CardDefinitionId.ToString());
-				GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this, SourceCardInstanceId]()
-				{
-					StartTidesCallingOnPlayChain(this, SourceCardInstanceId);
-				}));
-			}
-		}
-		return bPlayed;
+		return PlaySourceCardToEmptyZone(SourceCardInstanceId, ZoneId);
 	}
 
 	return false;
@@ -194,18 +225,30 @@ bool ATCG_GameState::SendTopDeckCardToGraveyard(int32 PlayerIndex)
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Sent top deck card to graveyard Player=%d Card=%s"), PlayerIndex, *SentCardDefinitionId.ToString());
 
 	const FTCGCardInstance* SentCard = FindCardInstance(SentCardId);
-	if (IsTidesCallingCard(SentCard))
+	if (SentCard)
 	{
 		TArray<FTCGEffectChainEntry> Chain;
-		if (AddCardEffectRefToChain(Chain, SentCardId, SentCardId, MakeTidesCallingFromDeckToGraveyardEffect()))
+		TArray<FTCGCardEffectRef> EffectRefs;
+		GetPrintedEffectRefsForCard(*SentCard, EffectRefs);
+		for (const FTCGCardEffectRef& EffectRef : EffectRefs)
 		{
-			for (FTCGEffectChainEntry& Entry : Chain)
+			if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnSentToGraveyard))
 			{
-				Entry.bRequiresSourceOnBoard = false;
-				Entry.bRequiresTargetOnBoard = false;
+				AddCardEffectRefToChain(Chain, SentCardId, SentCardId, EffectRef);
 			}
-			ResolveEffectChain(Chain);
 		}
+
+		if (Chain.Num() <= 0 && IsTidesCallingCard(SentCard))
+		{
+			AddCardEffectRefToChain(Chain, SentCardId, SentCardId, MakeTidesCallingFromDeckToGraveyardEffect());
+		}
+
+		for (FTCGEffectChainEntry& Entry : Chain)
+		{
+			Entry.bRequiresSourceOnBoard = false;
+			Entry.bRequiresTargetOnBoard = false;
+		}
+		ResolveEffectChain(Chain);
 	}
 
 	return true;
