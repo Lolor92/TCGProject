@@ -66,14 +66,6 @@ public:
 	bool bRequiresSourceUnderTarget = false;
 };
 
-/**
- * GameState exists on the server and all clients.
- *
- * It stores shared match state:
- * - round / phase / placement step
- * - active player
- * - card instances
- */
 UCLASS()
 class TCGPROJECT_API ATCG_GameState : public AGameState
 {
@@ -85,7 +77,6 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 public:
-	// Legacy debug counter kept for now while the code moves from turns to rounds.
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
 	int32 TurnNumber = 0;
 
@@ -94,6 +85,12 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
 	int32 PlacementStepIndex = 0;
+
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
+	TArray<int32> Player0PlacementFieldZonesUsedThisRound;
+
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
+	TArray<int32> Player1PlacementFieldZonesUsedThisRound;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Rules", meta = (ClampMin = "1", UIMin = "1"))
 	int32 PlacementStepsPerPlayer = 4;
@@ -104,24 +101,18 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Rules", meta = (ClampMin = "0", UIMin = "0"))
 	int32 CardsDrawnPerPlacementStep = 1;
 
-	// If the match reaches this round and both players still have Units after battle,
-	// the player with the most board Units wins. Equal Unit counts means draw.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Rules", meta = (ClampMin = "1", UIMin = "1"))
 	int32 MaxRoundNumber = 10;
 
-	// Which player is currently taking actions.
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
 	int32 CurrentTurnPlayerIndex = INDEX_NONE;
 
-	// Current phase of the match.
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
 	ETCGMatchPhase CurrentPhase = ETCGMatchPhase::WaitingForPlayers;
 	
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
 	ETCGMatchResult MatchResult = ETCGMatchResult::None;
 
-	// All card copies currently known by the match.
-	// This is gameplay state, not visual actors.
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Cards")
 	TArray<FTCGCardInstance> MatchCards;
 	
