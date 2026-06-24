@@ -2,6 +2,7 @@
 #include "GameState/TCG_BattleResolver.h"
 #include "GameState/TCG_DebugScenarioRunner.h"
 #include "GameState/TCG_CardMovementService.h"
+#include "GameState/TCG_CardQueryService.h"
 #include "Net/UnrealNetwork.h"
 
 namespace
@@ -256,46 +257,22 @@ FTCGCardInstance& ATCG_GameState::AddDebugCardInstance(FName CardDefinitionId, E
 
 FTCGCardInstance* ATCG_GameState::FindCardInstance(const FGuid& CardInstanceId)
 {
-	for (FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.CardInstanceId == CardInstanceId) return &Card;
-	}
-	return nullptr;
+	return UTCG_CardQueryService::FindCardInstance(this, CardInstanceId);
 }
 
 const FTCGCardInstance* ATCG_GameState::FindCardInstance(const FGuid& CardInstanceId) const
 {
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.CardInstanceId == CardInstanceId) return &Card;
-	}
-	return nullptr;
+	return UTCG_CardQueryService::FindCardInstance(this, CardInstanceId);
 }
 
 FTCGCardInstance* ATCG_GameState::FindTopCardInStack(const FGuid& StackId)
 {
-	if (!StackId.IsValid()) return nullptr;
-
-	FTCGCardInstance* TopCard = nullptr;
-	for (FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.Location != ETCGCardLocation::Board || Card.StackId != StackId) continue;
-		if (!TopCard || Card.StackIndex > TopCard->StackIndex) TopCard = &Card;
-	}
-	return TopCard;
+	return UTCG_CardQueryService::FindTopCardInStack(this, StackId);
 }
 
 const FTCGCardInstance* ATCG_GameState::FindTopCardInStack(const FGuid& StackId) const
 {
-	if (!StackId.IsValid()) return nullptr;
-
-	const FTCGCardInstance* TopCard = nullptr;
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.Location != ETCGCardLocation::Board || Card.StackId != StackId) continue;
-		if (!TopCard || Card.StackIndex > TopCard->StackIndex) TopCard = &Card;
-	}
-	return TopCard;
+	return UTCG_CardQueryService::FindTopCardInStack(this, StackId);
 }
 
 bool ATCG_GameState::CanPlaceCardOnStack(const FGuid& CardInstanceId, const FGuid& TargetStackId) const
@@ -706,138 +683,37 @@ bool ATCG_GameState::MoveStackToLocation(const FGuid& StackId, ETCGCardLocation 
 
 bool ATCG_GameState::DoesPlayerHaveAnyCardOnBoard(int32 PlayerIndex) const
 {
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == ETCGCardLocation::Board) return true;
-	}
-	return false;
+	return UTCG_CardQueryService::DoesPlayerHaveAnyCardOnBoard(this, PlayerIndex);
 }
 
 int32 ATCG_GameState::GetCardsUnderneathCount(const FGuid& CardInstanceId) const
 {
-	const FTCGCardInstance* TargetCard = FindCardInstance(CardInstanceId);
-	if (!TargetCard || !TargetCard->StackId.IsValid() || TargetCard->StackIndex <= 0) return 0;
-
-	int32 Count = 0;
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.Location == ETCGCardLocation::Board && Card.StackId == TargetCard->StackId && Card.StackIndex < TargetCard->StackIndex) Count++;
-	}
-	return Count;
+	return UTCG_CardQueryService::GetCardsUnderneathCount(this, CardInstanceId);
 }
 
 int32 ATCG_GameState::GetFinalAttack(const FGuid& CardInstanceId) const
 {
-	const FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
-	if (!Card) return 0;
-
-	int32 FinalAttack = Card->BaseAttack + Card->AttackModifier + GetCardsUnderneathCount(CardInstanceId);
-
-	if (!Card->StackId.IsValid())
-	{
-		return FinalAttack;
-	}
-
-	TArray<FTCGCardInstance> StackCards;
-	GetCardsInStack(Card->StackId, StackCards);
-
-	for (const FTCGCardInstance& StackCard : StackCards)
-	{
-		if (StackCard.StackIndex > Card->StackIndex)
-		{
-			continue;
-		}
-
-		TArray<FTCGCardEffectRef> EffectRefs;
-		GetPrintedEffectRefsForCard(StackCard, EffectRefs);
-
-		for (const FTCGCardEffectRef& EffectRef : EffectRefs)
-		{
-			if (EffectRef.Trigger != ETCGEffectTrigger::None)
-			{
-				continue;
-			}
-
-			for (const FTCGEffectStep& Step : EffectRef.Steps)
-			{
-				if (Step.StepType != ETCGEffectStepType::ModifyAttack)
-				{
-					continue;
-				}
-
-				if (Step.ValueMode == ETCGEffectValueMode::Fixed)
-				{
-					FinalAttack += Step.Value;
-				}
-				else if (Step.ValueMode == ETCGEffectValueMode::CardsUnderneathSource)
-				{
-					FinalAttack += GetCardsUnderneathCount(StackCard.CardInstanceId);
-				}
-				else if (Step.ValueMode == ETCGEffectValueMode::CardsUnderneathTarget)
-				{
-					FinalAttack += GetCardsUnderneathCount(CardInstanceId);
-				}
-				else if (Step.ValueMode == ETCGEffectValueMode::ElementCardsInControllerGraveyard)
-				{
-					FinalAttack += CountCardsInLocationByElement(
-						Card->OwnerPlayerIndex,
-						ETCGCardLocation::Graveyard,
-						Step.TargetFilter.RequiredElement);
-				}
-			}
-		}
-	}
-
-	return FinalAttack;
+	return UTCG_CardQueryService::GetFinalAttack(this, CardInstanceId);
 }
 
 bool ATCG_GameState::FindStackIdInZone(FName ZoneId, FGuid& OutStackId) const
 {
-	OutStackId.Invalidate();
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.Location != ETCGCardLocation::Board || Card.ZoneId != ZoneId || !Card.StackId.IsValid()) continue;
-		OutStackId = Card.StackId;
-		return true;
-	}
-	return false;
+	return UTCG_CardQueryService::FindStackIdInZone(this, ZoneId, OutStackId);
 }
 
 void ATCG_GameState::GetCardsInStack(const FGuid& StackId, TArray<FTCGCardInstance>& OutCards) const
 {
-	OutCards.Reset();
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.Location == ETCGCardLocation::Board && Card.StackId == StackId) OutCards.Add(Card);
-	}
-	OutCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
-	{
-		return A.StackIndex < B.StackIndex;
-	});
+	UTCG_CardQueryService::GetCardsInStack(this, StackId, OutCards);
 }
 
 void ATCG_GameState::GetCardsInZone(FName ZoneId, TArray<FTCGCardInstance>& OutCards) const
 {
-	OutCards.Reset();
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.Location == ETCGCardLocation::Board && Card.ZoneId == ZoneId) OutCards.Add(Card);
-	}
-	OutCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
-	{
-		return A.StackIndex < B.StackIndex;
-	});
+	UTCG_CardQueryService::GetCardsInZone(this, ZoneId, OutCards);
 }
 
 const FTCGCardInstance* ATCG_GameState::FindTopCardInZone(FName ZoneId) const
 {
-	const FTCGCardInstance* TopCard = nullptr;
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.Location != ETCGCardLocation::Board || Card.ZoneId != ZoneId) continue;
-		if (!TopCard || Card.StackIndex > TopCard->StackIndex) TopCard = &Card;
-	}
-	return TopCard;
+	return UTCG_CardQueryService::FindTopCardInZone(this, ZoneId);
 }
 
 bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player1ZoneId)
@@ -862,39 +738,22 @@ ETCGMatchResult ATCG_GameState::CheckLoseConditionAfterBattle() const
 
 void ATCG_GameState::GetCardsInLocation(int32 PlayerIndex, ETCGCardLocation Location, TArray<FTCGCardInstance>& OutCards) const
 {
-	OutCards.Reset();
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == Location) OutCards.Add(Card);
-	}
+	UTCG_CardQueryService::GetCardsInLocation(this, PlayerIndex, Location, OutCards);
 }
 
 void ATCG_GameState::GetCardsInHand(int32 PlayerIndex, TArray<FTCGCardInstance>& OutCards) const
 {
-	GetCardsInLocation(PlayerIndex, ETCGCardLocation::Hand, OutCards);
-	OutCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
-	{
-		return A.LocationIndex < B.LocationIndex;
-	});
+	UTCG_CardQueryService::GetCardsInHand(this, PlayerIndex, OutCards);
 }
 
 void ATCG_GameState::GetCardsInDeck(int32 PlayerIndex, TArray<FTCGCardInstance>& OutCards) const
 {
-	GetCardsInLocation(PlayerIndex, ETCGCardLocation::Deck, OutCards);
-	OutCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
-	{
-		return A.LocationIndex > B.LocationIndex;
-	});
+	UTCG_CardQueryService::GetCardsInDeck(this, PlayerIndex, OutCards);
 }
 
 int32 ATCG_GameState::GetNextLocationIndex(int32 PlayerIndex, ETCGCardLocation Location) const
 {
-	int32 HighestIndex = INDEX_NONE;
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == Location) HighestIndex = FMath::Max(HighestIndex, Card.LocationIndex);
-	}
-	return HighestIndex + 1;
+	return UTCG_CardQueryService::GetNextLocationIndex(this, PlayerIndex, Location);
 }
 
 bool ATCG_GameState::DrawCard(int32 PlayerIndex)
