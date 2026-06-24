@@ -1,10 +1,9 @@
 #include "GameState/TCG_GameState.h"
+#include "TimerManager.h"
 
 namespace
 {
 	const FName DebugCard_TidesCalling = "Debug_Water_TidesCalling";
-	TArray<TWeakObjectPtr<ATCG_GameState>> QueuedGameStates;
-	TMap<TWeakObjectPtr<ATCG_GameState>, TArray<FGuid>> QueuedOnPlayCardsByGameState;
 
 	FTCGCardEffectRef MakeTidesCallingFromDeckToGraveyardEffect()
 	{
@@ -51,41 +50,20 @@ namespace
 		return Card && Card->CardDefinitionId == DebugCard_TidesCalling;
 	}
 
-	void QueuePostChainOnPlay(ATCG_GameState* GameState, const FGuid& CardInstanceId)
+	void StartTidesCallingOnPlayChain(ATCG_GameState* GameState, const FGuid& SourceCardInstanceId)
 	{
-		if (!GameState || !CardInstanceId.IsValid()) return;
+		if (!GameState) return;
 
-		TWeakObjectPtr<ATCG_GameState> GameStateKey(GameState);
-		QueuedOnPlayCardsByGameState.FindOrAdd(GameStateKey).Add(CardInstanceId);
-		QueuedGameStates.AddUnique(GameStateKey);
-
-		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Queued post-chain OnPlay trigger Card=%s"), *CardInstanceId.ToString());
-	}
-}
-
-void TCGDrainQueuedPostChainTriggers(ATCG_GameState* GameState)
-{
-	if (!GameState) return;
-
-	TWeakObjectPtr<ATCG_GameState> GameStateKey(GameState);
-	TArray<FGuid>* QueuedCards = QueuedOnPlayCardsByGameState.Find(GameStateKey);
-	if (!QueuedCards || QueuedCards->Num() <= 0) return;
-
-	TArray<FGuid> CardsToProcess = *QueuedCards;
-	QueuedCards->Reset();
-
-	for (const FGuid& CardInstanceId : CardsToProcess)
-	{
-		const FTCGCardInstance* Card = GameState->FindCardInstance(CardInstanceId);
-		if (!IsTidesCallingCard(Card) || Card->Location != ETCGCardLocation::Board)
+		const FTCGCardInstance* SourceCard = GameState->FindCardInstance(SourceCardInstanceId);
+		if (!IsTidesCallingCard(SourceCard) || SourceCard->Location != ETCGCardLocation::Board)
 		{
-			continue;
+			return;
 		}
 
-		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Starting queued OnPlay chain Source=%s"), *Card->CardDefinitionId.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Starting queued OnPlay chain Source=%s"), *SourceCard->CardDefinitionId.ToString());
 
 		TArray<FTCGEffectChainEntry> Chain;
-		GameState->AddCardEffectRefToChain(Chain, CardInstanceId, CardInstanceId, MakeTidesCallingOnPlayEffect());
+		GameState->AddCardEffectRefToChain(Chain, SourceCardInstanceId, SourceCardInstanceId, MakeTidesCallingOnPlayEffect());
 		GameState->ResolveEffectChain(Chain);
 	}
 }
@@ -137,7 +115,11 @@ bool ATCG_GameState::PlaySourceCardToFirstEmptyZone(const FGuid& SourceCardInsta
 
 			if (IsTidesCallingCard(SourceCard))
 			{
-				QueuePostChainOnPlay(this, SourceCardInstanceId);
+				UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Queued OnPlay chain after current chain Source=%s"), *SourceCard->CardDefinitionId.ToString());
+				GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this, SourceCardInstanceId]()
+				{
+					StartTidesCallingOnPlayChain(this, SourceCardInstanceId);
+				}));
 			}
 		}
 		return bPlayed;
