@@ -1,0 +1,232 @@
+#include "GameState/TCG_GameState.h"
+
+bool ATCG_GameState::MoveGraveyardCardsToHandAndTopDeck(const FGuid& ToHandCardInstanceId, const FGuid& ToDeckCardInstanceId)
+{
+	if (!ToHandCardInstanceId.IsValid() || !ToDeckCardInstanceId.IsValid() || ToHandCardInstanceId == ToDeckCardInstanceId) return false;
+
+	FTCGCardInstance* ToHandCard = FindCardInstance(ToHandCardInstanceId);
+	FTCGCardInstance* ToDeckCard = FindCardInstance(ToDeckCardInstanceId);
+	if (!ToHandCard || !ToDeckCard) return false;
+	if (ToHandCard->Location != ETCGCardLocation::Graveyard || ToDeckCard->Location != ETCGCardLocation::Graveyard) return false;
+
+	const bool bMovedToHand = MoveCardToLocation(ToHandCardInstanceId, ETCGCardLocation::Hand);
+	const bool bMovedToDeck = MoveCardToTopOfDeck(ToDeckCardInstanceId);
+	return bMovedToHand && bMovedToDeck;
+}
+
+bool ATCG_GameState::RemoveMaterialFromUnit(const FGuid& TargetCardInstanceId, const FGuid& MaterialCardInstanceId)
+{
+	FTCGCardInstance* TargetCard = FindCardInstance(TargetCardInstanceId);
+	FTCGCardInstance* MaterialCard = FindCardInstance(MaterialCardInstanceId);
+	if (!TargetCard || !MaterialCard) return false;
+	if (TargetCard->Location != ETCGCardLocation::Board || MaterialCard->Location != ETCGCardLocation::Board) return false;
+	if (!TargetCard->StackId.IsValid() || TargetCard->StackId != MaterialCard->StackId) return false;
+	if (MaterialCard->StackIndex >= TargetCard->StackIndex) return false;
+
+	const FGuid StackId = TargetCard->StackId;
+	const int32 RemovedStackIndex = MaterialCard->StackIndex;
+	if (!MoveCardToLocation(MaterialCardInstanceId, ETCGCardLocation::Graveyard)) return false;
+
+	for (FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.Location == ETCGCardLocation::Board && Card.StackId == StackId && Card.StackIndex > RemovedStackIndex)
+		{
+			Card.StackIndex--;
+		}
+	}
+
+	return true;
+}
+
+bool ATCG_GameState::BeginPendingGraveyardCardsToHandAndTopDeckChoice(int32 PlayerIndex, const FTCGEffectTargetFilter& TargetFilter, const FTCGEffectChainEntry& ChainEntry)
+{
+	if (!IsValidPlayerIndex(PlayerIndex) || PendingGraveyardCardsToHandAndTopDeckChoice.bIsPending) return false;
+
+	const int32 OwnerPlayerIndex = TargetFilter.OwnerMode == ETCGEffectTargetMode::Opponent ? 1 - PlayerIndex : PlayerIndex;
+
+	PendingGraveyardCardsToHandAndTopDeckChoice.Reset();
+	PendingGraveyardCardsToHandAndTopDeckChoice.bIsPending = true;
+	PendingGraveyardCardsToHandAndTopDeckChoice.PlayerIndex = PlayerIndex;
+	PendingGraveyardCardsToHandAndTopDeckChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
+	PendingGraveyardCardsToHandAndTopDeckChoice.ChainIndex = ChainEntry.ChainIndex;
+
+	for (const FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.OwnerPlayerIndex != OwnerPlayerIndex) continue;
+		if (Card.Location != ETCGCardLocation::Graveyard) continue;
+		if (TargetFilter.bRequireElement && Card.Element != TargetFilter.RequiredElement) continue;
+		if (TargetFilter.bExcludeSourceCard && Card.CardInstanceId == ChainEntry.SourceCardInstanceId) continue;
+		PendingGraveyardCardsToHandAndTopDeckChoice.EligibleCardInstanceIds.Add(Card.CardInstanceId);
+	}
+
+	if (PendingGraveyardCardsToHandAndTopDeckChoice.EligibleCardInstanceIds.Num() < 2)
+	{
+		ClearPendingGraveyardCardsToHandAndTopDeckChoice();
+		return false;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending graveyard hand/topdeck choice started Player=%d Cards=%d"), PlayerIndex, PendingGraveyardCardsToHandAndTopDeckChoice.EligibleCardInstanceIds.Num());
+	return true;
+}
+
+bool ATCG_GameState::SubmitPendingGraveyardCardsToHandAndTopDeckChoice(int32 PlayerIndex, const FGuid& ChosenToHandCardInstanceId, const FGuid& ChosenToDeckCardInstanceId)
+{
+	if (!PendingGraveyardCardsToHandAndTopDeckChoice.bIsPending || PendingGraveyardCardsToHandAndTopDeckChoice.PlayerIndex != PlayerIndex) return false;
+	if (!ChosenToHandCardInstanceId.IsValid() || !ChosenToDeckCardInstanceId.IsValid() || ChosenToHandCardInstanceId == ChosenToDeckCardInstanceId) return false;
+	if (!PendingGraveyardCardsToHandAndTopDeckChoice.EligibleCardInstanceIds.Contains(ChosenToHandCardInstanceId)) return false;
+	if (!PendingGraveyardCardsToHandAndTopDeckChoice.EligibleCardInstanceIds.Contains(ChosenToDeckCardInstanceId)) return false;
+
+	const bool bMoved = MoveGraveyardCardsToHandAndTopDeck(ChosenToHandCardInstanceId, ChosenToDeckCardInstanceId);
+	if (!bMoved) return false;
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending graveyard hand/topdeck choice submitted Player=%d"), PlayerIndex);
+	ClearPendingGraveyardCardsToHandAndTopDeckChoice();
+	return true;
+}
+
+bool ATCG_GameState::HasPendingGraveyardCardsToHandAndTopDeckChoice() const { return PendingGraveyardCardsToHandAndTopDeckChoice.bIsPending; }
+void ATCG_GameState::GetPendingGraveyardCardsToHandAndTopDeckOptions(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingGraveyardCardsToHandAndTopDeckChoice.EligibleCardInstanceIds; }
+void ATCG_GameState::ClearPendingGraveyardCardsToHandAndTopDeckChoice() { PendingGraveyardCardsToHandAndTopDeckChoice.Reset(); }
+
+bool ATCG_GameState::BeginPendingRemoveMaterialChoice(int32 PlayerIndex, const FGuid& TargetCardInstanceId, const FTCGEffectChainEntry& ChainEntry)
+{
+	if (!IsValidPlayerIndex(PlayerIndex) || PendingRemoveMaterialChoice.bIsPending) return false;
+
+	const FTCGCardInstance* TargetCard = FindCardInstance(TargetCardInstanceId);
+	if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board || !TargetCard->StackId.IsValid()) return false;
+
+	PendingRemoveMaterialChoice.Reset();
+	PendingRemoveMaterialChoice.bIsPending = true;
+	PendingRemoveMaterialChoice.PlayerIndex = PlayerIndex;
+	PendingRemoveMaterialChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
+	PendingRemoveMaterialChoice.TargetCardInstanceId = TargetCardInstanceId;
+	PendingRemoveMaterialChoice.ChainIndex = ChainEntry.ChainIndex;
+
+	for (const FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.Location != ETCGCardLocation::Board) continue;
+		if (Card.StackId != TargetCard->StackId) continue;
+		if (Card.StackIndex >= TargetCard->StackIndex) continue;
+		PendingRemoveMaterialChoice.EligibleMaterialCardInstanceIds.Add(Card.CardInstanceId);
+	}
+
+	if (PendingRemoveMaterialChoice.EligibleMaterialCardInstanceIds.Num() <= 0)
+	{
+		ClearPendingRemoveMaterialChoice();
+		return false;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending remove material choice started Player=%d Materials=%d"), PlayerIndex, PendingRemoveMaterialChoice.EligibleMaterialCardInstanceIds.Num());
+	return true;
+}
+
+bool ATCG_GameState::SubmitPendingRemoveMaterialChoice(int32 PlayerIndex, const FGuid& ChosenMaterialCardInstanceId)
+{
+	if (!PendingRemoveMaterialChoice.bIsPending || PendingRemoveMaterialChoice.PlayerIndex != PlayerIndex) return false;
+	if (!ChosenMaterialCardInstanceId.IsValid() || !PendingRemoveMaterialChoice.EligibleMaterialCardInstanceIds.Contains(ChosenMaterialCardInstanceId)) return false;
+
+	const bool bRemoved = RemoveMaterialFromUnit(PendingRemoveMaterialChoice.TargetCardInstanceId, ChosenMaterialCardInstanceId);
+	if (!bRemoved) return false;
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending remove material choice submitted Player=%d"), PlayerIndex);
+	ClearPendingRemoveMaterialChoice();
+	return true;
+}
+
+bool ATCG_GameState::HasPendingRemoveMaterialChoice() const { return PendingRemoveMaterialChoice.bIsPending; }
+void ATCG_GameState::GetPendingRemoveMaterialChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingRemoveMaterialChoice.EligibleMaterialCardInstanceIds; }
+void ATCG_GameState::ClearPendingRemoveMaterialChoice() { PendingRemoveMaterialChoice.Reset(); }
+
+void ATCG_GameState::RunDebugDestroyedRecoveryScenario()
+{
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: DestroyedRecovery scenario start"));
+
+	MatchCards.Empty();
+	StartMatch();
+	SetPhase(ETCGMatchPhase::Battle);
+	SetMatchResult(ETCGMatchResult::None);
+
+	FTCGCardInstance& DestroyedSource = AddCardInstance("Debug_Water_DestroyedRecovery_Source", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
+	FTCGCardInstance& WaterToHand = AddCardInstance("Debug_Water_DestroyedRecovery_Hand", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
+	FTCGCardInstance& WaterToDeck = AddCardInstance("Debug_Water_DestroyedRecovery_Deck", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
+	FTCGCardInstance& EarthIgnored = AddCardInstance("Debug_Earth_DestroyedRecovery_Ignored", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Graveyard);
+
+	const FGuid DestroyerStackId = FGuid::NewGuid();
+	FTCGCardInstance& DestroyerMaterialA = AddCardInstance("Debug_Water_Destroyer_Material_A", ETCGCardElement::Water, 1, 1, ETCGCardLocation::Board);
+	DestroyerMaterialA.ZoneId = GetFieldZoneId(1, 0);
+	DestroyerMaterialA.StackId = DestroyerStackId;
+	DestroyerMaterialA.StackIndex = 0;
+
+	FTCGCardInstance& DestroyerMaterialB = AddCardInstance("Debug_Fire_Destroyer_Material_B", ETCGCardElement::Fire, 1, 1, ETCGCardLocation::Board);
+	DestroyerMaterialB.ZoneId = GetFieldZoneId(1, 0);
+	DestroyerMaterialB.StackId = DestroyerStackId;
+	DestroyerMaterialB.StackIndex = 1;
+
+	FTCGCardInstance& DestroyerTop = AddCardInstance("Debug_Dark_Destroyer_Top", ETCGCardElement::Dark, 5, 1, ETCGCardLocation::Board);
+	DestroyerTop.ZoneId = GetFieldZoneId(1, 0);
+	DestroyerTop.StackId = DestroyerStackId;
+	DestroyerTop.StackIndex = 2;
+
+	FTCGEffectTargetFilter GraveyardFilter;
+	GraveyardFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+	GraveyardFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+	GraveyardFilter.bRequireElement = true;
+	GraveyardFilter.RequiredElement = ETCGCardElement::Water;
+	GraveyardFilter.bExcludeSourceCard = true;
+
+	FTCGEffectChainEntry ChainEntry;
+	ChainEntry.ChainIndex = 1;
+	ChainEntry.SourceCardInstanceId = DestroyedSource.CardInstanceId;
+	ChainEntry.TargetCardInstanceId = DestroyerTop.CardInstanceId;
+	ChainEntry.SourceCardDefinitionId = DestroyedSource.CardDefinitionId;
+	ChainEntry.Trigger = ETCGEffectTrigger::OnDestroyed;
+	ChainEntry.ControllerPlayerIndex = 0;
+	ChainEntry.bRequiresSourceOnBoard = false;
+	ChainEntry.bRequiresTargetOnBoard = true;
+
+	const bool bRecoveryChoiceStarted = BeginPendingGraveyardCardsToHandAndTopDeckChoice(0, GraveyardFilter, ChainEntry);
+	TArray<FGuid> RecoveryOptions;
+	GetPendingGraveyardCardsToHandAndTopDeckOptions(RecoveryOptions);
+	const bool bSourceExcluded = !RecoveryOptions.Contains(DestroyedSource.CardInstanceId);
+	const bool bEarthExcluded = !RecoveryOptions.Contains(EarthIgnored.CardInstanceId);
+	const bool bTwoWatersEligible = RecoveryOptions.Contains(WaterToHand.CardInstanceId) && RecoveryOptions.Contains(WaterToDeck.CardInstanceId);
+	const bool bRecoverySubmitted = SubmitPendingGraveyardCardsToHandAndTopDeckChoice(0, WaterToHand.CardInstanceId, WaterToDeck.CardInstanceId);
+
+	const bool bMaterialChoiceStarted = BeginPendingRemoveMaterialChoice(0, DestroyerTop.CardInstanceId, ChainEntry);
+	TArray<FGuid> MaterialOptions;
+	GetPendingRemoveMaterialChoiceOptions(MaterialOptions);
+	const bool bMaterialsEligible = MaterialOptions.Contains(DestroyerMaterialA.CardInstanceId) && MaterialOptions.Contains(DestroyerMaterialB.CardInstanceId);
+	const bool bMaterialRemoved = MaterialOptions.Num() > 0 && SubmitPendingRemoveMaterialChoice(0, MaterialOptions[0]);
+
+	const FTCGCardInstance* SourceAfter = FindCardInstance(DestroyedSource.CardInstanceId);
+	const FTCGCardInstance* HandAfter = FindCardInstance(WaterToHand.CardInstanceId);
+	const FTCGCardInstance* DeckAfter = FindCardInstance(WaterToDeck.CardInstanceId);
+	const FTCGCardInstance* EarthAfter = FindCardInstance(EarthIgnored.CardInstanceId);
+	const FTCGCardInstance* DestroyerAfter = FindCardInstance(DestroyerTop.CardInstanceId);
+
+	const bool bSourceStillGraveyard = SourceAfter && SourceAfter->Location == ETCGCardLocation::Graveyard;
+	const bool bChosenToHand = HandAfter && HandAfter->Location == ETCGCardLocation::Hand;
+	const bool bChosenToDeck = DeckAfter && DeckAfter->Location == ETCGCardLocation::Deck;
+	const bool bEarthStillGraveyard = EarthAfter && EarthAfter->Location == ETCGCardLocation::Graveyard;
+	const bool bDestroyerStillBoard = DestroyerAfter && DestroyerAfter->Location == ETCGCardLocation::Board;
+	const int32 RemainingMaterials = GetCardsUnderneathCount(DestroyerTop.CardInstanceId);
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("TCG Debug: DestroyedRecovery summary RecoveryChoice=%s RecoverySubmitted=%s SourceExcluded=%s TwoWatersEligible=%s EarthExcluded=%s SourceStillGraveyard=%s ChosenToHand=%s ChosenToDeck=%s EarthStillGraveyard=%s MaterialChoice=%s MaterialsEligible=%s MaterialRemoved=%s DestroyerStillBoard=%s RemainingMaterials=%d"),
+		bRecoveryChoiceStarted ? TEXT("true") : TEXT("false"),
+		bRecoverySubmitted ? TEXT("true") : TEXT("false"),
+		bSourceExcluded ? TEXT("true") : TEXT("false"),
+		bTwoWatersEligible ? TEXT("true") : TEXT("false"),
+		bEarthExcluded ? TEXT("true") : TEXT("false"),
+		bSourceStillGraveyard ? TEXT("true") : TEXT("false"),
+		bChosenToHand ? TEXT("true") : TEXT("false"),
+		bChosenToDeck ? TEXT("true") : TEXT("false"),
+		bEarthStillGraveyard ? TEXT("true") : TEXT("false"),
+		bMaterialChoiceStarted ? TEXT("true") : TEXT("false"),
+		bMaterialsEligible ? TEXT("true") : TEXT("false"),
+		bMaterialRemoved ? TEXT("true") : TEXT("false"),
+		bDestroyerStillBoard ? TEXT("true") : TEXT("false"),
+		RemainingMaterials);
+
+	EndMatch(ETCGMatchResult::Draw);
+}
