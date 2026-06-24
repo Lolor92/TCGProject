@@ -102,6 +102,14 @@ SelectionMode PlayerChoice
 
 means the resolver creates `PendingDiscardChoice` on the GameState. UI/Blueprint can read the available card instance ids through `GetPendingDiscardChoiceOptions` and complete the choice with `SubmitPendingDiscardChoice`.
 
+Debug test mode:
+
+`TCG_GameState_Effects.cpp` currently has `bAutoSubmitDebugDiscardChoice = true`.
+
+When a discard choice is requested, debug mode automatically picks the first valid discard option and calls `SubmitPendingDiscardChoice`. This proves the request/selection/submit/move-to-graveyard path without needing UI yet.
+
+Turn this off when real UI choice is wired.
+
 Current limitation:
 
 A pending discard choice does not yet resume later chain steps after the choice is submitted. For effects ending at discard, such as `Draw 2, then choose and discard 1`, this is enough to test the player-choice path. Later chain-resume support should store the paused chain entry and next step index.
