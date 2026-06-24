@@ -56,9 +56,6 @@ enum class ETCGEffectTrigger : uint8
 
 /**
  * Reusable effect step kind.
- *
- * A card effect is built from small pieces: draw, discard, modify attack,
- * selection, card movement, and flow-control steps such as Then.
  */
 UENUM(BlueprintType)
 enum class ETCGEffectStepType : uint8
@@ -73,7 +70,8 @@ enum class ETCGEffectStepType : uint8
 	PlaySourceToEmptyZone          UMETA(DisplayName = "Play Source To Empty Zone"),
 	SendTopDeckCardToGraveyard     UMETA(DisplayName = "Send Top Deck Card To Graveyard"),
 	MoveGraveyardCardToBottomDeck  UMETA(DisplayName = "Move Graveyard Card To Bottom Deck"),
-	AttachSourceToWaterUnitMaterial UMETA(DisplayName = "Attach Source To Water Unit Material")
+	AttachSourceToWaterUnitMaterial UMETA(DisplayName = "Attach Source To Water Unit Material Legacy"),
+	AttachSourceToUnitMaterial     UMETA(DisplayName = "Attach Source To Unit Material")
 };
 
 /**
@@ -99,7 +97,8 @@ enum class ETCGEffectValueMode : uint8
 	Fixed                       UMETA(DisplayName = "Fixed"),
 	CardsUnderneathSource       UMETA(DisplayName = "Cards Underneath Source"),
 	CardsUnderneathTarget       UMETA(DisplayName = "Cards Underneath Target"),
-	WaterCardsInControllerGraveyard UMETA(DisplayName = "Water Cards In Controller Graveyard")
+	WaterCardsInControllerGraveyard UMETA(DisplayName = "Water Cards In Controller Graveyard Legacy"),
+	ElementCardsInControllerGraveyard UMETA(DisplayName = "Element Cards In Controller Graveyard")
 };
 
 /**
@@ -114,9 +113,6 @@ enum class ETCGEffectSelectionMode : uint8
 
 /**
  * Basic target filter for selection steps.
- *
- * This is intentionally small for now. It gives us a data shape that can grow
- * into player choice, enemy units, overlays, graveyard cards, and so on.
  */
 USTRUCT(BlueprintType)
 struct FTCGEffectTargetFilter
@@ -132,6 +128,13 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	bool bRequireTopCard = true;
+
+	// If false, any element is valid.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
+	bool bRequireElement = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect", meta = (EditCondition = "bRequireElement"))
+	ETCGCardElement RequiredElement = ETCGCardElement::Water;
 };
 
 /**
@@ -149,7 +152,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	ETCGEffectTargetMode TargetMode = ETCGEffectTargetMode::None;
 
-	// Generic number used by the step.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	int32 Value = 0;
 
@@ -159,7 +161,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	ETCGEffectSelectionMode SelectionMode = ETCGEffectSelectionMode::Automatic;
 
-	// If true, this step only resolves when the previous meaningful step succeeded.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	bool bRequiresPreviousStepSuccess = false;
 
@@ -169,9 +170,6 @@ public:
 
 /**
  * Effect reference and optional inline modular effect.
- *
- * EffectId remains only as a temporary migration field for existing debug assets.
- * Real effects should use modular Steps.
  */
 USTRUCT(BlueprintType)
 struct FTCGCardEffectRef
