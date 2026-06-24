@@ -68,7 +68,7 @@ enum class ETCGEffectStepType : uint8
 	BoostAllOwnUnitsThisRound           UMETA(DisplayName = "13 - Boost Own Units This Round"),
 	RevealTopDeckCardsAddElementToHand  UMETA(DisplayName = "22 - Reveal Top Deck Cards, Add Element To Hand"),
 	PlayGraveyardCardToEmptyZone        UMETA(DisplayName = "33 - Play Graveyard Card To Empty Zone"),
-	MoveGraveyardCardsToHandAndTopDeck  UMETA(DisplayName = "Deprecated - Move Graveyard Cards To Hand And Top Deck"),
+	MoveGraveyardCardsToHandAndTopDeck  UMETA(DisplayName = "34 - Choose 2 Graveyard Cards To Hand / Top Deck"),
 	RemoveMaterialFromTargetUnit        UMETA(DisplayName = "43 - Remove Material From Target Unit"),
 	MoveGraveyardCardToHand             UMETA(DisplayName = "30 - Move Graveyard Card To Hand"),
 	MoveGraveyardCardToTopDeck          UMETA(DisplayName = "31 - Move Graveyard Card To Top Deck")
@@ -126,7 +126,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "3. Value", meta = (EditCondition = "StepType == ETCGEffectStepType::ModifyAttack", EditConditionHides)) ETCGEffectValueMode ValueMode = ETCGEffectValueMode::Fixed;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "4. Choice", meta = (EditCondition = "StepType != ETCGEffectStepType::None && StepType != ETCGEffectStepType::Then && StepType != ETCGEffectStepType::ModifyAttack && StepType != ETCGEffectStepType::SendTopDeckCardToGraveyard && StepType != ETCGEffectStepType::SendTopDeckCardsToGraveyard && StepType != ETCGEffectStepType::BoostAllOwnUnitsThisRound", EditConditionHides)) ETCGEffectSelectionMode SelectionMode = ETCGEffectSelectionMode::Automatic;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "5. Chain") bool bRequiresPreviousStepSuccess = false;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "6. Filter", meta = (EditCondition = "StepType == ETCGEffectStepType::SelectTarget || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToTopDeck || StepType == ETCGEffectStepType::PlayGraveyardCardToEmptyZone || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial", EditConditionHides)) FTCGEffectTargetFilter TargetFilter;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "6. Filter", meta = (EditCondition = "StepType == ETCGEffectStepType::SelectTarget || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToTopDeck || StepType == ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck || StepType == ETCGEffectStepType::PlayGraveyardCardToEmptyZone || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial", EditConditionHides)) FTCGEffectTargetFilter TargetFilter;
 };
 
 USTRUCT(BlueprintType)
