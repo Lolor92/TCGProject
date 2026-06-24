@@ -13,9 +13,10 @@ namespace
 	constexpr ETCGDebugScenario DebugScenario = ETCGDebugScenario::NormalRoundFlow;
 	constexpr bool bEnableDebugOverlayRemovalFizzleTest = false;
 	constexpr bool bLogDebugSetup = true;
+	constexpr bool bLogCardSetupDetails = false;
 	constexpr bool bLogRoundFlow = true;
-	constexpr bool bLogPlacementFlow = true;
-	constexpr bool bLogBattleFlow = true;
+	constexpr bool bLogPlacementFlow = false;
+	constexpr bool bLogBattleFlow = false;
 	constexpr bool bLogEffectChains = false;
 	constexpr bool bLogVerboseCardTriggers = false;
 
@@ -193,7 +194,7 @@ FTCGCardInstance& ATCG_GameState::AddDebugCardInstance(FName CardDefinitionId, E
 	{
 		if (FTCGCardInstance* CardInstance = AddCardInstanceFromDefinition(CardDefinition, OwnerPlayerIndex, StartingLocation))
 		{
-			if (bLogDebugSetup)
+			if (bLogCardSetupDetails)
 			{
 				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Added card %s P%d ATK %d Effects %d"), *CardInstance->CardDefinitionId.ToString(), OwnerPlayerIndex, CardInstance->BaseAttack, CardDefinition->Effects.Num());
 			}
