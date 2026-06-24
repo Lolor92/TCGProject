@@ -66,7 +66,8 @@ enum class ETCGEffectStepType : uint8
 	AttachGraveyardCardToSourceMaterial UMETA(DisplayName = "Attach Graveyard Card To Source Material"),
 	SendTopDeckCardsToGraveyard         UMETA(DisplayName = "Send Top Deck Cards To Graveyard"),
 	BoostAllOwnUnitsThisRound           UMETA(DisplayName = "Boost All Own Units This Round"),
-	RevealTopDeckCardsAddElementToHand  UMETA(DisplayName = "Reveal Top Deck Cards Add Element To Hand")
+	RevealTopDeckCardsAddElementToHand  UMETA(DisplayName = "Reveal Top Deck Cards Add Element To Hand"),
+	PlayGraveyardCardToEmptyZone        UMETA(DisplayName = "Play Graveyard Card To Empty Zone")
 };
 
 UENUM(BlueprintType)
@@ -107,6 +108,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") bool bRequireTopCard = true;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") bool bRequireElement = false;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect", meta = (EditCondition = "bRequireElement")) ETCGCardElement RequiredElement = ETCGCardElement::Water;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") bool bExcludeSourceCard = false;
 };
 
 USTRUCT(BlueprintType)
