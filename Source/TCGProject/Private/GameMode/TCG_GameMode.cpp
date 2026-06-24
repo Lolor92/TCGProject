@@ -30,25 +30,8 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		ATCG_GameState* TCGGameState = GetGameState<ATCG_GameState>();
 		if (TCGGameState)
 		{
-			TCGGameState->StartMatch();
-			TCGGameState->SetupDebugMatch();
-
-			// Add extra debug deck copies so modular draw/discard effects can be tested
-			// without immediately running into an empty deck.
-			for (int32 ExtraCopyIndex = 0; ExtraCopyIndex < 2; ++ExtraCopyIndex)
-			{
-				TCGGameState->AddDebugCardInstance("Debug_Earth_Deck_A", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
-				TCGGameState->AddDebugCardInstance("Debug_Earth_Deck_B", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
-				TCGGameState->AddDebugCardInstance("Debug_Fire_Deck_A", ETCGCardElement::Fire, 2, 0, ETCGCardLocation::Deck);
-				TCGGameState->AddDebugCardInstance("Debug_Fire_Deck_B", ETCGCardElement::Fire, 3, 0, ETCGCardLocation::Deck);
-
-				TCGGameState->AddDebugCardInstance("Debug_Dark_Deck_A", ETCGCardElement::Dark, 5, 1, ETCGCardLocation::Deck);
-				TCGGameState->AddDebugCardInstance("Debug_Dark_Deck_B", ETCGCardElement::Dark, 2, 1, ETCGCardLocation::Deck);
-				TCGGameState->AddDebugCardInstance("Debug_Light_Deck_A", ETCGCardElement::Light, 4, 1, ETCGCardLocation::Deck);
-				TCGGameState->AddDebugCardInstance("Debug_Light_Deck_A", ETCGCardElement::Light, 4, 1, ETCGCardLocation::Deck);
-			}
-
-			TCGGameState->RunDebugTurnFlow();
+			// Dedicated Tide's Calling debug scenario.
+			TCGGameState->RunDebugTidesCallingScenario();
 		}
 	}
 }
