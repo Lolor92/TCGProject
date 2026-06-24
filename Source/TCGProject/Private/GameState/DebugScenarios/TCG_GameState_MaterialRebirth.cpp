@@ -556,4 +556,5 @@ void ATCG_GameState::RunDebugMaterialRebirthScenario()
 	RunDebugHandDetachResponseScenario(this);
 	RunDebugGraveyardNegateOpponentAttackScenario(this);
 	RunDebugCardEffectSaveReplacementScenario(this);
+	RunDebugGraveyardRecycleBothDrawScenario();
 }

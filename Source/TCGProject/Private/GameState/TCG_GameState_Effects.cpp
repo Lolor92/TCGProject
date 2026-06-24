@@ -45,6 +45,7 @@ namespace
 		case ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget: return TEXT("DiscardSourceDetachUpToTwoMaterialsFromTarget");
 		case ETCGEffectStepType::DestroyTargetUnitByCardEffect: return TEXT("DestroyTargetUnitByCardEffect");
 		case ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials: return TEXT("DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials");
+		case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw: return TEXT("BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw");
 		default: return TEXT("None");
 		}
 	}
@@ -263,6 +264,80 @@ namespace
 		return bReturnedUnit;
 	}
 
+	static bool BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw(
+		ATCG_GameState* GameState,
+		const FTCGEffectChainEntry& ChainEntry)
+	{
+		if (!GameState || !GameState->IsValidPlayerIndex(ChainEntry.ControllerPlayerIndex))
+		{
+			return false;
+		}
+
+		const FTCGCardInstance* SourceCard = GameState->FindCardInstance(ChainEntry.SourceCardInstanceId);
+		if (!SourceCard
+			|| SourceCard->OwnerPlayerIndex != ChainEntry.ControllerPlayerIndex
+			|| SourceCard->Location != ETCGCardLocation::Graveyard)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Graveyard recycle both draw failed Source=%s Reason=SourceNotInGraveyard"),
+				ChainEntry.SourceCardDefinitionId.IsNone() ? TEXT("None") : *ChainEntry.SourceCardDefinitionId.ToString());
+
+			return false;
+		}
+
+		TArray<FGuid> GraveyardCardIds;
+		for (const FTCGCardInstance& Card : GameState->MatchCards)
+		{
+			if (Card.OwnerPlayerIndex != ChainEntry.ControllerPlayerIndex) continue;
+			if (Card.Location != ETCGCardLocation::Graveyard) continue;
+			if (Card.CardInstanceId == ChainEntry.SourceCardInstanceId) continue;
+
+			GraveyardCardIds.Add(Card.CardInstanceId);
+		}
+
+		if (GraveyardCardIds.Num() < 2)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Graveyard recycle both draw failed Source=%s Reason=NotEnoughGraveyardCards Count=%d"),
+				*SourceCard->CardDefinitionId.ToString(),
+				GraveyardCardIds.Num());
+
+			return false;
+		}
+
+		const FName SourceDefinitionId = SourceCard->CardDefinitionId;
+
+		if (!GameState->MoveCardToLocation(ChainEntry.SourceCardInstanceId, ETCGCardLocation::Banish))
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Graveyard recycle both draw failed Source=%s Reason=BanishFailed"),
+				*SourceDefinitionId.ToString());
+
+			return false;
+		}
+
+		int32 ReturnedCount = 0;
+		for (int32 Index = 0; Index < GraveyardCardIds.Num() && ReturnedCount < 2; ++Index)
+		{
+			if (GameState->MoveCardToBottomOfDeck(GraveyardCardIds[Index]))
+			{
+				ReturnedCount++;
+			}
+		}
+
+		const int32 Player0Drawn = GameState->DrawCards(0, 1);
+		const int32 Player1Drawn = GameState->DrawCards(1, 1);
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: Graveyard recycle both draw Source=%s Banished=true Returned=%d Drawn=%d/%d"),
+			*SourceDefinitionId.ToString(),
+			ReturnedCount,
+			Player0Drawn,
+			Player1Drawn);
+
+		return ReturnedCount == 2 && Player0Drawn == 1 && Player1Drawn == 1;
+	}
+
 	static bool EffectRefHasStep(const FTCGCardEffectRef& EffectRef, ETCGEffectStepType StepType)
 	{
 		for (const FTCGEffectStep& Step : EffectRef.Steps)
@@ -344,7 +419,24 @@ namespace
 			return true;
 		}
 
-		return GameState->MoveStackToLocation(TargetCard->StackId, ETCGCardLocation::Graveyard);
+		TArray<FTCGEffectChainEntry> DestroyedResponseChain;
+		GameState->BuildYourUnitDestroyedGraveyardResponseChain(
+			TargetCard->OwnerPlayerIndex,
+			TargetCardInstanceId,
+			DestroyedResponseChain);
+
+		const bool bDestroyed = GameState->MoveStackToLocation(TargetCard->StackId, ETCGCardLocation::Graveyard);
+		if (bDestroyed && DestroyedResponseChain.Num() > 0)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Card effect destruction graveyard responses Player=%d Count=%d"),
+				TargetCard->OwnerPlayerIndex,
+				DestroyedResponseChain.Num());
+
+			GameState->ResolveEffectChain(DestroyedResponseChain);
+		}
+
+		return bDestroyed;
 	}
 }
 
@@ -595,6 +687,18 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 	{
 		bStepSucceeded = DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials(this, ChainEntry);
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
+		break;
+	}
+	case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw:
+	{
+		bStepSucceeded = BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw(this, ChainEntry);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Step BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw Player=%d Success=%s"),
+				ChainEntry.ControllerPlayerIndex,
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
 		break;
 	}
 	case ETCGEffectStepType::AttachSourceToWaterUnitMaterial:

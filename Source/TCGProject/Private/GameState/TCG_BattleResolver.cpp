@@ -112,6 +112,24 @@ namespace
 		}
 	}
 
+	static void ResolveDestroyedUnitGraveyardResponses(
+		ATCG_GameState* GameState,
+		int32 DestroyedUnitOwnerPlayerIndex,
+		TArray<FTCGEffectChainEntry>& DestroyedResponseChain)
+	{
+		if (!GameState || DestroyedResponseChain.Num() <= 0)
+		{
+			return;
+		}
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Battle: Destroyed unit graveyard responses Player=%d Count=%d"),
+			DestroyedUnitOwnerPlayerIndex,
+			DestroyedResponseChain.Num());
+
+		GameState->ResolveEffectChain(DestroyedResponseChain);
+	}
+
 	static void ResolveDestroyedUnitByBattleTriggers(ATCG_GameState* GameState, const FGuid& WinnerCardInstanceId)
 	{
 		if (!GameState || !WinnerCardInstanceId.IsValid()) return;
@@ -153,20 +171,36 @@ bool UTCG_BattleResolver::ResolveBattleBetweenZones(ATCG_GameState* GameState, F
 
 	if (Player0Attack > Player1Attack)
 	{
+		TArray<FTCGEffectChainEntry> DestroyedResponseChain;
+		GameState->BuildYourUnitDestroyedGraveyardResponseChain(1, Player1Card->CardInstanceId, DestroyedResponseChain);
+
 		GameState->MoveStackToLocation(Player1LoserStackId, ETCGCardLocation::Graveyard);
+		ResolveDestroyedUnitGraveyardResponses(GameState, 1, DestroyedResponseChain);
 		ResolveDestroyedUnitHandResponses(GameState, 1, Player0WinnerId);
 		ResolveDestroyedUnitByBattleTriggers(GameState, Player0WinnerId);
 	}
 	else if (Player1Attack > Player0Attack)
 	{
+		TArray<FTCGEffectChainEntry> DestroyedResponseChain;
+		GameState->BuildYourUnitDestroyedGraveyardResponseChain(0, Player0Card->CardInstanceId, DestroyedResponseChain);
+
 		GameState->MoveStackToLocation(Player0LoserStackId, ETCGCardLocation::Graveyard);
+		ResolveDestroyedUnitGraveyardResponses(GameState, 0, DestroyedResponseChain);
 		ResolveDestroyedUnitHandResponses(GameState, 0, Player1WinnerId);
 		ResolveDestroyedUnitByBattleTriggers(GameState, Player1WinnerId);
 	}
 	else
 	{
+		TArray<FTCGEffectChainEntry> Player0DestroyedResponseChain;
+		TArray<FTCGEffectChainEntry> Player1DestroyedResponseChain;
+		GameState->BuildYourUnitDestroyedGraveyardResponseChain(0, Player0Card->CardInstanceId, Player0DestroyedResponseChain);
+		GameState->BuildYourUnitDestroyedGraveyardResponseChain(1, Player1Card->CardInstanceId, Player1DestroyedResponseChain);
+
 		GameState->MoveStackToLocation(Player0LoserStackId, ETCGCardLocation::Graveyard);
 		GameState->MoveStackToLocation(Player1LoserStackId, ETCGCardLocation::Graveyard);
+
+		ResolveDestroyedUnitGraveyardResponses(GameState, 0, Player0DestroyedResponseChain);
+		ResolveDestroyedUnitGraveyardResponses(GameState, 1, Player1DestroyedResponseChain);
 	}
 
 	return true;
@@ -280,20 +314,36 @@ bool UTCG_BattleResolver::ResolveBattlePhase(ATCG_GameState* GameState)
 
 		if (AttackerAttack > DefenderAttack)
 		{
+			TArray<FTCGEffectChainEntry> DestroyedResponseChain;
+			GameState->BuildYourUnitDestroyedGraveyardResponseChain(DefenderPlayerIndex, DefenderCardId, DestroyedResponseChain);
+
 			GameState->MoveStackToLocation(DefenderStackId, ETCGCardLocation::Graveyard);
+			ResolveDestroyedUnitGraveyardResponses(GameState, DefenderPlayerIndex, DestroyedResponseChain);
 			ResolveDestroyedUnitHandResponses(GameState, DefenderPlayerIndex, AttackerCardId);
 			ResolveDestroyedUnitByBattleTriggers(GameState, AttackerCardId);
 		}
 		else if (DefenderAttack > AttackerAttack)
 		{
+			TArray<FTCGEffectChainEntry> DestroyedResponseChain;
+			GameState->BuildYourUnitDestroyedGraveyardResponseChain(AttackerPlayerIndex, AttackerCardId, DestroyedResponseChain);
+
 			GameState->MoveStackToLocation(AttackerStackId, ETCGCardLocation::Graveyard);
+			ResolveDestroyedUnitGraveyardResponses(GameState, AttackerPlayerIndex, DestroyedResponseChain);
 			ResolveDestroyedUnitHandResponses(GameState, AttackerPlayerIndex, DefenderCardId);
 			ResolveDestroyedUnitByBattleTriggers(GameState, DefenderCardId);
 		}
 		else
 		{
+			TArray<FTCGEffectChainEntry> AttackerDestroyedResponseChain;
+			TArray<FTCGEffectChainEntry> DefenderDestroyedResponseChain;
+			GameState->BuildYourUnitDestroyedGraveyardResponseChain(AttackerPlayerIndex, AttackerCardId, AttackerDestroyedResponseChain);
+			GameState->BuildYourUnitDestroyedGraveyardResponseChain(DefenderPlayerIndex, DefenderCardId, DefenderDestroyedResponseChain);
+
 			GameState->MoveStackToLocation(AttackerStackId, ETCGCardLocation::Graveyard);
 			GameState->MoveStackToLocation(DefenderStackId, ETCGCardLocation::Graveyard);
+
+			ResolveDestroyedUnitGraveyardResponses(GameState, AttackerPlayerIndex, AttackerDestroyedResponseChain);
+			ResolveDestroyedUnitGraveyardResponses(GameState, DefenderPlayerIndex, DefenderDestroyedResponseChain);
 		}
 		bResolvedAnyBattle = true;
 	}
