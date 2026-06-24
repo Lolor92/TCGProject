@@ -3,6 +3,8 @@
 #include "GameState/TCG_GameState.h"
 #include "PlayerState/TCG_PlayerState.h"
 
+void RunDebugBattleDestroyRevealScenario(ATCG_GameState* GameState);
+
 ATCG_GameMode::ATCG_GameMode()
 {
 	// Tell Unreal which GameState and PlayerState this GameMode uses.
@@ -30,8 +32,8 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		ATCG_GameState* TCGGameState = GetGameState<ATCG_GameState>();
 		if (TCGGameState)
 		{
-			// Dedicated Water graveyard round bonus debug scenario.
-			TCGGameState->RunDebugWaterGraveyardBoostScenario();
+			// Dedicated battle-destroy reveal debug scenario.
+			RunDebugBattleDestroyRevealScenario(TCGGameState);
 		}
 	}
 }
