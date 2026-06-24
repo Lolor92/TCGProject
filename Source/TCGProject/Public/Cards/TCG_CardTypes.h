@@ -69,7 +69,10 @@ enum class ETCGEffectStepType : uint8
 	DiscardCards                 UMETA(DisplayName = "Discard Cards"),
 	ModifyAttack                 UMETA(DisplayName = "Modify Attack"),
 	SelectTarget                 UMETA(DisplayName = "Select Target"),
-	MoveBottomOverlayToGraveyard UMETA(DisplayName = "Move Bottom Overlay To Graveyard")
+	MoveBottomOverlayToGraveyard UMETA(DisplayName = "Move Bottom Overlay To Graveyard"),
+	PlaySourceToEmptyZone        UMETA(DisplayName = "Play Source To Empty Zone"),
+	SendTopDeckCardToGraveyard   UMETA(DisplayName = "Send Top Deck Card To Graveyard"),
+	MoveGraveyardCardToBottomDeck UMETA(DisplayName = "Move Graveyard Card To Bottom Deck")
 };
 
 /**
@@ -131,12 +134,6 @@ public:
 
 /**
  * One reusable piece of an effect.
- *
- * Examples:
- * - DrawCards, TargetMode Controller, Value 2
- * - DiscardCards, TargetMode Controller, Value 1, SelectionMode PlayerChoice, bRequiresPreviousStepSuccess true
- * - ModifyAttack, TargetMode SourceCard, Value 2, ValueMode Fixed
- * - ModifyAttack, TargetMode TriggerTarget, ValueMode CardsUnderneathTarget
  */
 USTRUCT(BlueprintType)
 struct FTCGEffectStep
@@ -151,8 +148,6 @@ public:
 	ETCGEffectTargetMode TargetMode = ETCGEffectTargetMode::None;
 
 	// Generic number used by the step.
-	// DrawCards: number to draw. DiscardCards: number to discard.
-	// ModifyAttack with Fixed value mode: amount to add.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	int32 Value = 0;
 
@@ -163,7 +158,6 @@ public:
 	ETCGEffectSelectionMode SelectionMode = ETCGEffectSelectionMode::Automatic;
 
 	// If true, this step only resolves when the previous meaningful step succeeded.
-	// This is the data version of "then".
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	bool bRequiresPreviousStepSuccess = false;
 
@@ -183,15 +177,12 @@ struct FTCGCardEffectRef
 	GENERATED_BODY()
 
 public:
-	// When this effect wants to trigger.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	ETCGEffectTrigger Trigger = ETCGEffectTrigger::None;
 
-	// Temporary migration ID for old/debug data. Do not use for new real card effects.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	FName EffectId = NAME_None;
 
-	// Modular effect pieces. Preferred for real cards going forward.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect")
 	TArray<FTCGEffectStep> Steps;
 
@@ -201,10 +192,6 @@ public:
 
 /**
  * One unique card copy inside the current match.
- *
- * Example:
- * You can have 3 copies of the same card definition.
- * Each copy needs its own CardInstanceId.
  */
 USTRUCT(BlueprintType)
 struct FTCGCardInstance
@@ -212,56 +199,36 @@ struct FTCGCardInstance
 	GENERATED_BODY()
 
 public:
-	// Unique ID for this specific card copy during the match.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
 	FGuid CardInstanceId;
 
-	// ID of the static card data.
-	// Example: "WaterSprite", "FireWolf".
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
 	FName CardDefinitionId = NAME_None;
 
-	// Which player owns this card.
-	// Usually 0 or 1.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
 	int32 OwnerPlayerIndex = INDEX_NONE;
 
-	// Current gameplay location.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
 	ETCGCardLocation Location = ETCGCardLocation::None;
 	
-	// Order inside Deck/Hand/Graveyard/Banish.
-	// For deck, higher index means closer to the top for now.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
 	int32 LocationIndex = INDEX_NONE;
 
-	// Board zone/slot name later.
-	// Example: "Player0_Field_0".
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
 	FName ZoneId = NAME_None;
 
-	// ID of the stack this card belongs to.
-	// Cards in the same stack share this value.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Stack")
 	FGuid StackId;
 
-	// Position inside the stack.
-	// 0 = bottom card.
-	// Higher number = closer to the top.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Stack")
 	int32 StackIndex = INDEX_NONE;
 	
-	// Runtime snapshot of the card element.
-	// This lets rules check stack legality without loading the card asset every time.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
 	ETCGCardElement Element = ETCGCardElement::Fire;
 
-	// Runtime snapshot of printed attack.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
 	int32 BaseAttack = 0;
 	
-	// Temporary runtime attack modifier.
-	// Later this should become a proper modifier/effect system.
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Card")
 	int32 AttackModifier = 0;
 
