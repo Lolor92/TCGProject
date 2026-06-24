@@ -5,6 +5,7 @@ namespace
 {
 	const FName DebugCard_TidesCalling = "Debug_Water_TidesCalling";
 	const FName DebugCard_DreampoolMirechant = "Dreampool_Mirechant";
+	const FName DebugCard_Draw2Return1 = "Debug_Water_Draw2Return1";
 
 	FTCGCardEffectRef MakeTidesCallingFromDeckToGraveyardEffect()
 	{
@@ -58,6 +59,34 @@ namespace
 		return EffectRef;
 	}
 
+	FTCGCardEffectRef MakeDraw2Return1FromDeckToGraveyardEffect()
+	{
+		FTCGCardEffectRef EffectRef;
+		EffectRef.Trigger = ETCGEffectTrigger::OnSentToGraveyard;
+		EffectRef.bOptional = true;
+
+		FTCGEffectStep DrawStep;
+		DrawStep.StepType = ETCGEffectStepType::DrawCards;
+		DrawStep.TargetMode = ETCGEffectTargetMode::Controller;
+		DrawStep.Value = 2;
+		DrawStep.SelectionMode = ETCGEffectSelectionMode::Automatic;
+		EffectRef.Steps.Add(DrawStep);
+
+		FTCGEffectStep ThenStep;
+		ThenStep.StepType = ETCGEffectStepType::Then;
+		EffectRef.Steps.Add(ThenStep);
+
+		FTCGEffectStep ReturnStep;
+		ReturnStep.StepType = ETCGEffectStepType::MoveHandCardToTopDeck;
+		ReturnStep.TargetMode = ETCGEffectTargetMode::Controller;
+		ReturnStep.Value = 1;
+		ReturnStep.SelectionMode = ETCGEffectSelectionMode::PlayerChoice;
+		ReturnStep.bRequiresPreviousStepSuccess = true;
+		EffectRef.Steps.Add(ReturnStep);
+
+		return EffectRef;
+	}
+
 	bool IsTidesCallingCard(const FTCGCardInstance* Card)
 	{
 		return Card && Card->CardDefinitionId == DebugCard_TidesCalling;
@@ -66,6 +95,11 @@ namespace
 	bool IsMirechantCard(const FTCGCardInstance* Card)
 	{
 		return Card && Card->CardDefinitionId == DebugCard_DreampoolMirechant;
+	}
+
+	bool IsDraw2Return1Card(const FTCGCardInstance* Card)
+	{
+		return Card && Card->CardDefinitionId == DebugCard_Draw2Return1;
 	}
 
 	int32 GetContinuousAttackBonusForStack(ATCG_GameState* GameState, const FTCGCardInstance& TopCard)
@@ -259,6 +293,7 @@ bool ATCG_GameState::SendTopDeckCardToGraveyard(int32 PlayerIndex)
 		}
 		if (Chain.Num() <= 0 && IsTidesCallingCard(SentCard)) AddCardEffectRefToChain(Chain, SentCardId, SentCardId, MakeTidesCallingFromDeckToGraveyardEffect());
 		if (Chain.Num() <= 0 && IsMirechantCard(SentCard)) AddCardEffectRefToChain(Chain, SentCardId, SentCardId, MakeMirechantFromDeckToGraveyardEffect());
+		if (Chain.Num() <= 0 && IsDraw2Return1Card(SentCard)) AddCardEffectRefToChain(Chain, SentCardId, SentCardId, MakeDraw2Return1FromDeckToGraveyardEffect());
 		for (FTCGEffectChainEntry& Entry : Chain)
 		{
 			Entry.bRequiresSourceOnBoard = false;
@@ -332,5 +367,49 @@ void ATCG_GameState::RunDebugDreampoolMirechantScenario()
 		CountCardsInLocationByElement(0, ETCGCardLocation::Graveyard, ETCGCardElement::Water),
 		BeforeAttack,
 		AfterAttack);
+	EndMatch(ETCGMatchResult::Draw);
+}
+
+void ATCG_GameState::RunDebugDraw2Return1Scenario()
+{
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw2Return1 scenario start"));
+	MatchCards.Empty();
+	StartMatch();
+	SetPhase(ETCGMatchPhase::Placement);
+	SetCurrentTurnPlayer(0);
+
+	const FGuid InitialHandCardId = AddCardInstance("Debug_Hand_Seed_A", ETCGCardElement::Wind, 1, 0, ETCGCardLocation::Hand).CardInstanceId;
+	AddCardInstance("Debug_Draw_Target_A", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
+	AddCardInstance("Debug_Draw_Target_B", ETCGCardElement::Fire, 1, 0, ETCGCardLocation::Deck);
+	AddDebugCardInstance(DebugCard_Draw2Return1, ETCGCardElement::Water, 2, 0, ETCGCardLocation::Deck);
+
+	TArray<FTCGCardInstance> HandBefore;
+	TArray<FTCGCardInstance> DeckBefore;
+	TArray<FTCGCardInstance> GraveyardBefore;
+	GetCardsInHand(0, HandBefore);
+	GetCardsInDeck(0, DeckBefore);
+	GetCardsInLocation(0, ETCGCardLocation::Graveyard, GraveyardBefore);
+
+	const bool bSentTopDeck = SendTopDeckCardToGraveyard(0);
+
+	TArray<FTCGCardInstance> HandAfter;
+	TArray<FTCGCardInstance> DeckAfter;
+	TArray<FTCGCardInstance> GraveyardAfter;
+	GetCardsInHand(0, HandAfter);
+	GetCardsInDeck(0, DeckAfter);
+	GetCardsInLocation(0, ETCGCardLocation::Graveyard, GraveyardAfter);
+
+	const FTCGCardInstance* TopDeckCard = DeckAfter.Num() > 0 ? &DeckAfter[0] : nullptr;
+	const bool bReturnedInitialHandCardToTopDeck = TopDeckCard && TopDeckCard->CardInstanceId == InitialHandCardId;
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Draw2Return1 summary SentTopDeck=%s HandBefore=%d HandAfter=%d DeckBefore=%d DeckAfter=%d GraveBefore=%d GraveAfter=%d TopDeck=%s ReturnedInitialHand=%s"),
+		bSentTopDeck ? TEXT("true") : TEXT("false"),
+		HandBefore.Num(),
+		HandAfter.Num(),
+		DeckBefore.Num(),
+		DeckAfter.Num(),
+		GraveyardBefore.Num(),
+		GraveyardAfter.Num(),
+		TopDeckCard ? *TopDeckCard->CardDefinitionId.ToString() : TEXT("None"),
+		bReturnedInitialHandCardToTopDeck ? TEXT("true") : TEXT("false"));
 	EndMatch(ETCGMatchResult::Draw);
 }
