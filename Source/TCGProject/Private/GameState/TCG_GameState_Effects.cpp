@@ -27,6 +27,8 @@ namespace
 		case ETCGEffectStepType::MoveBottomOverlayToGraveyard: return TEXT("MoveBottomOverlayToGraveyard");
 		case ETCGEffectStepType::PlaySourceToEmptyZone: return TEXT("PlaySourceToEmptyZone");
 		case ETCGEffectStepType::SendTopDeckCardToGraveyard: return TEXT("SendTopDeckCardToGraveyard");
+		case ETCGEffectStepType::MoveGraveyardCardToHand: return TEXT("MoveGraveyardCardToHand");
+		case ETCGEffectStepType::MoveGraveyardCardToTopDeck: return TEXT("MoveGraveyardCardToTopDeck");
 		case ETCGEffectStepType::MoveGraveyardCardToBottomDeck: return TEXT("MoveGraveyardCardToBottomDeck");
 		case ETCGEffectStepType::MoveHandCardToTopDeck: return TEXT("MoveHandCardToTopDeck");
 		case ETCGEffectStepType::AttachSourceToWaterUnitMaterial: return TEXT("AttachSourceToWaterUnitMaterialLegacy");
@@ -36,7 +38,7 @@ namespace
 		case ETCGEffectStepType::BoostAllOwnUnitsThisRound: return TEXT("BoostAllOwnUnitsThisRound");
 		case ETCGEffectStepType::RevealTopDeckCardsAddElementToHand: return TEXT("RevealTopDeckCardsAddElementToHand");
 		case ETCGEffectStepType::PlayGraveyardCardToEmptyZone: return TEXT("PlayGraveyardCardToEmptyZone");
-		case ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck: return TEXT("MoveGraveyardCardsToHandAndTopDeck");
+		case ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck: return TEXT("MoveGraveyardCardsToHandAndTopDeckDeprecated");
 		case ETCGEffectStepType::RemoveMaterialFromTargetUnit: return TEXT("RemoveMaterialFromTargetUnit");
 		default: return TEXT("None");
 		}
@@ -106,6 +108,38 @@ namespace
 			return true;
 		}
 		return false;
+	}
+
+	static void GetFilteredGraveyardCards(ATCG_GameState* GameState, int32 PlayerIndex, const FTCGEffectTargetFilter& TargetFilter, const FTCGEffectChainEntry& ChainEntry, TArray<FGuid>& OutCardIds)
+	{
+		OutCardIds.Reset();
+		if (!GameState || !GameState->IsValidPlayerIndex(PlayerIndex)) return;
+
+		const int32 OwnerPlayerIndex = TargetFilter.OwnerMode == ETCGEffectTargetMode::Opponent ? 1 - PlayerIndex : PlayerIndex;
+		for (const FTCGCardInstance& Card : GameState->MatchCards)
+		{
+			if (Card.OwnerPlayerIndex != OwnerPlayerIndex) continue;
+			if (Card.Location != ETCGCardLocation::Graveyard) continue;
+			if (TargetFilter.bRequireElement && Card.Element != TargetFilter.RequiredElement) continue;
+			if (TargetFilter.bExcludeSourceCard && Card.CardInstanceId == ChainEntry.SourceCardInstanceId) continue;
+			OutCardIds.Add(Card.CardInstanceId);
+		}
+	}
+
+	static bool MoveFirstFilteredGraveyardCardToHand(ATCG_GameState* GameState, int32 PlayerIndex, const FTCGEffectTargetFilter& TargetFilter, const FTCGEffectChainEntry& ChainEntry)
+	{
+		TArray<FGuid> Options;
+		GetFilteredGraveyardCards(GameState, PlayerIndex, TargetFilter, ChainEntry, Options);
+		if (Options.Num() <= 0) return false;
+		return GameState->MoveCardToLocation(Options[0], ETCGCardLocation::Hand);
+	}
+
+	static bool MoveFirstFilteredGraveyardCardToTopDeck(ATCG_GameState* GameState, int32 PlayerIndex, const FTCGEffectTargetFilter& TargetFilter, const FTCGEffectChainEntry& ChainEntry)
+	{
+		TArray<FGuid> Options;
+		GetFilteredGraveyardCards(GameState, PlayerIndex, TargetFilter, ChainEntry, Options);
+		if (Options.Num() <= 0) return false;
+		return GameState->MoveCardToTopOfDeck(Options[0]);
 	}
 }
 
@@ -310,6 +344,18 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		bStepSucceeded = bAutoSubmittedChoice;
 		break;
 	}
+	case ETCGEffectStepType::MoveGraveyardCardToHand:
+	{
+		bStepSucceeded = MoveFirstFilteredGraveyardCardToHand(this, ChainEntry.ControllerPlayerIndex, Step.TargetFilter, ChainEntry);
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveGraveyardCardToHand Player=%d Mode=%s Success=%s"), ChainEntry.ControllerPlayerIndex, GetTCGEffectSelectionModeDebugName(Step.SelectionMode), bStepSucceeded ? TEXT("true") : TEXT("false"));
+		break;
+	}
+	case ETCGEffectStepType::MoveGraveyardCardToTopDeck:
+	{
+		bStepSucceeded = MoveFirstFilteredGraveyardCardToTopDeck(this, ChainEntry.ControllerPlayerIndex, Step.TargetFilter, ChainEntry);
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveGraveyardCardToTopDeck Player=%d Mode=%s Success=%s"), ChainEntry.ControllerPlayerIndex, GetTCGEffectSelectionModeDebugName(Step.SelectionMode), bStepSucceeded ? TEXT("true") : TEXT("false"));
+		break;
+	}
 	case ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck:
 	{
 		const bool bChoiceStarted = BeginPendingGraveyardCardsToHandAndTopDeckChoice(ChainEntry.ControllerPlayerIndex, Step.TargetFilter, ChainEntry);
@@ -323,7 +369,7 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 				bAutoSubmittedChoice = SubmitPendingGraveyardCardsToHandAndTopDeckChoice(ChainEntry.ControllerPlayerIndex, ChoiceOptions[0], ChoiceOptions[1]);
 			}
 		}
-		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveGraveyardCardsToHandAndTopDeck Player=%d Pending=%s AutoSubmitted=%s"), ChainEntry.ControllerPlayerIndex, bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveGraveyardCardsToHandAndTopDeck Deprecated Player=%d Pending=%s AutoSubmitted=%s"), ChainEntry.ControllerPlayerIndex, bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
 		bStepSucceeded = bAutoSubmittedChoice;
 		break;
 	}
