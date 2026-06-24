@@ -12,6 +12,7 @@ A card effect is built from reusable pieces:
 * condition / validity piece
 * target piece
 * action piece
+* value piece
 * flow piece
 
 Example card text:
@@ -28,13 +29,13 @@ Steps:
   2. Then
   3. DiscardCards, Controller, Value 1, RequiresPreviousStepSuccess
   4. Then
-  5. ModifyAttack, SourceCard, Value 2, RequiresPreviousStepSuccess
+  5. ModifyAttack, SourceCard, ValueMode Fixed, Value 2, RequiresPreviousStepSuccess
 
 Effect B
 Trigger: OnDestroyed
 Steps:
   1. SelectTarget, Controller board Unit
-  2. ModifyAttack, SelectedTarget, Value 2, RequiresPreviousStepSuccess
+  2. ModifyAttack, SelectedTarget, ValueMode Fixed, Value 2, RequiresPreviousStepSuccess
 ```
 
 ## Data Shape
@@ -46,13 +47,13 @@ Steps:
 * `Steps`
 * `bOptional`
 
-`EffectId` stays for now as a stable debug/fallback id because existing debug card assets may still only use `Trigger + EffectId`.
+`EffectId` stays for now as a stable debug/fallback id because the overlay-removal debug fizzle test still uses a special hardcoded action.
 
 For real card effects going forward, the preferred path is modular `Steps`.
 
 If an effect has modular `Steps`, the resolver uses the modular step sequence.
 
-If `Steps` is empty, the resolver can still use the old hardcoded/debug `EffectId` behavior.
+If `Steps` is empty, the resolver can still use the remaining hardcoded/debug `EffectId` behavior.
 
 ## Step Types
 
@@ -77,6 +78,40 @@ Draw 2 cards, then discard 1.
 ```
 
 If the draw step fails, the discard step can be skipped.
+
+## Value Modes
+
+Some steps need a number.
+
+`FTCGEffectStep::ValueMode` controls how that number is produced.
+
+Implemented value modes:
+
+* `Fixed`
+* `CardsUnderneathSource`
+* `CardsUnderneathTarget`
+
+Examples:
+
+```text
+ModifyAttack, SourceCard, ValueMode Fixed, Value 2
+```
+
+means:
+
+```text
+This card gains +2 Attack.
+```
+
+```text
+ModifyAttack, TriggerTarget, ValueMode CardsUnderneathTarget
+```
+
+means:
+
+```text
+The played/top card gains Attack equal to the number of cards underneath it.
+```
 
 ## Chain Build Order
 
@@ -151,6 +186,7 @@ Implemented data:
 
 * `ETCGEffectStepType`
 * `ETCGEffectTargetMode`
+* `ETCGEffectValueMode`
 * `FTCGEffectTargetFilter`
 * `FTCGEffectStep`
 * `FTCGCardEffectRef::Steps`
@@ -174,11 +210,12 @@ Implemented first modular steps:
 
 Implemented chain hook:
 
-* `BuildStackOnPlayEffectChain` now uses `GetPrintedEffectRefsForCard` and `AddCardEffectRefToChain`.
-* `ResolveEffectChain` now calls `ResolveEffectChainEntry`, which chooses modular `Steps` first and falls back to debug `EffectId` when needed.
+* `BuildStackOnPlayEffectChain` uses `GetPrintedEffectRefsForCard` and `AddCardEffectRefToChain`.
+* `ResolveEffectChain` calls `ResolveEffectChainEntry`, which chooses modular `Steps` first and falls back to debug `EffectId` when needed.
 
-Legacy status:
+Legacy cleanup status:
 
-* `EffectId` is not removed yet because current debug card assets may still depend on it.
-* `GetPrintedEffectsForCardTrigger` and `AddCardTriggerToChain` remain as compatibility wrappers for now.
-* After debug assets are converted to modular `Steps`, these wrappers and hardcoded debug effect ids can be removed.
+* `Debug_Draw1` is auto-converted to modular `DrawCards 1` when added to the chain.
+* `Debug_GainAttackForCardsUnderneath` is auto-converted to modular `ModifyAttack` with `CardsUnderneathTarget` when added to the chain.
+* `EffectId` is not removed yet because `Debug_RemoveBottomOverlay` remains a special hardcoded debug/fizzle action.
+* After the overlay-removal test is replaced by a modular remove-overlay step, `EffectId` and the hardcoded debug fallback can be removed.
