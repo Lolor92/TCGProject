@@ -5,6 +5,7 @@ namespace
 	constexpr bool bLogEffectResolution = true;
 	constexpr bool bAutoSubmitDebugDiscardChoice = true;
 	constexpr bool bAutoSubmitDebugGraveyardToDeckChoice = true;
+	constexpr bool bAutoSubmitDebugHandToTopDeckChoice = true;
 	constexpr bool bAutoSubmitDebugPlayToEmptyZoneChoice = true;
 	constexpr bool bAutoSubmitDebugAttachSourceToUnitChoice = true;
 
@@ -25,6 +26,7 @@ namespace
 		case ETCGEffectStepType::PlaySourceToEmptyZone: return TEXT("PlaySourceToEmptyZone");
 		case ETCGEffectStepType::SendTopDeckCardToGraveyard: return TEXT("SendTopDeckCardToGraveyard");
 		case ETCGEffectStepType::MoveGraveyardCardToBottomDeck: return TEXT("MoveGraveyardCardToBottomDeck");
+		case ETCGEffectStepType::MoveHandCardToTopDeck: return TEXT("MoveHandCardToTopDeck");
 		case ETCGEffectStepType::AttachSourceToWaterUnitMaterial: return TEXT("AttachSourceToWaterUnitMaterialLegacy");
 		case ETCGEffectStepType::AttachSourceToUnitMaterial: return TEXT("AttachSourceToUnitMaterial");
 		default: return TEXT("None");
@@ -311,6 +313,29 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveGraveyardCardToBottomDeck Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
+	case ETCGEffectStepType::MoveHandCardToTopDeck:
+	{
+		const int32 MoveCount = FMath::Max(1, Step.Value <= 0 ? 1 : Step.Value);
+		if (Step.SelectionMode == ETCGEffectSelectionMode::PlayerChoice)
+		{
+			const bool bChoiceStarted = BeginPendingHandToTopDeckChoice(ChainEntry.ControllerPlayerIndex, MoveCount, ChainEntry);
+			bool bAutoSubmittedChoice = false;
+			if (bChoiceStarted && bAutoSubmitDebugHandToTopDeckChoice)
+			{
+				TArray<FGuid> ChoiceOptions;
+				GetPendingHandToTopDeckChoiceOptions(ChoiceOptions);
+				TArray<FGuid> DebugChosenCards;
+				for (int32 Index = 0; Index < ChoiceOptions.Num() && DebugChosenCards.Num() < MoveCount; ++Index) DebugChosenCards.Add(ChoiceOptions[Index]);
+				bAutoSubmittedChoice = SubmitPendingHandToTopDeckChoice(ChainEntry.ControllerPlayerIndex, DebugChosenCards);
+			}
+			if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveHandCardToTopDeck Player=%d Requested=%d Mode=%s Pending=%s AutoSubmitted=%s"), ChainEntry.ControllerPlayerIndex, MoveCount, GetTCGEffectSelectionModeDebugName(Step.SelectionMode), bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
+			bStepSucceeded = bAutoSubmittedChoice;
+			break;
+		}
+		bStepSucceeded = MoveFirstHandCardToTopDeck(ChainEntry.ControllerPlayerIndex);
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveHandCardToTopDeck Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
+		break;
+	}
 	default:
 		break;
 	}
@@ -399,6 +424,45 @@ bool ATCG_GameState::SubmitPendingGraveyardToDeckChoice(int32 PlayerIndex, const
 bool ATCG_GameState::HasPendingGraveyardToDeckChoice() const { return PendingGraveyardToDeckChoice.bIsPending; }
 void ATCG_GameState::GetPendingGraveyardToDeckChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingGraveyardToDeckChoice.EligibleCardInstanceIds; }
 void ATCG_GameState::ClearPendingGraveyardToDeckChoice() { PendingGraveyardToDeckChoice.Reset(); }
+
+bool ATCG_GameState::BeginPendingHandToTopDeckChoice(int32 PlayerIndex, int32 Count, const FTCGEffectChainEntry& ChainEntry)
+{
+	if (!IsValidPlayerIndex(PlayerIndex) || Count <= 0 || PendingHandToTopDeckChoice.bIsPending) return false;
+	TArray<FTCGCardInstance> HandCards;
+	GetCardsInHand(PlayerIndex, HandCards);
+	if (HandCards.Num() < Count) return false;
+	PendingHandToTopDeckChoice.Reset();
+	PendingHandToTopDeckChoice.bIsPending = true;
+	PendingHandToTopDeckChoice.PlayerIndex = PlayerIndex;
+	PendingHandToTopDeckChoice.RequiredCount = Count;
+	PendingHandToTopDeckChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
+	PendingHandToTopDeckChoice.ChainIndex = ChainEntry.ChainIndex;
+	for (const FTCGCardInstance& Card : HandCards) PendingHandToTopDeckChoice.EligibleCardInstanceIds.Add(Card.CardInstanceId);
+	return PendingHandToTopDeckChoice.EligibleCardInstanceIds.Num() >= Count;
+}
+
+bool ATCG_GameState::SubmitPendingHandToTopDeckChoice(int32 PlayerIndex, const TArray<FGuid>& ChosenCardInstanceIds)
+{
+	if (!PendingHandToTopDeckChoice.bIsPending || PendingHandToTopDeckChoice.PlayerIndex != PlayerIndex) return false;
+	if (ChosenCardInstanceIds.Num() != PendingHandToTopDeckChoice.RequiredCount) return false;
+	TSet<FGuid> UniqueChosenIds;
+	for (const FGuid& ChosenId : ChosenCardInstanceIds)
+	{
+		if (!ChosenId.IsValid() || UniqueChosenIds.Contains(ChosenId)) return false;
+		if (!PendingHandToTopDeckChoice.EligibleCardInstanceIds.Contains(ChosenId)) return false;
+		const FTCGCardInstance* Card = FindCardInstance(ChosenId);
+		if (!Card || Card->OwnerPlayerIndex != PlayerIndex || Card->Location != ETCGCardLocation::Hand) return false;
+		UniqueChosenIds.Add(ChosenId);
+	}
+	for (const FGuid& ChosenId : ChosenCardInstanceIds) MoveCardToTopOfDeck(ChosenId);
+	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending hand-to-top-deck choice submitted Player=%d Count=%d"), PlayerIndex, ChosenCardInstanceIds.Num());
+	ClearPendingHandToTopDeckChoice();
+	return true;
+}
+
+bool ATCG_GameState::HasPendingHandToTopDeckChoice() const { return PendingHandToTopDeckChoice.bIsPending; }
+void ATCG_GameState::GetPendingHandToTopDeckChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingHandToTopDeckChoice.EligibleCardInstanceIds; }
+void ATCG_GameState::ClearPendingHandToTopDeckChoice() { PendingHandToTopDeckChoice.Reset(); }
 
 bool ATCG_GameState::BeginPendingPlayToEmptyZoneChoice(int32 PlayerIndex, const FTCGEffectChainEntry& ChainEntry)
 {
@@ -490,6 +554,33 @@ bool ATCG_GameState::SubmitPendingAttachSourceToWaterUnitChoice(int32 PlayerInde
 bool ATCG_GameState::HasPendingAttachSourceToWaterUnitChoice() const { return PendingAttachSourceToWaterUnitChoice.bIsPending; }
 void ATCG_GameState::GetPendingAttachSourceToWaterUnitChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingAttachSourceToWaterUnitChoice.EligibleTargetCardInstanceIds; }
 void ATCG_GameState::ClearPendingAttachSourceToWaterUnitChoice() { PendingAttachSourceToWaterUnitChoice.Reset(); }
+
+bool ATCG_GameState::MoveCardToTopOfDeck(const FGuid& CardInstanceId)
+{
+	FTCGCardInstance* CardToMove = FindCardInstance(CardInstanceId);
+	if (!CardToMove || !IsValidPlayerIndex(CardToMove->OwnerPlayerIndex)) return false;
+	const int32 PlayerIndex = CardToMove->OwnerPlayerIndex;
+	const FName CardDefinitionId = CardToMove->CardDefinitionId;
+	CardToMove->Location = ETCGCardLocation::Deck;
+	CardToMove->LocationIndex = GetNextLocationIndex(PlayerIndex, ETCGCardLocation::Deck);
+	CardToMove->ZoneId = NAME_None;
+	CardToMove->StackId.Invalidate();
+	CardToMove->StackIndex = INDEX_NONE;
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Moved card to top deck Player=%d Card=%s"), PlayerIndex, *CardDefinitionId.ToString());
+	return true;
+}
+
+bool ATCG_GameState::MoveFirstHandCardToTopDeck(int32 PlayerIndex)
+{
+	if (!IsValidPlayerIndex(PlayerIndex)) return false;
+	FTCGCardInstance* HandCard = nullptr;
+	for (FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.OwnerPlayerIndex != PlayerIndex || Card.Location != ETCGCardLocation::Hand) continue;
+		if (!HandCard || Card.LocationIndex < HandCard->LocationIndex) HandCard = &Card;
+	}
+	return HandCard ? MoveCardToTopOfDeck(HandCard->CardInstanceId) : false;
+}
 
 int32 ATCG_GameState::DiscardCardsFromHand(int32 PlayerIndex, int32 Count)
 {
