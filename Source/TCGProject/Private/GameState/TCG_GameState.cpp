@@ -72,6 +72,7 @@ void ATCG_GameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ATCG_GameState, CurrentPhase);
 	DOREPLIFETIME(ATCG_GameState, MatchResult);
 	DOREPLIFETIME(ATCG_GameState, MatchCards);
+	DOREPLIFETIME(ATCG_GameState, PendingDiscardChoice);
 }
 
 FName ATCG_GameState::GetFieldZoneId(int32 PlayerIndex, int32 FieldIndex)
@@ -89,6 +90,7 @@ void ATCG_GameState::StartMatch()
 	CurrentTurnPlayerIndex = 0;
 	CurrentPhase = ETCGMatchPhase::RoundStart;
 	MatchResult = ETCGMatchResult::None;
+	ClearPendingDiscardChoice();
 }
 
 void ATCG_GameState::SetPhase(ETCGMatchPhase NewPhase)
@@ -134,7 +136,11 @@ bool ATCG_GameState::IsPlacementPhaseComplete() const
 
 bool ATCG_GameState::CanPlayerActInPlacementStep(int32 PlayerIndex) const
 {
-	return IsValidPlayerIndex(PlayerIndex) && CurrentPhase == ETCGMatchPhase::Placement && !IsPlacementPhaseComplete() && GetPlacementStepPlayer() == PlayerIndex;
+	return !HasPendingDiscardChoice()
+		&& IsValidPlayerIndex(PlayerIndex)
+		&& CurrentPhase == ETCGMatchPhase::Placement
+		&& !IsPlacementPhaseComplete()
+		&& GetPlacementStepPlayer() == PlayerIndex;
 }
 
 int32 ATCG_GameState::GetCompletedPlacementStepsForPlayer(int32 PlayerIndex) const
@@ -171,6 +177,15 @@ bool ATCG_GameState::CanPlayerPlaceInFieldZone(int32 PlayerIndex, int32 FieldInd
 
 bool ATCG_GameState::AdvancePlacementStep()
 {
+	if (HasPendingDiscardChoice())
+	{
+		if (bLogPlacementFlow)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement advance paused PendingDiscard Player=%d Count=%d"), PendingDiscardChoice.PlayerIndex, PendingDiscardChoice.RequiredCount);
+		}
+		return false;
+	}
+
 	if (CurrentPhase != ETCGMatchPhase::Placement || IsPlacementPhaseComplete()) return false;
 
 	PlacementStepIndex++;
@@ -345,7 +360,7 @@ bool ATCG_GameState::IsCurrentTurnPlayer(int32 PlayerIndex) const
 
 bool ATCG_GameState::CanPlayerActInCurrentPhase(int32 PlayerIndex) const
 {
-	if (IsMatchOver()) return false;
+	if (IsMatchOver() || HasPendingDiscardChoice()) return false;
 	return CanPlayerActInPlacementStep(PlayerIndex);
 }
 
@@ -387,13 +402,14 @@ bool ATCG_GameState::PlayerPlayCardToZone(int32 PlayerIndex, const FGuid& CardIn
 	if (!CanPlayerPlayCardToZone(PlayerIndex, CardInstanceId, ZoneId))
 	{
 		const FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
-		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: PlayerPlayCardToZone rejected Player=%d Card=%s Zone=%s Phase=%d PlacementStep=%d CurrentPlayer=%d"),
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: PlayerPlayCardToZone rejected Player=%d Card=%s Zone=%s Phase=%d PlacementStep=%d CurrentPlayer=%d PendingChoice=%s"),
 			PlayerIndex,
 			Card ? *Card->CardDefinitionId.ToString() : TEXT("None"),
 			*ZoneId.ToString(),
 			static_cast<int32>(CurrentPhase),
 			PlacementStepIndex,
-			CurrentTurnPlayerIndex);
+			CurrentTurnPlayerIndex,
+			HasPendingDiscardChoice() ? TEXT("true") : TEXT("false"));
 		return false;
 	}
 
@@ -409,7 +425,17 @@ bool ATCG_GameState::PlayerPlayCardToZone(int32 PlayerIndex, const FGuid& CardIn
 			break;
 		}
 
-		AdvancePlacementStep();
+		if (HasPendingDiscardChoice())
+		{
+			if (bLogPlacementFlow)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement paused for discard choice Player=%d Count=%d"), PendingDiscardChoice.PlayerIndex, PendingDiscardChoice.RequiredCount);
+			}
+		}
+		else
+		{
+			AdvancePlacementStep();
+		}
 	}
 	return bPlayed;
 }
@@ -643,55 +669,7 @@ bool ATCG_GameState::ResolveEffectChain(const TArray<FTCGEffectChainEntry>& Chai
 
 bool ATCG_GameState::ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& ChainEntry)
 {
-	const FTCGCardInstance* SourceCard = FindCardInstance(ChainEntry.SourceCardInstanceId);
-	const FTCGCardInstance* TargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
-	if (!SourceCard || !TargetCard) return false;
-
-	if (ChainEntry.EffectId == DebugEffect_Draw1)
-	{
-		const bool bDrewCard = DrawCard(ChainEntry.ControllerPlayerIndex);
-		if (bLogEffectChains)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Legacy Draw1 Source=%s Success=%s"), *SourceCard->CardDefinitionId.ToString(), bDrewCard ? TEXT("true") : TEXT("false"));
-		}
-		return bDrewCard;
-	}
-
-	if (ChainEntry.EffectId == DebugEffect_GainAttackForCardsUnderneath)
-	{
-		FTCGCardInstance* MutableTargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
-		if (!MutableTargetCard) return false;
-		MutableTargetCard->AttackModifier += GetCardsUnderneathCount(ChainEntry.TargetCardInstanceId);
-		if (bLogEffectChains)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Legacy GainAttackForCardsUnderneath Target=%s Success=true"), *MutableTargetCard->CardDefinitionId.ToString());
-		}
-		return true;
-	}
-
-	if (ChainEntry.EffectId == DebugEffect_RemoveBottomOverlay)
-	{
-		FTCGCardInstance* MutableTargetCard = FindCardInstance(ChainEntry.TargetCardInstanceId);
-		if (!MutableTargetCard || !MutableTargetCard->StackId.IsValid()) return false;
-
-		FTCGCardInstance* BottomOverlayCard = nullptr;
-		for (FTCGCardInstance& Card : MatchCards)
-		{
-			if (Card.Location != ETCGCardLocation::Board) continue;
-			if (Card.StackId != MutableTargetCard->StackId) continue;
-			if (Card.CardInstanceId == MutableTargetCard->CardInstanceId) continue;
-			if (Card.StackIndex >= MutableTargetCard->StackIndex) continue;
-			if (!BottomOverlayCard || Card.StackIndex < BottomOverlayCard->StackIndex) BottomOverlayCard = &Card;
-		}
-
-		const bool bMoved = BottomOverlayCard && MoveCardToLocation(BottomOverlayCard->CardInstanceId, ETCGCardLocation::Graveyard);
-		if (bLogEffectChains)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Legacy RemoveBottomOverlay Target=%s Success=%s"), *MutableTargetCard->CardDefinitionId.ToString(), bMoved ? TEXT("true") : TEXT("false"));
-		}
-		return bMoved;
-	}
-
+	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Deprecated debug resolver ignored Chain=%d Source=%s"), ChainEntry.ChainIndex, *ChainEntry.SourceCardDefinitionId.ToString());
 	return false;
 }
 
@@ -834,6 +812,15 @@ bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player
 
 bool ATCG_GameState::ResolveBattlePhase()
 {
+	if (HasPendingDiscardChoice())
+	{
+		if (bLogBattleFlow || bLogRoundFlow)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase paused PendingDiscard Player=%d Count=%d"), PendingDiscardChoice.PlayerIndex, PendingDiscardChoice.RequiredCount);
+		}
+		return false;
+	}
+
 	bool bResolvedAnyBattle = false;
 	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
 	{
@@ -874,14 +861,6 @@ bool ATCG_GameState::ResolveBattlePhase()
 		const FGuid DefenderStackId = DefenderCard->StackId;
 		const int32 AttackerAttack = GetFinalAttack(AttackerCard->CardInstanceId);
 		const int32 DefenderAttack = GetFinalAttack(DefenderCard->CardInstanceId);
-		const FName AttackerDefinitionId = AttackerCard->CardDefinitionId;
-		const FName DefenderDefinitionId = DefenderCard->CardDefinitionId;
-
-		if (bLogBattleFlow)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle declaration Field=%d Attacker=P%d Target=P%d Field=%d"), FieldIndex, AttackerPlayerIndex, DefenderPlayerIndex, DefenderFieldIndex);
-			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle attack P%d %s ATK %d -> P%d %s ATK %d"), AttackerPlayerIndex, *AttackerDefinitionId.ToString(), AttackerAttack, DefenderPlayerIndex, *DefenderDefinitionId.ToString(), DefenderAttack);
-		}
 
 		if (AttackerAttack > DefenderAttack)
 		{
@@ -923,6 +902,10 @@ void ATCG_GameState::GetCardsInLocation(int32 PlayerIndex, ETCGCardLocation Loca
 void ATCG_GameState::GetCardsInHand(int32 PlayerIndex, TArray<FTCGCardInstance>& OutCards) const
 {
 	GetCardsInLocation(PlayerIndex, ETCGCardLocation::Hand, OutCards);
+	OutCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
+	{
+		return A.LocationIndex < B.LocationIndex;
+	});
 }
 
 void ATCG_GameState::GetCardsInDeck(int32 PlayerIndex, TArray<FTCGCardInstance>& OutCards) const
@@ -1040,7 +1023,7 @@ void ATCG_GameState::RunDebugTurnFlow()
 		return ETCGMatchResult::Draw;
 	};
 
-	auto RunWraparoundBattleScenario = [this, &AddDebugBoardUnit]()
+	if (DebugScenario == ETCGDebugScenario::WraparoundBattle)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Wraparound battle scenario start"));
 		MatchCards.Empty();
@@ -1058,9 +1041,10 @@ void ATCG_GameState::RunDebugTurnFlow()
 			DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"),
 			GetTCGMatchResultDebugName(ScenarioResult));
 		EndMatch(ScenarioResult);
-	};
+		return;
+	}
 
-	auto RunRoundLimitTiebreakScenario = [this, &AddDebugBoardUnit, &CountBoardUnits, &GetRoundLimitResult]()
+	if (DebugScenario == ETCGDebugScenario::RoundLimitTiebreak)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round limit tiebreak scenario start Max=%d"), MaxRoundNumber);
 		MatchCards.Empty();
@@ -1087,9 +1071,10 @@ void ATCG_GameState::RunDebugTurnFlow()
 			DoesPlayerHaveAnyCardOnBoard(1) ? TEXT("true") : TEXT("false"),
 			GetTCGMatchResultDebugName(ScenarioResult));
 		EndMatch(ScenarioResult);
-	};
+		return;
+	}
 
-	auto RunOverlayPlacementScenario = [this, &AddDebugBoardUnit]()
+	if (DebugScenario == ETCGDebugScenario::OverlayPlacement)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Overlay placement scenario start"));
 		MatchCards.Empty();
@@ -1128,23 +1113,6 @@ void ATCG_GameState::RunDebugTurnFlow()
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Overlay placement different-zone attempt Field=1 Type=Overlay Success=%s Expected=true UsedZones=%d"), bDifferentZoneOverlaySuccess ? TEXT("true") : TEXT("false"), Player0PlacementFieldZonesUsedThisRound.Num());
 
 		EndMatch(ETCGMatchResult::Draw);
-	};
-
-	if (DebugScenario == ETCGDebugScenario::WraparoundBattle)
-	{
-		RunWraparoundBattleScenario();
-		return;
-	}
-
-	if (DebugScenario == ETCGDebugScenario::RoundLimitTiebreak)
-	{
-		RunRoundLimitTiebreakScenario();
-		return;
-	}
-
-	if (DebugScenario == ETCGDebugScenario::OverlayPlacement)
-	{
-		RunOverlayPlacementScenario();
 		return;
 	}
 
@@ -1157,6 +1125,15 @@ void ATCG_GameState::RunDebugTurnFlow()
 
 	while (!IsMatchOver())
 	{
+		if (HasPendingDiscardChoice())
+		{
+			if (bLogRoundFlow)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round flow paused PendingDiscard Player=%d Count=%d"), PendingDiscardChoice.PlayerIndex, PendingDiscardChoice.RequiredCount);
+			}
+			return;
+		}
+
 		if (bLogRoundFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Round %d start"), RoundNumber);
 
 		SetPhase(ETCGMatchPhase::Placement);
@@ -1167,6 +1144,15 @@ void ATCG_GameState::RunDebugTurnFlow()
 
 		while (CurrentPhase == ETCGMatchPhase::Placement && !IsPlacementPhaseComplete())
 		{
+			if (HasPendingDiscardChoice())
+			{
+				if (bLogPlacementFlow)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement loop paused PendingDiscard Player=%d Count=%d"), PendingDiscardChoice.PlayerIndex, PendingDiscardChoice.RequiredCount);
+				}
+				return;
+			}
+
 			const int32 PlayerIndex = GetPlacementStepPlayer();
 			const int32 DrawnCount = DrawCards(PlayerIndex, CardsDrawnPerPlacementStep);
 
@@ -1213,10 +1199,28 @@ void ATCG_GameState::RunDebugTurnFlow()
 					*PlacementType,
 					UsedZones.Num());
 			}
+
+			if (HasPendingDiscardChoice())
+			{
+				if (bLogPlacementFlow)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Placement loop paused after play PendingDiscard Player=%d Count=%d"), PendingDiscardChoice.PlayerIndex, PendingDiscardChoice.RequiredCount);
+				}
+				return;
+			}
 		}
 
 		if (CurrentPhase == ETCGMatchPhase::Battle)
 		{
+			if (HasPendingDiscardChoice())
+			{
+				if (bLogRoundFlow)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle start paused PendingDiscard Player=%d Count=%d"), PendingDiscardChoice.PlayerIndex, PendingDiscardChoice.RequiredCount);
+				}
+				return;
+			}
+
 			if (bLogRoundFlow) UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle phase started R%d"), RoundNumber);
 			const bool bResolved = ResolveBattlePhase();
 			ETCGMatchResult ResultAfterBattle = CheckLoseConditionAfterBattle();
