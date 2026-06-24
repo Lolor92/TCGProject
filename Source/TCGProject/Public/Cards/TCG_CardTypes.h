@@ -38,7 +38,8 @@ enum class ETCGEffectTrigger : uint8
 	OnStackAdded              UMETA(DisplayName = "On Stack Added"),
 	OnBecomingTopCard         UMETA(DisplayName = "On Becoming Top Card"),
 	OnAttack                  UMETA(DisplayName = "On Attack"),
-	OnCardSentToYourGraveyard UMETA(DisplayName = "On Card Sent To Your Graveyard")
+	OnCardSentToYourGraveyard UMETA(DisplayName = "On Card Sent To Your Graveyard"),
+	OnBattleDestroy           UMETA(DisplayName = "On Battle Destroy")
 };
 
 UENUM(BlueprintType)
@@ -59,7 +60,8 @@ enum class ETCGEffectStepType : uint8
 	MoveHandCardToTopDeck               UMETA(DisplayName = "Move Hand Card To Top Deck"),
 	AttachGraveyardCardToSourceMaterial UMETA(DisplayName = "Attach Graveyard Card To Source Material"),
 	SendTopDeckCardsToGraveyard         UMETA(DisplayName = "Send Top Deck Cards To Graveyard"),
-	BoostAllOwnUnitsThisRound           UMETA(DisplayName = "Boost All Own Units This Round")
+	BoostAllOwnUnitsThisRound           UMETA(DisplayName = "Boost All Own Units This Round"),
+	RevealTopDeckCardsAddWaterToHand    UMETA(DisplayName = "Reveal Top Deck Cards Add Water To Hand")
 };
 
 UENUM(BlueprintType)
