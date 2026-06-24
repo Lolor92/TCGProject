@@ -6,6 +6,7 @@ namespace
 
 	const FName LegacyDebugEffect_Draw1 = "Debug_Draw1";
 	const FName LegacyDebugEffect_GainAttackForCardsUnderneath = "Debug_GainAttackForCardsUnderneath";
+	const FName LegacyDebugEffect_RemoveBottomOverlay = "Debug_RemoveBottomOverlay";
 
 	static const TCHAR* GetTCGEffectStepDebugName(ETCGEffectStepType StepType)
 	{
@@ -16,6 +17,7 @@ namespace
 		case ETCGEffectStepType::DiscardCards: return TEXT("DiscardCards");
 		case ETCGEffectStepType::ModifyAttack: return TEXT("ModifyAttack");
 		case ETCGEffectStepType::SelectTarget: return TEXT("SelectTarget");
+		case ETCGEffectStepType::MoveBottomOverlayToGraveyard: return TEXT("MoveBottomOverlayToGraveyard");
 		default: return TEXT("None");
 		}
 	}
@@ -40,6 +42,15 @@ namespace
 		case ETCGEffectValueMode::CardsUnderneathSource: return TEXT("CardsUnderneathSource");
 		case ETCGEffectValueMode::CardsUnderneathTarget: return TEXT("CardsUnderneathTarget");
 		default: return TEXT("Fixed");
+		}
+	}
+
+	static const TCHAR* GetTCGEffectSelectionModeDebugName(ETCGEffectSelectionMode SelectionMode)
+	{
+		switch (SelectionMode)
+		{
+		case ETCGEffectSelectionMode::PlayerChoice: return TEXT("PlayerChoice");
+		default: return TEXT("Automatic");
 		}
 	}
 
@@ -72,6 +83,15 @@ namespace
 			return true;
 		}
 
+		if (EffectRef.EffectId == LegacyDebugEffect_RemoveBottomOverlay)
+		{
+			FTCGEffectStep MoveOverlayStep;
+			MoveOverlayStep.StepType = ETCGEffectStepType::MoveBottomOverlayToGraveyard;
+			MoveOverlayStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+			EffectRef.Steps.Add(MoveOverlayStep);
+			return true;
+		}
+
 		return false;
 	}
 }
@@ -88,7 +108,7 @@ bool ATCG_GameState::AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain
 	FTCGCardEffectRef ResolvedEffectRef = EffectRef;
 	const bool bConvertedLegacyEffect = ConvertLegacyDebugEffectToSteps(ResolvedEffectRef);
 
-	if (ResolvedEffectRef.EffectId.IsNone() && ResolvedEffectRef.Steps.Num() <= 0)
+	if (ResolvedEffectRef.Steps.Num() <= 0)
 	{
 		return false;
 	}
@@ -121,12 +141,18 @@ bool ATCG_GameState::AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain
 
 bool ATCG_GameState::ResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEntry)
 {
-	if (ChainEntry.EffectRef.Steps.Num() > 0)
+	if (ChainEntry.EffectRef.Steps.Num() <= 0)
 	{
-		return ResolveModularEffectChainEntry(ChainEntry);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Chain entry has no modular steps Chain=%d Source=%s"),
+				ChainEntry.ChainIndex,
+				*ChainEntry.SourceCardDefinitionId.ToString());
+		}
+		return false;
 	}
 
-	return ResolveDebugEffectChainEntry(ChainEntry);
+	return ResolveModularEffectChainEntry(ChainEntry);
 }
 
 bool ATCG_GameState::ResolveModularEffectChainEntry(const FTCGEffectChainEntry& ChainEntry)
@@ -207,14 +233,30 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 	case ETCGEffectStepType::DiscardCards:
 	{
 		const int32 DiscardCount = FMath::Max(0, Step.Value);
+		if (Step.SelectionMode == ETCGEffectSelectionMode::PlayerChoice)
+		{
+			const bool bChoiceStarted = BeginPendingDiscardChoice(ChainEntry.ControllerPlayerIndex, DiscardCount, ChainEntry);
+			if (bLogEffectResolution)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardCards Player=%d Requested=%d Mode=%s Pending=%s"),
+					ChainEntry.ControllerPlayerIndex,
+					DiscardCount,
+					GetTCGEffectSelectionModeDebugName(Step.SelectionMode),
+					bChoiceStarted ? TEXT("true") : TEXT("false"));
+			}
+			bStepSucceeded = false;
+			break;
+		}
+
 		const int32 DiscardedCount = DiscardCardsFromHand(ChainEntry.ControllerPlayerIndex, DiscardCount);
 		bStepSucceeded = DiscardedCount == DiscardCount && DiscardCount > 0;
 		if (bLogEffectResolution)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardCards Player=%d Requested=%d Discarded=%d Success=%s"),
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardCards Player=%d Requested=%d Discarded=%d Mode=%s Success=%s"),
 				ChainEntry.ControllerPlayerIndex,
 				DiscardCount,
 				DiscardedCount,
+				GetTCGEffectSelectionModeDebugName(Step.SelectionMode),
 				bStepSucceeded ? TEXT("true") : TEXT("false"));
 		}
 		break;
@@ -260,8 +302,6 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 	}
 	case ETCGEffectStepType::SelectTarget:
 	{
-		// Target selection is intentionally scaffolded here. Player-choice UI and selected-target storage
-		// will be added in the next pass. For now this step checks whether a matching target exists.
 		const int32 OwnerPlayerIndex = Step.TargetFilter.OwnerMode == ETCGEffectTargetMode::Opponent
 			? 1 - ChainEntry.ControllerPlayerIndex
 			: ChainEntry.ControllerPlayerIndex;
@@ -289,6 +329,20 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		}
 		break;
 	}
+	case ETCGEffectStepType::MoveBottomOverlayToGraveyard:
+	{
+		const FGuid TargetCardInstanceId = Step.TargetMode == ETCGEffectTargetMode::SourceCard
+			? ChainEntry.SourceCardInstanceId
+			: ChainEntry.TargetCardInstanceId;
+		bStepSucceeded = MoveBottomOverlayToGraveyard(TargetCardInstanceId);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveBottomOverlayToGraveyard TargetMode=%s Success=%s"),
+				GetTCGEffectTargetModeDebugName(Step.TargetMode),
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
+		break;
+	}
 	default:
 		break;
 	}
@@ -302,6 +356,91 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 	}
 
 	return bStepSucceeded;
+}
+
+bool ATCG_GameState::BeginPendingDiscardChoice(int32 PlayerIndex, int32 Count, const FTCGEffectChainEntry& ChainEntry)
+{
+	if (!IsValidPlayerIndex(PlayerIndex) || Count <= 0 || PendingDiscardChoice.bIsPending)
+	{
+		return false;
+	}
+
+	TArray<FTCGCardInstance> HandCards;
+	GetCardsInHand(PlayerIndex, HandCards);
+	if (HandCards.Num() < Count)
+	{
+		return false;
+	}
+
+	PendingDiscardChoice.Reset();
+	PendingDiscardChoice.bIsPending = true;
+	PendingDiscardChoice.PlayerIndex = PlayerIndex;
+	PendingDiscardChoice.RequiredCount = Count;
+	PendingDiscardChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
+	PendingDiscardChoice.ChainIndex = ChainEntry.ChainIndex;
+
+	for (const FTCGCardInstance& Card : HandCards)
+	{
+		PendingDiscardChoice.EligibleCardInstanceIds.Add(Card.CardInstanceId);
+	}
+
+	return PendingDiscardChoice.EligibleCardInstanceIds.Num() >= Count;
+}
+
+bool ATCG_GameState::SubmitPendingDiscardChoice(int32 PlayerIndex, const TArray<FGuid>& ChosenCardInstanceIds)
+{
+	if (!PendingDiscardChoice.bIsPending || PendingDiscardChoice.PlayerIndex != PlayerIndex)
+	{
+		return false;
+	}
+
+	if (ChosenCardInstanceIds.Num() != PendingDiscardChoice.RequiredCount)
+	{
+		return false;
+	}
+
+	TSet<FGuid> UniqueChosenIds;
+	for (const FGuid& ChosenId : ChosenCardInstanceIds)
+	{
+		if (!ChosenId.IsValid() || UniqueChosenIds.Contains(ChosenId))
+		{
+			return false;
+		}
+		if (!PendingDiscardChoice.EligibleCardInstanceIds.Contains(ChosenId))
+		{
+			return false;
+		}
+		const FTCGCardInstance* Card = FindCardInstance(ChosenId);
+		if (!Card || Card->OwnerPlayerIndex != PlayerIndex || Card->Location != ETCGCardLocation::Hand)
+		{
+			return false;
+		}
+		UniqueChosenIds.Add(ChosenId);
+	}
+
+	for (const FGuid& ChosenId : ChosenCardInstanceIds)
+	{
+		MoveCardToLocation(ChosenId, ETCGCardLocation::Graveyard);
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending discard choice submitted Player=%d Count=%d"), PlayerIndex, ChosenCardInstanceIds.Num());
+	ClearPendingDiscardChoice();
+	return true;
+}
+
+bool ATCG_GameState::HasPendingDiscardChoice() const
+{
+	return PendingDiscardChoice.bIsPending;
+}
+
+void ATCG_GameState::GetPendingDiscardChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const
+{
+	OutCardInstanceIds = PendingDiscardChoice.EligibleCardInstanceIds;
+}
+
+void ATCG_GameState::ClearPendingDiscardChoice()
+{
+	PendingDiscardChoice.Reset();
 }
 
 int32 ATCG_GameState::DiscardCardsFromHand(int32 PlayerIndex, int32 Count)
