@@ -43,6 +43,8 @@ namespace
 		case ETCGEffectStepType::RemoveMaterialFromTargetUnit: return TEXT("RemoveMaterialFromTargetUnit");
 		case ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit: return TEXT("AttackMillTwoWaterBounceBattlingUnit");
 		case ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget: return TEXT("DiscardSourceDetachUpToTwoMaterialsFromTarget");
+		case ETCGEffectStepType::DestroyTargetUnitByCardEffect: return TEXT("DestroyTargetUnitByCardEffect");
+		case ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials: return TEXT("DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials");
 		default: return TEXT("None");
 		}
 	}
@@ -186,6 +188,79 @@ namespace
 			DetachedCount);
 
 		return true;
+	}
+
+	static bool ReturnUnitToHandMaterialsToGraveyard(ATCG_GameState* GameState, const FGuid& TargetTopCardInstanceId, int32& OutMaterialCount)
+	{
+		OutMaterialCount = 0;
+		if (!GameState) return false;
+
+		const FTCGCardInstance* TargetTopCard = GameState->FindCardInstance(TargetTopCardInstanceId);
+		if (!TargetTopCard || TargetTopCard->Location != ETCGCardLocation::Board || !TargetTopCard->StackId.IsValid()) return false;
+
+		const FGuid StackId = TargetTopCard->StackId;
+		const FGuid TopCardId = TargetTopCard->CardInstanceId;
+
+		TArray<FGuid> MaterialIds;
+		for (const FTCGCardInstance& Card : GameState->MatchCards)
+		{
+			if (Card.Location != ETCGCardLocation::Board) continue;
+			if (Card.StackId != StackId) continue;
+			if (Card.CardInstanceId == TopCardId) continue;
+			if (Card.StackIndex >= TargetTopCard->StackIndex) continue;
+			MaterialIds.Add(Card.CardInstanceId);
+		}
+
+		OutMaterialCount = MaterialIds.Num();
+		bool bMovedMaterials = true;
+		for (const FGuid& MaterialId : MaterialIds)
+		{
+			bMovedMaterials &= GameState->MoveCardToLocation(MaterialId, ETCGCardLocation::Graveyard);
+		}
+
+		const bool bMovedTop = GameState->MoveCardToLocation(TopCardId, ETCGCardLocation::Hand);
+		return bMovedMaterials && bMovedTop;
+	}
+
+	static bool DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials(ATCG_GameState* GameState, const FTCGEffectChainEntry& ChainEntry)
+	{
+		if (!GameState) return false;
+
+		const FTCGCardInstance* SourceCard = GameState->FindCardInstance(ChainEntry.SourceCardInstanceId);
+		const FTCGCardInstance* TargetCard = GameState->FindCardInstance(ChainEntry.TargetCardInstanceId);
+		if (!SourceCard || SourceCard->OwnerPlayerIndex != ChainEntry.ControllerPlayerIndex || SourceCard->Location != ETCGCardLocation::Hand)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Unit save failed Source=%s Reason=SourceNotInHand"), ChainEntry.SourceCardDefinitionId.IsNone() ? TEXT("None") : *ChainEntry.SourceCardDefinitionId.ToString());
+			return false;
+		}
+		if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board || TargetCard->OwnerPlayerIndex != ChainEntry.ControllerPlayerIndex)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Unit save failed Source=%s Reason=TargetInvalid"), *SourceCard->CardDefinitionId.ToString());
+			return false;
+		}
+
+		const FName SourceDefinitionId = SourceCard->CardDefinitionId;
+		const FName TargetDefinitionId = TargetCard->CardDefinitionId;
+		const bool bDiscardedSource = GameState->MoveCardToLocation(ChainEntry.SourceCardInstanceId, ETCGCardLocation::Graveyard);
+		if (!bDiscardedSource)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Unit save failed Source=%s Reason=DiscardFailed"), *SourceDefinitionId.ToString());
+			return false;
+		}
+
+		int32 MaterialCount = 0;
+		const bool bReturnedUnit = ReturnUnitToHandMaterialsToGraveyard(GameState, ChainEntry.TargetCardInstanceId, MaterialCount);
+		const int32 DrawnCount = bReturnedUnit && MaterialCount >= 2 ? GameState->DrawCards(ChainEntry.ControllerPlayerIndex, 1) : 0;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: Unit save Source=%s Target=%s Discarded=true Returned=%s Materials=%d Drawn=%d"),
+			*SourceDefinitionId.ToString(),
+			*TargetDefinitionId.ToString(),
+			bReturnedUnit ? TEXT("true") : TEXT("false"),
+			MaterialCount,
+			DrawnCount);
+
+		return bReturnedUnit;
 	}
 }
 
@@ -419,6 +494,12 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 	{
 		bStepSucceeded = DiscardSourceDetachUpToTwoMaterialsFromTarget(this, ChainEntry);
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardSourceDetachUpToTwoMaterialsFromTarget Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
+		break;
+	}
+	case ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials:
+	{
+		bStepSucceeded = DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials(this, ChainEntry);
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
 	case ETCGEffectStepType::AttachSourceToWaterUnitMaterial:
