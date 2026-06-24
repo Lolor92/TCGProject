@@ -71,6 +71,20 @@ RunDebugTidesCallingScenario()
 
 GameMode temporarily runs this Tide's Calling scenario instead of the normal round-flow scenario.
 
+Expected important Tide log:
+
+```text
+TCG Debug: Tide's Calling scenario start
+TCG Debug: Sent top deck card to graveyard Player=0 Card=Debug_Water_TidesCalling
+TCG Effect: Step PlaySourceToEmptyZone Success=true
+TCG Debug: Tide's Calling played from graveyard Player=0 Field=0
+TCG Effect: Step SendTopDeckCardToGraveyard Player=0 Success=true
+TCG Effect: Pending graveyard-to-deck choice submitted Player=0 Count=1
+TCG Effect: Step MoveGraveyardCardToBottomDeck Player=0 Requested=1 Mode=PlayerChoice Pending=true AutoSubmitted=true
+TCG Effect: Step result Type=MoveGraveyardCardToBottomDeck PreviousSuccess=true Success=true
+TCG Debug: Tide's Calling scenario summary SentTopDeck=true TidesOnBoard=true
+```
+
 ## Data Shape
 
 `FTCGCardEffectRef` has:
@@ -137,17 +151,30 @@ SelectionMode PlayerChoice
 
 means the resolver creates `PendingDiscardChoice` on the GameState. UI/Blueprint can read the available card instance ids through `GetPendingDiscardChoiceOptions` and complete the choice with `SubmitPendingDiscardChoice`.
 
+For `MoveGraveyardCardToBottomDeck`:
+
+```text
+SelectionMode PlayerChoice
+```
+
+means the resolver creates `PendingGraveyardToDeckChoice` on the GameState. UI/Blueprint can read the available Graveyard card instance ids through `GetPendingGraveyardToDeckChoiceOptions` and complete the choice with `SubmitPendingGraveyardToDeckChoice`.
+
 Debug test mode:
 
-`TCG_GameState_Effects.cpp` currently has `bAutoSubmitDebugDiscardChoice = true`.
+`TCG_GameState_Effects.cpp` currently has:
 
-When a discard choice is requested, debug mode automatically picks the first valid discard option and calls `SubmitPendingDiscardChoice`. This proves the request/selection/submit/move-to-graveyard path without needing UI yet.
+```cpp
+bAutoSubmitDebugDiscardChoice = true
+bAutoSubmitDebugGraveyardToDeckChoice = true
+```
 
-Turn this off when real UI choice is wired.
+When a choice is requested, debug mode automatically picks the first valid option and submits it. This proves the request/selection/submit/move path without needing UI yet.
+
+Turn these off when real UI choice is wired.
 
 Current limitation:
 
-A pending discard choice does not yet resume later chain steps after the choice is submitted. For effects ending at discard, such as `Draw 2, then choose and discard 1`, this is enough to test the player-choice path. Later chain-resume support should store the paused chain entry and next step index.
+A pending choice does not yet resume later chain steps after the choice is submitted. For effects ending at that choice, this is enough to test the player-choice path. Later chain-resume support should store the paused chain entry and next step index.
 
 ## Value Modes
 
@@ -266,6 +293,7 @@ Implemented data:
 * `FTCGCardEffectRef::bOptional`
 * `FTCGEffectChainEntry::EffectRef`
 * `FTCGPendingDiscardChoice`
+* `FTCGPendingGraveyardToDeckChoice`
 
 Implemented resolver helpers:
 
@@ -276,6 +304,8 @@ Implemented resolver helpers:
 * `DiscardCardsFromHand`
 * `BeginPendingDiscardChoice`
 * `SubmitPendingDiscardChoice`
+* `BeginPendingGraveyardToDeckChoice`
+* `SubmitPendingGraveyardToDeckChoice`
 * `MoveBottomOverlayToGraveyard`
 * `PlaySourceCardToFirstEmptyZone`
 * `SendTopDeckCardToGraveyard`
