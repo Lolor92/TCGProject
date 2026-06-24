@@ -3,7 +3,7 @@
 
 namespace
 {
-	constexpr bool bLogEffectResolution = true;
+	constexpr bool bLogEffectResolution = false;
 	constexpr bool bAutoSubmitDebugDiscardChoice = true;
 	constexpr bool bAutoSubmitDebugGraveyardToDeckChoice = true;
 	constexpr bool bAutoSubmitDebugHandToTopDeckChoice = true;
