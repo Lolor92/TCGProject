@@ -1042,10 +1042,48 @@ bool ATCG_GameState::ResolveBattlePhase()
 			continue;
 		}
 
-		const FGuid AttackerStackId = AttackerCard->StackId;
-		const FGuid DefenderStackId = DefenderCard->StackId;
-		const int32 AttackerAttack = GetFinalAttack(AttackerCard->CardInstanceId);
-		const int32 DefenderAttack = GetFinalAttack(DefenderCard->CardInstanceId);
+		const FGuid AttackerCardId = AttackerCard->CardInstanceId;
+		const FGuid DefenderCardId = DefenderCard->CardInstanceId;
+
+		TArray<FTCGEffectChainEntry> AttackChain;
+		TArray<FTCGCardEffectRef> AttackEffectRefs;
+		GetPrintedEffectRefsForCard(*AttackerCard, AttackEffectRefs);
+
+		for (const FTCGCardEffectRef& EffectRef : AttackEffectRefs)
+		{
+			if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnAttack))
+			{
+				AddCardEffectRefToChain(AttackChain, AttackerCardId, DefenderCardId, EffectRef);
+			}
+		}
+
+		const bool bAttackChainResolved = ResolveEffectChain(AttackChain);
+
+		const FTCGCardInstance* AttackerAfterAttackEffects = FindCardInstance(AttackerCardId);
+		const FTCGCardInstance* DefenderAfterAttackEffects = FindCardInstance(DefenderCardId);
+
+		if (!AttackerAfterAttackEffects
+			|| AttackerAfterAttackEffects->Location != ETCGCardLocation::Board
+			|| !DefenderAfterAttackEffects
+			|| DefenderAfterAttackEffects->Location != ETCGCardLocation::Board)
+		{
+			if (bLogBattleFlow)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("TCG Debug: Battle damage skipped Field=%d Attacker=P%d OnAttackResolved=%s Reason=UnitLeftBoard"),
+					FieldIndex,
+					AttackerPlayerIndex,
+					bAttackChainResolved ? TEXT("true") : TEXT("false"));
+			}
+
+			bResolvedAnyBattle = true;
+			continue;
+		}
+
+		const FGuid AttackerStackId = AttackerAfterAttackEffects->StackId;
+		const FGuid DefenderStackId = DefenderAfterAttackEffects->StackId;
+		const int32 AttackerAttack = GetFinalAttack(AttackerCardId);
+		const int32 DefenderAttack = GetFinalAttack(DefenderCardId);
 
 		if (AttackerAttack > DefenderAttack)
 		{
