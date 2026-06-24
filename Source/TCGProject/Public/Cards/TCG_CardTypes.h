@@ -29,47 +29,55 @@ UENUM(BlueprintType)
 enum class ETCGEffectTrigger : uint8
 {
 	None                      UMETA(DisplayName = "None"),
-	OnPlay                    UMETA(DisplayName = "On Play"),
-	OnDestroyed               UMETA(DisplayName = "On Destroyed"),
-	OnSentToGraveyard         UMETA(DisplayName = "On Sent To Graveyard"),
-	OnSentFromDeckToGraveyard     UMETA(DisplayName = "On Sent From Deck To Graveyard"),
-	OnSentFromHandToGraveyard     UMETA(DisplayName = "On Sent From Hand To Graveyard"),
-	OnSentFromBoardToGraveyard    UMETA(DisplayName = "On Sent From Board To Graveyard"),
-	OnSentFromMaterialToGraveyard UMETA(DisplayName = "On Sent From Material To Graveyard"),
-	OnBanished                UMETA(DisplayName = "On Banished"),
-	OnBattleStart             UMETA(DisplayName = "On Battle Start"),
-	OnBattleEnd               UMETA(DisplayName = "On Battle End"),
-	OnStackAdded              UMETA(DisplayName = "On Stack Added"),
-	OnBecomingTopCard         UMETA(DisplayName = "On Becoming Top Card"),
-	OnAttack                  UMETA(DisplayName = "On Attack"),
-	OnCardSentToYourGraveyard UMETA(DisplayName = "On Card Sent To Your Graveyard"),
-	OnDestroyedUnitByBattle   UMETA(DisplayName = "On Destroyed Unit By Battle"),
-	OnDestroyedByBattle       UMETA(DisplayName = "On Destroyed By Battle")
+	OnPlay                    UMETA(DisplayName = "01 - On Play"),
+	OnDestroyed               UMETA(DisplayName = "02 - On Destroyed"),
+	OnSentToGraveyard         UMETA(DisplayName = "03 - On Sent To Graveyard"),
+	OnSentFromDeckToGraveyard     UMETA(DisplayName = "04 - On Sent From Deck To Graveyard"),
+	OnSentFromHandToGraveyard     UMETA(DisplayName = "05 - On Sent From Hand To Graveyard"),
+	OnSentFromBoardToGraveyard    UMETA(DisplayName = "06 - On Sent From Board To Graveyard"),
+	OnSentFromMaterialToGraveyard UMETA(DisplayName = "07 - On Sent From Material To Graveyard"),
+	OnCardSentToYourGraveyard UMETA(DisplayName = "08 - On Card Sent To Your Graveyard"),
+	OnBanished                UMETA(DisplayName = "09 - On Banished"),
+	OnBattleStart             UMETA(DisplayName = "10 - On Battle Start"),
+	OnBattleEnd               UMETA(DisplayName = "11 - On Battle End"),
+	OnAttack                  UMETA(DisplayName = "12 - On Attack"),
+	OnDestroyedUnitByBattle   UMETA(DisplayName = "13 - On Destroyed Unit By Battle"),
+	OnDestroyedByBattle       UMETA(DisplayName = "14 - On Destroyed By Battle"),
+	OnStackAdded              UMETA(DisplayName = "20 - On Stack Added"),
+	OnBecomingTopCard         UMETA(DisplayName = "21 - On Becoming Top Card")
 };
 
 UENUM(BlueprintType)
 enum class ETCGEffectStepType : uint8
 {
 	None                                UMETA(DisplayName = "None"),
-	Then                                UMETA(DisplayName = "Then"),
-	DrawCards                           UMETA(DisplayName = "Draw Cards"),
-	DiscardCards                        UMETA(DisplayName = "Discard Cards"),
-	ModifyAttack                        UMETA(DisplayName = "Modify Attack"),
-	SelectTarget                        UMETA(DisplayName = "Select Target"),
-	MoveBottomOverlayToGraveyard        UMETA(DisplayName = "Move Bottom Overlay To Graveyard"),
-	PlaySourceToEmptyZone               UMETA(DisplayName = "Play Source To Empty Zone"),
-	SendTopDeckCardToGraveyard          UMETA(DisplayName = "Send Top Deck Card To Graveyard"),
-	MoveGraveyardCardToBottomDeck       UMETA(DisplayName = "Move Graveyard Card To Bottom Deck"),
-	AttachSourceToWaterUnitMaterial     UMETA(DisplayName = "Attach Source To Water Unit Material Legacy"),
-	AttachSourceToUnitMaterial          UMETA(DisplayName = "Attach Source To Unit Material"),
-	MoveHandCardToTopDeck               UMETA(DisplayName = "Move Hand Card To Top Deck"),
-	AttachGraveyardCardToSourceMaterial UMETA(DisplayName = "Attach Graveyard Card To Source Material"),
-	SendTopDeckCardsToGraveyard         UMETA(DisplayName = "Send Top Deck Cards To Graveyard"),
-	BoostAllOwnUnitsThisRound           UMETA(DisplayName = "Boost All Own Units This Round"),
-	RevealTopDeckCardsAddElementToHand  UMETA(DisplayName = "Reveal Top Deck Cards Add Element To Hand"),
-	PlayGraveyardCardToEmptyZone        UMETA(DisplayName = "Play Graveyard Card To Empty Zone"),
-	MoveGraveyardCardsToHandAndTopDeck  UMETA(DisplayName = "Move Graveyard Cards To Hand And Top Deck"),
-	RemoveMaterialFromTargetUnit        UMETA(DisplayName = "Remove Material From Target Unit")
+	Then                                UMETA(DisplayName = "00 - Then / Divider"),
+
+	DrawCards                           UMETA(DisplayName = "10 - Draw Cards"),
+	DiscardCards                        UMETA(DisplayName = "11 - Discard Cards"),
+	ModifyAttack                        UMETA(DisplayName = "12 - Modify Attack"),
+	BoostAllOwnUnitsThisRound           UMETA(DisplayName = "13 - Boost Own Units This Round"),
+
+	SendTopDeckCardToGraveyard          UMETA(DisplayName = "20 - Send Top Deck Card To Graveyard"),
+	SendTopDeckCardsToGraveyard         UMETA(DisplayName = "21 - Send Top Deck Cards To Graveyard"),
+	RevealTopDeckCardsAddElementToHand  UMETA(DisplayName = "22 - Reveal Top Deck Cards, Add Element To Hand"),
+	MoveHandCardToTopDeck               UMETA(DisplayName = "23 - Move Hand Card To Top Deck"),
+
+	MoveGraveyardCardToHand             UMETA(DisplayName = "30 - Move Graveyard Card To Hand"),
+	MoveGraveyardCardToTopDeck          UMETA(DisplayName = "31 - Move Graveyard Card To Top Deck"),
+	MoveGraveyardCardToBottomDeck       UMETA(DisplayName = "32 - Move Graveyard Card To Bottom Deck"),
+	PlayGraveyardCardToEmptyZone        UMETA(DisplayName = "33 - Play Graveyard Card To Empty Zone"),
+
+	PlaySourceToEmptyZone               UMETA(DisplayName = "40 - Play Source To Empty Zone"),
+	AttachSourceToUnitMaterial          UMETA(DisplayName = "41 - Attach Source To Unit Material"),
+	AttachGraveyardCardToSourceMaterial UMETA(DisplayName = "42 - Attach Graveyard Card To Source Material"),
+	RemoveMaterialFromTargetUnit        UMETA(DisplayName = "43 - Remove Material From Target Unit"),
+	MoveBottomOverlayToGraveyard        UMETA(DisplayName = "44 - Move Bottom Material To Graveyard"),
+
+	SelectTarget                        UMETA(DisplayName = "90 - Check Target Exists"),
+
+	AttachSourceToWaterUnitMaterial     UMETA(DisplayName = "Deprecated - Attach Source To Water Unit Material", Hidden),
+	MoveGraveyardCardsToHandAndTopDeck  UMETA(DisplayName = "Deprecated - Move Graveyard Cards To Hand And Top Deck", Hidden)
 };
 
 UENUM(BlueprintType)
@@ -105,12 +113,23 @@ struct FTCGEffectTargetFilter
 {
 	GENERATED_BODY()
 public:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") ETCGEffectTargetMode OwnerMode = ETCGEffectTargetMode::Controller;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") ETCGCardLocation RequiredLocation = ETCGCardLocation::Board;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") bool bRequireTopCard = true;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") bool bRequireElement = false;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect", meta = (EditCondition = "bRequireElement")) ETCGCardElement RequiredElement = ETCGCardElement::Water;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") bool bExcludeSourceCard = false;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
+	ETCGEffectTargetMode OwnerMode = ETCGEffectTargetMode::Controller;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
+	ETCGCardLocation RequiredLocation = ETCGCardLocation::Board;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter", meta = (EditCondition = "RequiredLocation == ETCGCardLocation::Board", EditConditionHides))
+	bool bRequireTopCard = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
+	bool bRequireElement = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter", meta = (EditCondition = "bRequireElement", EditConditionHides))
+	ETCGCardElement RequiredElement = ETCGCardElement::Water;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
+	bool bExcludeSourceCard = false;
 };
 
 USTRUCT(BlueprintType)
@@ -118,13 +137,26 @@ struct FTCGEffectStep
 {
 	GENERATED_BODY()
 public:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") ETCGEffectStepType StepType = ETCGEffectStepType::None;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") ETCGEffectTargetMode TargetMode = ETCGEffectTargetMode::None;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") int32 Value = 0;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") ETCGEffectValueMode ValueMode = ETCGEffectValueMode::Fixed;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") ETCGEffectSelectionMode SelectionMode = ETCGEffectSelectionMode::Automatic;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") bool bRequiresPreviousStepSuccess = false;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") FTCGEffectTargetFilter TargetFilter;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "1. Step")
+	ETCGEffectStepType StepType = ETCGEffectStepType::None;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "2. Target", meta = (EditCondition = "StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::MoveBottomOverlayToGraveyard || StepType == ETCGEffectStepType::RemoveMaterialFromTargetUnit || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial", EditConditionHides))
+	ETCGEffectTargetMode TargetMode = ETCGEffectTargetMode::None;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "3. Value", meta = (EditCondition = "StepType == ETCGEffectStepType::DrawCards || StepType == ETCGEffectStepType::DiscardCards || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::SendTopDeckCardsToGraveyard || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToBottomDeck || StepType == ETCGEffectStepType::MoveHandCardToTopDeck || StepType == ETCGEffectStepType::BoostAllOwnUnitsThisRound", EditConditionHides))
+	int32 Value = 0;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "3. Value", meta = (EditCondition = "StepType == ETCGEffectStepType::ModifyAttack", EditConditionHides))
+	ETCGEffectValueMode ValueMode = ETCGEffectValueMode::Fixed;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "4. Choice", meta = (EditCondition = "StepType != ETCGEffectStepType::None && StepType != ETCGEffectStepType::Then && StepType != ETCGEffectStepType::ModifyAttack && StepType != ETCGEffectStepType::SendTopDeckCardToGraveyard && StepType != ETCGEffectStepType::SendTopDeckCardsToGraveyard && StepType != ETCGEffectStepType::BoostAllOwnUnitsThisRound", EditConditionHides))
+	ETCGEffectSelectionMode SelectionMode = ETCGEffectSelectionMode::Automatic;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "5. Chain")
+	bool bRequiresPreviousStepSuccess = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "6. Filter", meta = (EditCondition = "StepType == ETCGEffectStepType::SelectTarget || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToTopDeck || StepType == ETCGEffectStepType::PlayGraveyardCardToEmptyZone || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial", EditConditionHides))
+	FTCGEffectTargetFilter TargetFilter;
 };
 
 USTRUCT(BlueprintType)
@@ -132,10 +164,17 @@ struct FTCGCardEffectRef
 {
 	GENERATED_BODY()
 public:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") ETCGEffectTrigger Trigger = ETCGEffectTrigger::None;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") FName EffectId = NAME_None;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") TArray<FTCGEffectStep> Steps;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Effect") bool bOptional = false;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "1. Trigger")
+	ETCGEffectTrigger Trigger = ETCGEffectTrigger::None;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "2. Legacy", meta = (EditCondition = "Steps.Num() == 0", EditConditionHides))
+	FName EffectId = NAME_None;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "3. Steps")
+	TArray<FTCGEffectStep> Steps;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "4. Timing")
+	bool bOptional = false;
 };
 
 USTRUCT(BlueprintType)
