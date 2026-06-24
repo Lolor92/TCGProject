@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Cards/TCG_CardTypes.h"
@@ -10,10 +10,10 @@ UENUM(BlueprintType)
 enum class ETCGMatchPhase : uint8
 {
 	WaitingForPlayers UMETA(DisplayName = "Waiting For Players"),
-	Draw UMETA(DisplayName = "Draw"),
-	Main UMETA(DisplayName = "Main"),
+	RoundStart UMETA(DisplayName = "Round Start"),
+	Placement UMETA(DisplayName = "Placement"),
 	Battle UMETA(DisplayName = "Battle"),
-	End UMETA(DisplayName = "End"),
+	RoundEnd UMETA(DisplayName = "Round End"),
 	GameOver UMETA(DisplayName = "Game Over")
 };
 
@@ -70,8 +70,7 @@ public:
  * GameState exists on the server and all clients.
  *
  * It stores shared match state:
- * - turn
- * - phase
+ * - round / phase / placement step
  * - active player
  * - card instances
  */
@@ -86,9 +85,18 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 public:
-	// Starts at 1 when the match begins.
+	// Legacy debug counter kept for now while the code moves from turns to rounds.
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
 	int32 TurnNumber = 0;
+
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
+	int32 RoundNumber = 0;
+
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
+	int32 PlacementStepIndex = 0;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Rules")
+	int32 PlacementStepsPerPlayer = 4;
 
 	// Which player is currently taking actions.
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "TCG|Match")
@@ -109,7 +117,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "TCG|Debug")
 	TArray<TObjectPtr<UTCG_CardDefinition>> DebugCardDefinitions;
 	
-	static constexpr int32 FieldZoneCount = 3;
+	static constexpr int32 FieldZoneCount = 4;
 
 	static FName GetFieldZoneId(int32 PlayerIndex, int32 FieldIndex);
 
@@ -120,6 +128,15 @@ public:
 	void EndMatch(ETCGMatchResult FinalResult);
 	bool IsMatchOver() const;
 	void SetCurrentTurnPlayer(int32 NewPlayerIndex);
+
+	int32 GetPlacementStepPlayer() const;
+	int32 GetMaxPlacementStepCount() const;
+	bool IsPlacementPhaseComplete() const;
+	bool CanPlayerActInPlacementStep(int32 PlayerIndex) const;
+	int32 GetCompletedPlacementStepsForPlayer(int32 PlayerIndex) const;
+	int32 GetNextRequiredFieldZoneIndex(int32 PlayerIndex) const;
+	bool CanPlayerPlaceInFieldZone(int32 PlayerIndex, int32 FieldIndex) const;
+	bool AdvancePlacementStep();
 
 public:
 	// Creates a new card instance and adds it to the match.
