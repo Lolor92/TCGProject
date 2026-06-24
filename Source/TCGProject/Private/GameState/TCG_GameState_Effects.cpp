@@ -9,6 +9,7 @@ namespace
 	constexpr bool bAutoSubmitDebugPlayToEmptyZoneChoice = true;
 	constexpr bool bAutoSubmitDebugAttachSourceToUnitChoice = true;
 	constexpr bool bAutoSubmitDebugPlayGraveyardCardToEmptyZoneChoice = true;
+	constexpr bool bAutoSubmitDebugDestroyedRecoveryChoice = true;
 
 	const FName LegacyDebugEffect_Draw1 = "Debug_Draw1";
 	const FName LegacyDebugEffect_GainAttackForCardsUnderneath = "Debug_GainAttackForCardsUnderneath";
@@ -35,6 +36,8 @@ namespace
 		case ETCGEffectStepType::BoostAllOwnUnitsThisRound: return TEXT("BoostAllOwnUnitsThisRound");
 		case ETCGEffectStepType::RevealTopDeckCardsAddElementToHand: return TEXT("RevealTopDeckCardsAddElementToHand");
 		case ETCGEffectStepType::PlayGraveyardCardToEmptyZone: return TEXT("PlayGraveyardCardToEmptyZone");
+		case ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck: return TEXT("MoveGraveyardCardsToHandAndTopDeck");
+		case ETCGEffectStepType::RemoveMaterialFromTargetUnit: return TEXT("RemoveMaterialFromTargetUnit");
 		default: return TEXT("None");
 		}
 	}
@@ -125,17 +128,16 @@ bool ATCG_GameState::AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain
 	NewEntry.EffectRef = ResolvedEffectRef;
 	NewEntry.ControllerPlayerIndex = SourceCard->OwnerPlayerIndex;
 	ApplyDebugEffectChainEntryRequirements(NewEntry);
+	if (NewEntry.Trigger == ETCGEffectTrigger::OnDestroyed)
+	{
+		NewEntry.bRequiresSourceOnBoard = false;
+		NewEntry.bRequiresTargetOnBoard = true;
+	}
 	Chain.Add(NewEntry);
 
 	if (bLogEffectResolution)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Chain add %d Source=%s EffectId=%s Steps=%d Optional=%s ConvertedLegacy=%s"),
-			NewEntry.ChainIndex,
-			*NewEntry.SourceCardDefinitionId.ToString(),
-			NewEntry.EffectId.IsNone() ? TEXT("None") : *NewEntry.EffectId.ToString(),
-			NewEntry.EffectRef.Steps.Num(),
-			NewEntry.EffectRef.bOptional ? TEXT("true") : TEXT("false"),
-			bConvertedLegacyEffect ? TEXT("true") : TEXT("false"));
+		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Chain add %d Source=%s EffectId=%s Steps=%d Optional=%s ConvertedLegacy=%s"), NewEntry.ChainIndex, *NewEntry.SourceCardDefinitionId.ToString(), NewEntry.EffectId.IsNone() ? TEXT("None") : *NewEntry.EffectId.ToString(), NewEntry.EffectRef.Steps.Num(), NewEntry.EffectRef.bOptional ? TEXT("true") : TEXT("false"), bConvertedLegacyEffect ? TEXT("true") : TEXT("false"));
 	}
 	return true;
 }
@@ -153,11 +155,9 @@ bool ATCG_GameState::ResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEn
 bool ATCG_GameState::ResolveModularEffectChainEntry(const FTCGEffectChainEntry& ChainEntry)
 {
 	if (ChainEntry.EffectRef.Steps.Num() <= 0) return false;
-
 	bool bResolvedAnyStep = false;
 	bool bPreviousMeaningfulStepSucceeded = true;
 	if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Resolve modular chain %d Source=%s Steps=%d"), ChainEntry.ChainIndex, *ChainEntry.SourceCardDefinitionId.ToString(), ChainEntry.EffectRef.Steps.Num());
-
 	for (const FTCGEffectStep& Step : ChainEntry.EffectRef.Steps)
 	{
 		if (Step.StepType == ETCGEffectStepType::None) continue;
@@ -172,7 +172,6 @@ bool ATCG_GameState::ResolveModularEffectChainEntry(const FTCGEffectChainEntry& 
 			bPreviousMeaningfulStepSucceeded = false;
 			continue;
 		}
-
 		const bool bStepSucceeded = ResolveEffectStep(ChainEntry, Step, bPreviousMeaningfulStepSucceeded);
 		bPreviousMeaningfulStepSucceeded = bStepSucceeded;
 		bResolvedAnyStep |= bStepSucceeded;
@@ -183,7 +182,6 @@ bool ATCG_GameState::ResolveModularEffectChainEntry(const FTCGEffectChainEntry& 
 bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step, bool bPreviousStepSucceeded)
 {
 	bool bStepSucceeded = false;
-
 	switch (Step.StepType)
 	{
 	case ETCGEffectStepType::DrawCards:
@@ -223,13 +221,11 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		FGuid TargetCardInstanceId;
 		if (Step.TargetMode == ETCGEffectTargetMode::SourceCard || Step.TargetMode == ETCGEffectTargetMode::None) TargetCardInstanceId = ChainEntry.SourceCardInstanceId;
 		else if (Step.TargetMode == ETCGEffectTargetMode::TriggerTarget) TargetCardInstanceId = ChainEntry.TargetCardInstanceId;
-
 		int32 AttackDelta = Step.Value;
 		if (Step.ValueMode == ETCGEffectValueMode::CardsUnderneathSource) AttackDelta = GetCardsUnderneathCount(ChainEntry.SourceCardInstanceId);
 		else if (Step.ValueMode == ETCGEffectValueMode::CardsUnderneathTarget) AttackDelta = GetCardsUnderneathCount(ChainEntry.TargetCardInstanceId);
 		else if (Step.ValueMode == ETCGEffectValueMode::WaterCardsInControllerGraveyard) AttackDelta = CountCardsInLocationByElement(ChainEntry.ControllerPlayerIndex, ETCGCardLocation::Graveyard, ETCGCardElement::Water);
 		else if (Step.ValueMode == ETCGEffectValueMode::ElementCardsInControllerGraveyard) AttackDelta = CountCardsInLocationByElement(ChainEntry.ControllerPlayerIndex, ETCGCardLocation::Graveyard, Step.TargetFilter.RequiredElement);
-
 		FTCGCardInstance* TargetCard = FindCardInstance(TargetCardInstanceId);
 		if (TargetCard && TargetCard->Location == ETCGCardLocation::Board)
 		{
@@ -297,7 +293,6 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		bool bAutoSubmittedChoice = false;
 		FGuid DebugChosenCardId;
 		FName DebugChosenZoneId = NAME_None;
-
 		if (bChoiceStarted && bAutoSubmitDebugPlayGraveyardCardToEmptyZoneChoice)
 		{
 			TArray<FGuid> CardOptions;
@@ -311,8 +306,42 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 				bAutoSubmittedChoice = SubmitPendingPlayGraveyardCardToEmptyZoneChoice(ChainEntry.ControllerPlayerIndex, DebugChosenCardId, DebugChosenZoneId);
 			}
 		}
-
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step PlayGraveyardCardToEmptyZone Player=%d Pending=%s AutoSubmitted=%s Zone=%s"), ChainEntry.ControllerPlayerIndex, bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"), DebugChosenZoneId.IsNone() ? TEXT("None") : *DebugChosenZoneId.ToString());
+		bStepSucceeded = bAutoSubmittedChoice;
+		break;
+	}
+	case ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck:
+	{
+		const bool bChoiceStarted = BeginPendingGraveyardCardsToHandAndTopDeckChoice(ChainEntry.ControllerPlayerIndex, Step.TargetFilter, ChainEntry);
+		bool bAutoSubmittedChoice = false;
+		if (bChoiceStarted && bAutoSubmitDebugDestroyedRecoveryChoice)
+		{
+			TArray<FGuid> ChoiceOptions;
+			GetPendingGraveyardCardsToHandAndTopDeckOptions(ChoiceOptions);
+			if (ChoiceOptions.Num() >= 2)
+			{
+				bAutoSubmittedChoice = SubmitPendingGraveyardCardsToHandAndTopDeckChoice(ChainEntry.ControllerPlayerIndex, ChoiceOptions[0], ChoiceOptions[1]);
+			}
+		}
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveGraveyardCardsToHandAndTopDeck Player=%d Pending=%s AutoSubmitted=%s"), ChainEntry.ControllerPlayerIndex, bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
+		bStepSucceeded = bAutoSubmittedChoice;
+		break;
+	}
+	case ETCGEffectStepType::RemoveMaterialFromTargetUnit:
+	{
+		const FGuid TargetCardInstanceId = Step.TargetMode == ETCGEffectTargetMode::SourceCard ? ChainEntry.SourceCardInstanceId : ChainEntry.TargetCardInstanceId;
+		const bool bChoiceStarted = BeginPendingRemoveMaterialChoice(ChainEntry.ControllerPlayerIndex, TargetCardInstanceId, ChainEntry);
+		bool bAutoSubmittedChoice = false;
+		if (bChoiceStarted && bAutoSubmitDebugDestroyedRecoveryChoice)
+		{
+			TArray<FGuid> ChoiceOptions;
+			GetPendingRemoveMaterialChoiceOptions(ChoiceOptions);
+			if (ChoiceOptions.Num() > 0)
+			{
+				bAutoSubmittedChoice = SubmitPendingRemoveMaterialChoice(ChainEntry.ControllerPlayerIndex, ChoiceOptions[0]);
+			}
+		}
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step RemoveMaterialFromTargetUnit Player=%d Pending=%s AutoSubmitted=%s"), ChainEntry.ControllerPlayerIndex, bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
 		bStepSucceeded = bAutoSubmittedChoice;
 		break;
 	}
@@ -428,262 +457,9 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 	default:
 		break;
 	}
-
 	if (bLogEffectResolution && Step.StepType != ETCGEffectStepType::None)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step result Type=%s PreviousSuccess=%s Success=%s"), GetTCGEffectStepDebugName(Step.StepType), bPreviousStepSucceeded ? TEXT("true") : TEXT("false"), bStepSucceeded ? TEXT("true") : TEXT("false"));
 	}
 	return bStepSucceeded;
 }
-
-bool ATCG_GameState::BeginPendingDiscardChoice(int32 PlayerIndex, int32 Count, const FTCGEffectChainEntry& ChainEntry)
-{
-	if (!IsValidPlayerIndex(PlayerIndex) || Count <= 0 || PendingDiscardChoice.bIsPending) return false;
-	TArray<FTCGCardInstance> HandCards;
-	GetCardsInHand(PlayerIndex, HandCards);
-	if (HandCards.Num() < Count) return false;
-	PendingDiscardChoice.Reset();
-	PendingDiscardChoice.bIsPending = true;
-	PendingDiscardChoice.PlayerIndex = PlayerIndex;
-	PendingDiscardChoice.RequiredCount = Count;
-	PendingDiscardChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
-	PendingDiscardChoice.ChainIndex = ChainEntry.ChainIndex;
-	for (const FTCGCardInstance& Card : HandCards) PendingDiscardChoice.EligibleCardInstanceIds.Add(Card.CardInstanceId);
-	return PendingDiscardChoice.EligibleCardInstanceIds.Num() >= Count;
-}
-
-bool ATCG_GameState::SubmitPendingDiscardChoice(int32 PlayerIndex, const TArray<FGuid>& ChosenCardInstanceIds)
-{
-	if (!PendingDiscardChoice.bIsPending || PendingDiscardChoice.PlayerIndex != PlayerIndex) return false;
-	if (ChosenCardInstanceIds.Num() != PendingDiscardChoice.RequiredCount) return false;
-	TSet<FGuid> UniqueChosenIds;
-	for (const FGuid& ChosenId : ChosenCardInstanceIds)
-	{
-		if (!ChosenId.IsValid() || UniqueChosenIds.Contains(ChosenId)) return false;
-		if (!PendingDiscardChoice.EligibleCardInstanceIds.Contains(ChosenId)) return false;
-		const FTCGCardInstance* Card = FindCardInstance(ChosenId);
-		if (!Card || Card->OwnerPlayerIndex != PlayerIndex || Card->Location != ETCGCardLocation::Hand) return false;
-		UniqueChosenIds.Add(ChosenId);
-	}
-	for (const FGuid& ChosenId : ChosenCardInstanceIds) MoveCardToLocation(ChosenId, ETCGCardLocation::Graveyard);
-	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending discard choice submitted Player=%d Count=%d"), PlayerIndex, ChosenCardInstanceIds.Num());
-	ClearPendingDiscardChoice();
-	return true;
-}
-
-bool ATCG_GameState::HasPendingDiscardChoice() const { return PendingDiscardChoice.bIsPending; }
-void ATCG_GameState::GetPendingDiscardChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingDiscardChoice.EligibleCardInstanceIds; }
-void ATCG_GameState::ClearPendingDiscardChoice() { PendingDiscardChoice.Reset(); }
-
-bool ATCG_GameState::BeginPendingGraveyardToDeckChoice(int32 PlayerIndex, int32 Count, const FTCGEffectChainEntry& ChainEntry)
-{
-	if (!IsValidPlayerIndex(PlayerIndex) || Count <= 0 || PendingGraveyardToDeckChoice.bIsPending) return false;
-	TArray<FTCGCardInstance> GraveyardCards;
-	GetCardsInLocation(PlayerIndex, ETCGCardLocation::Graveyard, GraveyardCards);
-	if (GraveyardCards.Num() < Count) return false;
-	GraveyardCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B){ return A.LocationIndex < B.LocationIndex; });
-	PendingGraveyardToDeckChoice.Reset();
-	PendingGraveyardToDeckChoice.bIsPending = true;
-	PendingGraveyardToDeckChoice.PlayerIndex = PlayerIndex;
-	PendingGraveyardToDeckChoice.RequiredCount = Count;
-	PendingGraveyardToDeckChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
-	PendingGraveyardToDeckChoice.ChainIndex = ChainEntry.ChainIndex;
-	for (const FTCGCardInstance& Card : GraveyardCards) PendingGraveyardToDeckChoice.EligibleCardInstanceIds.Add(Card.CardInstanceId);
-	return PendingGraveyardToDeckChoice.EligibleCardInstanceIds.Num() >= Count;
-}
-
-bool ATCG_GameState::SubmitPendingGraveyardToDeckChoice(int32 PlayerIndex, const TArray<FGuid>& ChosenCardInstanceIds)
-{
-	if (!PendingGraveyardToDeckChoice.bIsPending || PendingGraveyardToDeckChoice.PlayerIndex != PlayerIndex) return false;
-	if (ChosenCardInstanceIds.Num() != PendingGraveyardToDeckChoice.RequiredCount) return false;
-	TSet<FGuid> UniqueChosenIds;
-	for (const FGuid& ChosenId : ChosenCardInstanceIds)
-	{
-		if (!ChosenId.IsValid() || UniqueChosenIds.Contains(ChosenId)) return false;
-		if (!PendingGraveyardToDeckChoice.EligibleCardInstanceIds.Contains(ChosenId)) return false;
-		const FTCGCardInstance* Card = FindCardInstance(ChosenId);
-		if (!Card || Card->OwnerPlayerIndex != PlayerIndex || Card->Location != ETCGCardLocation::Graveyard) return false;
-		UniqueChosenIds.Add(ChosenId);
-	}
-	for (const FGuid& ChosenId : ChosenCardInstanceIds) MoveCardToBottomOfDeck(ChosenId);
-	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending graveyard-to-deck choice submitted Player=%d Count=%d"), PlayerIndex, ChosenCardInstanceIds.Num());
-	ClearPendingGraveyardToDeckChoice();
-	return true;
-}
-
-bool ATCG_GameState::HasPendingGraveyardToDeckChoice() const { return PendingGraveyardToDeckChoice.bIsPending; }
-void ATCG_GameState::GetPendingGraveyardToDeckChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingGraveyardToDeckChoice.EligibleCardInstanceIds; }
-void ATCG_GameState::ClearPendingGraveyardToDeckChoice() { PendingGraveyardToDeckChoice.Reset(); }
-
-bool ATCG_GameState::BeginPendingHandToTopDeckChoice(int32 PlayerIndex, int32 Count, const FTCGEffectChainEntry& ChainEntry)
-{
-	if (!IsValidPlayerIndex(PlayerIndex) || Count <= 0 || PendingHandToTopDeckChoice.bIsPending) return false;
-	TArray<FTCGCardInstance> HandCards;
-	GetCardsInHand(PlayerIndex, HandCards);
-	if (HandCards.Num() < Count) return false;
-	PendingHandToTopDeckChoice.Reset();
-	PendingHandToTopDeckChoice.bIsPending = true;
-	PendingHandToTopDeckChoice.PlayerIndex = PlayerIndex;
-	PendingHandToTopDeckChoice.RequiredCount = Count;
-	PendingHandToTopDeckChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
-	PendingHandToTopDeckChoice.ChainIndex = ChainEntry.ChainIndex;
-	for (const FTCGCardInstance& Card : HandCards) PendingHandToTopDeckChoice.EligibleCardInstanceIds.Add(Card.CardInstanceId);
-	return PendingHandToTopDeckChoice.EligibleCardInstanceIds.Num() >= Count;
-}
-
-bool ATCG_GameState::SubmitPendingHandToTopDeckChoice(int32 PlayerIndex, const TArray<FGuid>& ChosenCardInstanceIds)
-{
-	if (!PendingHandToTopDeckChoice.bIsPending || PendingHandToTopDeckChoice.PlayerIndex != PlayerIndex) return false;
-	if (ChosenCardInstanceIds.Num() != PendingHandToTopDeckChoice.RequiredCount) return false;
-	TSet<FGuid> UniqueChosenIds;
-	for (const FGuid& ChosenId : ChosenCardInstanceIds)
-	{
-		if (!ChosenId.IsValid() || UniqueChosenIds.Contains(ChosenId)) return false;
-		if (!PendingHandToTopDeckChoice.EligibleCardInstanceIds.Contains(ChosenId)) return false;
-		const FTCGCardInstance* Card = FindCardInstance(ChosenId);
-		if (!Card || Card->OwnerPlayerIndex != PlayerIndex || Card->Location != ETCGCardLocation::Hand) return false;
-		UniqueChosenIds.Add(ChosenId);
-	}
-	for (const FGuid& ChosenId : ChosenCardInstanceIds) MoveCardToTopOfDeck(ChosenId);
-	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending hand-to-top-deck choice submitted Player=%d Count=%d"), PlayerIndex, ChosenCardInstanceIds.Num());
-	ClearPendingHandToTopDeckChoice();
-	return true;
-}
-
-bool ATCG_GameState::HasPendingHandToTopDeckChoice() const { return PendingHandToTopDeckChoice.bIsPending; }
-void ATCG_GameState::GetPendingHandToTopDeckChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingHandToTopDeckChoice.EligibleCardInstanceIds; }
-void ATCG_GameState::ClearPendingHandToTopDeckChoice() { PendingHandToTopDeckChoice.Reset(); }
-
-bool ATCG_GameState::BeginPendingPlayToEmptyZoneChoice(int32 PlayerIndex, const FTCGEffectChainEntry& ChainEntry)
-{
-	if (!IsValidPlayerIndex(PlayerIndex) || PendingPlayToEmptyZoneChoice.bIsPending) return false;
-	const FTCGCardInstance* SourceCard = FindCardInstance(ChainEntry.SourceCardInstanceId);
-	if (!SourceCard) return false;
-	PendingPlayToEmptyZoneChoice.Reset();
-	PendingPlayToEmptyZoneChoice.bIsPending = true;
-	PendingPlayToEmptyZoneChoice.PlayerIndex = PlayerIndex;
-	PendingPlayToEmptyZoneChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
-	PendingPlayToEmptyZoneChoice.ChainIndex = ChainEntry.ChainIndex;
-	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
-	{
-		const FName ZoneId = GetFieldZoneId(PlayerIndex, FieldIndex);
-		FGuid ExistingStackId;
-		if (!FindStackIdInZone(ZoneId, ExistingStackId)) PendingPlayToEmptyZoneChoice.EligibleZoneIds.Add(ZoneId);
-	}
-	return PendingPlayToEmptyZoneChoice.EligibleZoneIds.Num() > 0;
-}
-
-bool ATCG_GameState::SubmitPendingPlayToEmptyZoneChoice(int32 PlayerIndex, FName ChosenZoneId)
-{
-	if (!PendingPlayToEmptyZoneChoice.bIsPending || PendingPlayToEmptyZoneChoice.PlayerIndex != PlayerIndex) return false;
-	if (ChosenZoneId.IsNone() || !PendingPlayToEmptyZoneChoice.EligibleZoneIds.Contains(ChosenZoneId)) return false;
-	const FGuid SourceCardId = PendingPlayToEmptyZoneChoice.SourceCardInstanceId;
-	const bool bPlayed = PlaySourceCardToEmptyZone(SourceCardId, ChosenZoneId);
-	if (!bPlayed) return false;
-	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending play-to-empty-zone choice submitted Player=%d Zone=%s"), PlayerIndex, *ChosenZoneId.ToString());
-	ClearPendingPlayToEmptyZoneChoice();
-	return true;
-}
-
-bool ATCG_GameState::HasPendingPlayToEmptyZoneChoice() const { return PendingPlayToEmptyZoneChoice.bIsPending; }
-void ATCG_GameState::GetPendingPlayToEmptyZoneChoiceOptions(TArray<FName>& OutZoneIds) const { OutZoneIds = PendingPlayToEmptyZoneChoice.EligibleZoneIds; }
-void ATCG_GameState::ClearPendingPlayToEmptyZoneChoice() { PendingPlayToEmptyZoneChoice.Reset(); }
-
-bool ATCG_GameState::BeginPendingAttachSourceToWaterUnitChoice(int32 PlayerIndex, const FTCGEffectChainEntry& ChainEntry)
-{
-	if (!IsValidPlayerIndex(PlayerIndex) || PendingAttachSourceToWaterUnitChoice.bIsPending) return false;
-	const FTCGCardInstance* SourceCard = FindCardInstance(ChainEntry.SourceCardInstanceId);
-	if (!SourceCard) return false;
-	PendingAttachSourceToWaterUnitChoice.Reset();
-	PendingAttachSourceToWaterUnitChoice.bIsPending = true;
-	PendingAttachSourceToWaterUnitChoice.PlayerIndex = PlayerIndex;
-	PendingAttachSourceToWaterUnitChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
-	PendingAttachSourceToWaterUnitChoice.ChainIndex = ChainEntry.ChainIndex;
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.OwnerPlayerIndex != PlayerIndex) continue;
-		if (Card.Location != ETCGCardLocation::Board) continue;
-		if (Card.CardInstanceId == ChainEntry.SourceCardInstanceId) continue;
-		if (Card.Element != ETCGCardElement::Water) continue;
-		const FTCGCardInstance* TopCard = FindTopCardInStack(Card.StackId);
-		if (!TopCard || TopCard->CardInstanceId != Card.CardInstanceId) continue;
-		PendingAttachSourceToWaterUnitChoice.EligibleTargetCardInstanceIds.Add(Card.CardInstanceId);
-	}
-	return PendingAttachSourceToWaterUnitChoice.EligibleTargetCardInstanceIds.Num() > 0;
-}
-
-bool ATCG_GameState::SubmitPendingAttachSourceToWaterUnitChoice(int32 PlayerIndex, const FGuid& ChosenTargetCardInstanceId)
-{
-	if (!PendingAttachSourceToWaterUnitChoice.bIsPending || PendingAttachSourceToWaterUnitChoice.PlayerIndex != PlayerIndex) return false;
-	if (!ChosenTargetCardInstanceId.IsValid() || !PendingAttachSourceToWaterUnitChoice.EligibleTargetCardInstanceIds.Contains(ChosenTargetCardInstanceId)) return false;
-	const bool bAttached = AttachSourceCardUnderWaterUnit(PendingAttachSourceToWaterUnitChoice.SourceCardInstanceId, ChosenTargetCardInstanceId);
-	if (!bAttached) return false;
-	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending attach source to unit choice submitted Player=%d"), PlayerIndex);
-	ClearPendingAttachSourceToWaterUnitChoice();
-	return true;
-}
-
-bool ATCG_GameState::HasPendingAttachSourceToWaterUnitChoice() const { return PendingAttachSourceToWaterUnitChoice.bIsPending; }
-void ATCG_GameState::GetPendingAttachSourceToWaterUnitChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingAttachSourceToWaterUnitChoice.EligibleTargetCardInstanceIds; }
-void ATCG_GameState::ClearPendingAttachSourceToWaterUnitChoice() { PendingAttachSourceToWaterUnitChoice.Reset(); }
-
-bool ATCG_GameState::BeginPendingPlayGraveyardCardToEmptyZoneChoice(int32 PlayerIndex, const FTCGEffectTargetFilter& TargetFilter, const FTCGEffectChainEntry& ChainEntry)
-{
-	if (!IsValidPlayerIndex(PlayerIndex) || PendingPlayGraveyardCardToEmptyZoneChoice.bIsPending) return false;
-
-	const int32 OwnerPlayerIndex = TargetFilter.OwnerMode == ETCGEffectTargetMode::Opponent ? 1 - PlayerIndex : PlayerIndex;
-
-	PendingPlayGraveyardCardToEmptyZoneChoice.Reset();
-	PendingPlayGraveyardCardToEmptyZoneChoice.bIsPending = true;
-	PendingPlayGraveyardCardToEmptyZoneChoice.PlayerIndex = PlayerIndex;
-	PendingPlayGraveyardCardToEmptyZoneChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
-	PendingPlayGraveyardCardToEmptyZoneChoice.ChainIndex = ChainEntry.ChainIndex;
-
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.OwnerPlayerIndex != OwnerPlayerIndex) continue;
-		if (Card.Location != ETCGCardLocation::Graveyard) continue;
-		if (TargetFilter.bRequireElement && Card.Element != TargetFilter.RequiredElement) continue;
-		if (TargetFilter.bExcludeSourceCard && Card.CardInstanceId == ChainEntry.SourceCardInstanceId) continue;
-		PendingPlayGraveyardCardToEmptyZoneChoice.EligibleCardInstanceIds.Add(Card.CardInstanceId);
-	}
-
-	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
-	{
-		const FName ZoneId = GetFieldZoneId(PlayerIndex, FieldIndex);
-		FGuid ExistingStackId;
-		if (!FindStackIdInZone(ZoneId, ExistingStackId)) PendingPlayGraveyardCardToEmptyZoneChoice.EligibleZoneIds.Add(ZoneId);
-	}
-
-	if (PendingPlayGraveyardCardToEmptyZoneChoice.EligibleCardInstanceIds.Num() <= 0 || PendingPlayGraveyardCardToEmptyZoneChoice.EligibleZoneIds.Num() <= 0)
-	{
-		ClearPendingPlayGraveyardCardToEmptyZoneChoice();
-		return false;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending play graveyard card to empty zone choice started Player=%d Cards=%d Zones=%d"),
-		PlayerIndex,
-		PendingPlayGraveyardCardToEmptyZoneChoice.EligibleCardInstanceIds.Num(),
-		PendingPlayGraveyardCardToEmptyZoneChoice.EligibleZoneIds.Num());
-
-	return true;
-}
-
-bool ATCG_GameState::SubmitPendingPlayGraveyardCardToEmptyZoneChoice(int32 PlayerIndex, const FGuid& ChosenCardInstanceId, FName ChosenZoneId)
-{
-	if (!PendingPlayGraveyardCardToEmptyZoneChoice.bIsPending || PendingPlayGraveyardCardToEmptyZoneChoice.PlayerIndex != PlayerIndex) return false;
-	if (!ChosenCardInstanceId.IsValid() || !PendingPlayGraveyardCardToEmptyZoneChoice.EligibleCardInstanceIds.Contains(ChosenCardInstanceId)) return false;
-	if (ChosenZoneId.IsNone() || !PendingPlayGraveyardCardToEmptyZoneChoice.EligibleZoneIds.Contains(ChosenZoneId)) return false;
-
-	const bool bPlayed = PlayGraveyardCardToEmptyZone(ChosenCardInstanceId, ChosenZoneId);
-	if (!bPlayed) return false;
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending play graveyard card to empty zone choice submitted Player=%d Zone=%s"), PlayerIndex, *ChosenZoneId.ToString());
-	ClearPendingPlayGraveyardCardToEmptyZoneChoice();
-	return true;
-}
-
-bool ATCG_GameState::HasPendingPlayGraveyardCardToEmptyZoneChoice() const { return PendingPlayGraveyardCardToEmptyZoneChoice.bIsPending; }
-void ATCG_GameState::GetPendingPlayGraveyardCardToEmptyZoneCardOptions(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingPlayGraveyardCardToEmptyZoneChoice.EligibleCardInstanceIds; }
-void ATCG_GameState::GetPendingPlayGraveyardCardToEmptyZoneZoneOptions(TArray<FName>& OutZoneIds) const { OutZoneIds = PendingPlayGraveyardCardToEmptyZoneChoice.EligibleZoneIds; }
-void ATCG_GameState::ClearPendingPlayGraveyardCardToEmptyZoneChoice() { PendingPlayGraveyardCardToEmptyZoneChoice.Reset(); }
