@@ -260,9 +260,13 @@ int32 ATCG_GameState::DiscardCardsFromHand(int32 PlayerIndex, int32 Count)
 		}
 	}
 
-	HandCards.Sort([](const FTCGCardInstance& A, const FTCGCardInstance& B)
+	HandCards.Sort([](const FTCGCardInstance* A, const FTCGCardInstance* B)
 	{
-		return A.LocationIndex < B.LocationIndex;
+		if (!A || !B)
+		{
+			return A != nullptr;
+		}
+		return A->LocationIndex < B->LocationIndex;
 	});
 
 	const int32 CardsToDiscard = FMath::Min(Count, HandCards.Num());
