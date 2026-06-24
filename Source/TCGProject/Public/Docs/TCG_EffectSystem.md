@@ -39,21 +39,20 @@ Steps:
 
 ## Data Shape
 
-`FTCGCardEffectRef` keeps the old fields:
+`FTCGCardEffectRef` has:
 
 * `Trigger`
 * `EffectId`
-
-It now also has:
-
 * `Steps`
 * `bOptional`
 
-`EffectId` stays as a legacy/debug fallback.
+`EffectId` stays for now as a stable debug/fallback id because existing debug card assets may still only use `Trigger + EffectId`.
 
-If an effect has modular `Steps`, the resolver should prefer the modular step sequence.
+For real card effects going forward, the preferred path is modular `Steps`.
 
-If `Steps` is empty, the resolver may still use the old hardcoded/debug `EffectId` behavior.
+If an effect has modular `Steps`, the resolver uses the modular step sequence.
+
+If `Steps` is empty, the resolver can still use the old hardcoded/debug `EffectId` behavior.
 
 ## Step Types
 
@@ -173,8 +172,13 @@ Implemented first modular steps:
 * ModifyAttack
 * SelectTarget scaffold
 
-Important note:
+Implemented chain hook:
 
-The existing `TCG_GameState.cpp` chain builder still needs to be switched from the old `GetPrintedEffectsForCardTrigger` / `EffectId` path to `GetPrintedEffectRefsForCard` / `AddCardEffectRefToChain` so modular steps are used by normal OnPlay chain building.
+* `BuildStackOnPlayEffectChain` now uses `GetPrintedEffectRefsForCard` and `AddCardEffectRefToChain`.
+* `ResolveEffectChain` now calls `ResolveEffectChainEntry`, which chooses modular `Steps` first and falls back to debug `EffectId` when needed.
 
-That hook should be a small follow-up edit to keep the first structural pass safe.
+Legacy status:
+
+* `EffectId` is not removed yet because current debug card assets may still depend on it.
+* `GetPrintedEffectsForCardTrigger` and `AddCardTriggerToChain` remain as compatibility wrappers for now.
+* After debug assets are converted to modular `Steps`, these wrappers and hardcoded debug effect ids can be removed.
