@@ -29,6 +29,7 @@ namespace
 		case ETCGEffectStepType::MoveHandCardToTopDeck: return TEXT("MoveHandCardToTopDeck");
 		case ETCGEffectStepType::AttachSourceToWaterUnitMaterial: return TEXT("AttachSourceToWaterUnitMaterialLegacy");
 		case ETCGEffectStepType::AttachSourceToUnitMaterial: return TEXT("AttachSourceToUnitMaterial");
+		case ETCGEffectStepType::AttachGraveyardCardToSourceMaterial: return TEXT("AttachGraveyardCardToSourceMaterial");
 		default: return TEXT("None");
 		}
 	}
@@ -282,6 +283,13 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		}
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step %s Player=%d Mode=%s Pending=%s AutoSubmitted=%s"), GetTCGEffectStepDebugName(Step.StepType), ChainEntry.ControllerPlayerIndex, GetTCGEffectSelectionModeDebugName(Step.SelectionMode), bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
 		bStepSucceeded = bAutoSubmittedChoice;
+		break;
+	}
+	case ETCGEffectStepType::AttachGraveyardCardToSourceMaterial:
+	{
+		const FGuid SourceUnitId = Step.TargetMode == ETCGEffectTargetMode::TriggerTarget ? ChainEntry.TargetCardInstanceId : ChainEntry.SourceCardInstanceId;
+		bStepSucceeded = AttachGraveyardCardToSourceMaterial(ChainEntry.ControllerPlayerIndex, SourceUnitId, Step.TargetFilter);
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step AttachGraveyardCardToSourceMaterial Player=%d Mode=%s Success=%s"), ChainEntry.ControllerPlayerIndex, GetTCGEffectSelectionModeDebugName(Step.SelectionMode), bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
 	case ETCGEffectStepType::SendTopDeckCardToGraveyard:
@@ -567,6 +575,38 @@ bool ATCG_GameState::MoveCardToTopOfDeck(const FGuid& CardInstanceId)
 	CardToMove->StackId.Invalidate();
 	CardToMove->StackIndex = INDEX_NONE;
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Moved card to top deck Player=%d Card=%s"), PlayerIndex, *CardDefinitionId.ToString());
+	return true;
+}
+
+bool ATCG_GameState::AttachGraveyardCardToSourceMaterial(int32 PlayerIndex, const FGuid& SourceCardInstanceId, const FTCGEffectTargetFilter& TargetFilter)
+{
+	FTCGCardInstance* SourceCard = FindCardInstance(SourceCardInstanceId);
+	if (!SourceCard || SourceCard->OwnerPlayerIndex != PlayerIndex || SourceCard->Location != ETCGCardLocation::Board || !SourceCard->StackId.IsValid()) return false;
+
+	FTCGCardInstance* ChosenCard = nullptr;
+	for (FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.OwnerPlayerIndex != PlayerIndex || Card.Location != ETCGCardLocation::Graveyard) continue;
+		if (TargetFilter.bRequireElement && Card.Element != TargetFilter.RequiredElement) continue;
+		if (!ChosenCard || Card.LocationIndex < ChosenCard->LocationIndex) ChosenCard = &Card;
+	}
+	if (!ChosenCard) return false;
+
+	const FName AttachedCardDefinitionId = ChosenCard->CardDefinitionId;
+	const FGuid TargetStackId = SourceCard->StackId;
+	const FName TargetZoneId = SourceCard->ZoneId;
+	for (FTCGCardInstance& Card : MatchCards)
+	{
+		if (Card.Location == ETCGCardLocation::Board && Card.StackId == TargetStackId) Card.StackIndex += 1;
+	}
+
+	ChosenCard->Location = ETCGCardLocation::Board;
+	ChosenCard->LocationIndex = INDEX_NONE;
+	ChosenCard->ZoneId = TargetZoneId;
+	ChosenCard->StackId = TargetStackId;
+	ChosenCard->StackIndex = 0;
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Attached graveyard card as material Source=%s Material=%s Zone=%s"), *SourceCard->CardDefinitionId.ToString(), *AttachedCardDefinitionId.ToString(), *TargetZoneId.ToString());
 	return true;
 }
 
