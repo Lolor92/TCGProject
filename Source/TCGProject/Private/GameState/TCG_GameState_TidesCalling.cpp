@@ -66,6 +66,39 @@ namespace
 		GameState->AddCardEffectRefToChain(Chain, SourceCardInstanceId, SourceCardInstanceId, MakeTidesCallingOnPlayEffect());
 		GameState->ResolveEffectChain(Chain);
 	}
+
+	void LogTidesCallingFinalSummary(ATCG_GameState* GameState, bool bSentTopDeck)
+	{
+		if (!GameState) return;
+
+		const bool bTidesOnBoard = GameState->DoesPlayerHaveAnyCardOnBoard(0);
+		TArray<FTCGCardInstance> Player0Deck;
+		TArray<FTCGCardInstance> Player0Graveyard;
+		GameState->GetCardsInDeck(0, Player0Deck);
+		GameState->GetCardsInLocation(0, ETCGCardLocation::Graveyard, Player0Graveyard);
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Tide's Calling scenario final summary SentTopDeck=%s TidesOnBoard=%s Deck=%d Graveyard=%d"),
+			bSentTopDeck ? TEXT("true") : TEXT("false"),
+			bTidesOnBoard ? TEXT("true") : TEXT("false"),
+			Player0Deck.Num(),
+			Player0Graveyard.Num());
+	}
+
+	void ScheduleTidesCallingFinalSummary(ATCG_GameState* GameState, bool bSentTopDeck)
+	{
+		if (!GameState) return;
+
+		// Temporary debug-only delay: Tide's OnPlay chain is currently started on the next tick.
+		// Long term, final debug summaries should be printed only after the real queued-trigger drain finishes.
+		GameState->GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(GameState, [GameState, bSentTopDeck]()
+		{
+			GameState->GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(GameState, [GameState, bSentTopDeck]()
+			{
+				LogTidesCallingFinalSummary(GameState, bSentTopDeck);
+				GameState->EndMatch(ETCGMatchResult::Draw);
+			}));
+		}));
+	}
 }
 
 bool ATCG_GameState::MoveCardToBottomOfDeck(const FGuid& CardInstanceId)
@@ -224,18 +257,5 @@ void ATCG_GameState::RunDebugTidesCallingScenario()
 	AddCardInstance("Debug_Water_GraveyardSeed", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Graveyard);
 
 	const bool bSentTopDeck = SendTopDeckCardToGraveyard(0);
-
-	const bool bTidesOnBoard = DoesPlayerHaveAnyCardOnBoard(0);
-	TArray<FTCGCardInstance> Player0Deck;
-	TArray<FTCGCardInstance> Player0Graveyard;
-	GetCardsInDeck(0, Player0Deck);
-	GetCardsInLocation(0, ETCGCardLocation::Graveyard, Player0Graveyard);
-
-	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Tide's Calling scenario summary SentTopDeck=%s TidesOnBoard=%s Deck=%d Graveyard=%d"),
-		bSentTopDeck ? TEXT("true") : TEXT("false"),
-		bTidesOnBoard ? TEXT("true") : TEXT("false"),
-		Player0Deck.Num(),
-		Player0Graveyard.Num());
-
-	EndMatch(ETCGMatchResult::Draw);
+	ScheduleTidesCallingFinalSummary(this, bSentTopDeck);
 }
