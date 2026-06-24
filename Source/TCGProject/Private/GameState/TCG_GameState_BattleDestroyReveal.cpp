@@ -1,0 +1,168 @@
+#include "GameState/TCG_GameState.h"
+
+namespace
+{
+	const FName DebugCard_BattleDestroyReveal = "Debug_Water_BattleDestroyReveal";
+
+	FTCGCardInstance* FindTopDeckCard(ATCG_GameState* GameState, int32 PlayerIndex)
+	{
+		if (!GameState || !GameState->IsValidPlayerIndex(PlayerIndex)) return nullptr;
+
+		FTCGCardInstance* TopDeckCard = nullptr;
+		for (FTCGCardInstance& Card : GameState->MatchCards)
+		{
+			if (Card.OwnerPlayerIndex != PlayerIndex || Card.Location != ETCGCardLocation::Deck) continue;
+			if (!TopDeckCard || Card.LocationIndex > TopDeckCard->LocationIndex) TopDeckCard = &Card;
+		}
+		return TopDeckCard;
+	}
+
+	TArray<FGuid> GetTopDeckCardIds(ATCG_GameState* GameState, int32 PlayerIndex, int32 Count)
+	{
+		TArray<FTCGCardInstance> DeckCards;
+		GameState->GetCardsInDeck(PlayerIndex, DeckCards);
+
+		TArray<FGuid> RevealedCardIds;
+		for (int32 Index = 0; Index < DeckCards.Num() && RevealedCardIds.Num() < Count; ++Index)
+		{
+			RevealedCardIds.Add(DeckCards[Index].CardInstanceId);
+		}
+		return RevealedCardIds;
+	}
+
+	bool RevealTopDeckCardsAddWaterToHand(ATCG_GameState* GameState, int32 PlayerIndex, int32 Count)
+	{
+		if (!GameState || !GameState->IsValidPlayerIndex(PlayerIndex) || Count <= 0) return false;
+
+		const TArray<FGuid> RevealedCardIds = GetTopDeckCardIds(GameState, PlayerIndex, Count);
+		if (RevealedCardIds.Num() <= 0) return false;
+
+		FGuid ChosenWaterCardId;
+		for (const FGuid& RevealedCardId : RevealedCardIds)
+		{
+			const FTCGCardInstance* RevealedCard = GameState->FindCardInstance(RevealedCardId);
+			if (!RevealedCard) continue;
+
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Revealed top deck card Player=%d Card=%s Element=%d"),
+				PlayerIndex,
+				*RevealedCard->CardDefinitionId.ToString(),
+				static_cast<int32>(RevealedCard->Element));
+
+			if (!ChosenWaterCardId.IsValid() && RevealedCard->Element == ETCGCardElement::Water)
+			{
+				ChosenWaterCardId = RevealedCardId;
+			}
+		}
+
+		if (!ChosenWaterCardId.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal found no Water card, cards stay on top deck in same order Player=%d Revealed=%d"), PlayerIndex, RevealedCardIds.Num());
+			return false;
+		}
+
+		const FTCGCardInstance* ChosenWaterCardBeforeMove = GameState->FindCardInstance(ChosenWaterCardId);
+		const FName ChosenWaterCardDefinitionId = ChosenWaterCardBeforeMove ? ChosenWaterCardBeforeMove->CardDefinitionId : NAME_None;
+		GameState->MoveCardToLocation(ChosenWaterCardId, ETCGCardLocation::Hand);
+
+		int32 SentOtherCount = 0;
+		for (const FGuid& RevealedCardId : RevealedCardIds)
+		{
+			if (RevealedCardId == ChosenWaterCardId) continue;
+			const FTCGCardInstance* OtherCardBeforeMove = GameState->FindCardInstance(RevealedCardId);
+			const FName OtherCardDefinitionId = OtherCardBeforeMove ? OtherCardBeforeMove->CardDefinitionId : NAME_None;
+			if (GameState->MoveCardToLocation(RevealedCardId, ETCGCardLocation::Graveyard))
+			{
+				SentOtherCount++;
+				UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal sent other card to graveyard Player=%d Card=%s"), PlayerIndex, *OtherCardDefinitionId.ToString());
+			}
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Reveal added Water card to hand Player=%d Card=%s SentOther=%d"),
+			PlayerIndex,
+			*ChosenWaterCardDefinitionId.ToString(),
+			SentOtherCount);
+
+		return true;
+	}
+
+	bool SendTopDeckCardToGraveyardAndResolveSelfMill(ATCG_GameState* GameState, int32 PlayerIndex)
+	{
+		FTCGCardInstance* TopDeckCard = FindTopDeckCard(GameState, PlayerIndex);
+		if (!TopDeckCard) return false;
+
+		const FGuid SentCardId = TopDeckCard->CardInstanceId;
+		const FName SentCardDefinitionId = TopDeckCard->CardDefinitionId;
+		const bool bWasBattleDestroyRevealCard = SentCardDefinitionId == DebugCard_BattleDestroyReveal;
+
+		if (!GameState->MoveCardToLocation(SentCardId, ETCGCardLocation::Graveyard)) return false;
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Battle destroy effect sent top deck card to graveyard Player=%d Card=%s"),
+			PlayerIndex,
+			*SentCardDefinitionId.ToString());
+
+		if (bWasBattleDestroyRevealCard)
+		{
+			RevealTopDeckCardsAddWaterToHand(GameState, PlayerIndex, 2);
+		}
+		return true;
+	}
+
+	int32 CountPlayerCardsInLocation(ATCG_GameState* GameState, int32 PlayerIndex, ETCGCardLocation Location)
+	{
+		int32 Count = 0;
+		for (const FTCGCardInstance& Card : GameState->MatchCards)
+		{
+			if (Card.OwnerPlayerIndex == PlayerIndex && Card.Location == Location) Count++;
+		}
+		return Count;
+	}
+}
+
+void RunDebugBattleDestroyRevealScenario(ATCG_GameState* GameState)
+{
+	if (!GameState) return;
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: BattleDestroyReveal scenario start"));
+	GameState->MatchCards.Empty();
+	GameState->StartMatch();
+	GameState->SetPhase(ETCGMatchPhase::Battle);
+
+	FTCGCardInstance& Attacker = GameState->AddCardInstance("Debug_Water_BattleWinner", ETCGCardElement::Water, 5, 0, ETCGCardLocation::Board);
+	Attacker.ZoneId = ATCG_GameState::GetFieldZoneId(0, 0);
+	Attacker.StackId = FGuid::NewGuid();
+	Attacker.StackIndex = 0;
+
+	FTCGCardInstance& Defender = GameState->AddCardInstance("Debug_Fire_BattleLoser", ETCGCardElement::Fire, 1, 1, ETCGCardLocation::Board);
+	Defender.ZoneId = ATCG_GameState::GetFieldZoneId(1, 0);
+	Defender.StackId = FGuid::NewGuid();
+	Defender.StackIndex = 0;
+
+	GameState->AddCardInstance(DebugCard_BattleDestroyReveal, ETCGCardElement::Water, 2, 0, ETCGCardLocation::Deck);
+	GameState->AddCardInstance("Debug_Earth_RevealOther", ETCGCardElement::Earth, 1, 0, ETCGCardLocation::Deck);
+	GameState->AddCardInstance("Debug_Water_RevealPick", ETCGCardElement::Water, 1, 0, ETCGCardLocation::Deck);
+
+	const int32 HandBefore = CountPlayerCardsInLocation(GameState, 0, ETCGCardLocation::Hand);
+	const int32 GraveBefore = CountPlayerCardsInLocation(GameState, 0, ETCGCardLocation::Graveyard);
+	const int32 DeckBefore = CountPlayerCardsInLocation(GameState, 0, ETCGCardLocation::Deck);
+
+	const bool bBattleResolved = GameState->ResolveBattleBetweenZones(Attacker.ZoneId, Defender.ZoneId);
+	const bool bDefenderDestroyed = !GameState->FindTopCardInZone(Defender.ZoneId);
+	const bool bMillResolved = bBattleResolved && bDefenderDestroyed && SendTopDeckCardToGraveyardAndResolveSelfMill(GameState, 0);
+
+	const int32 HandAfter = CountPlayerCardsInLocation(GameState, 0, ETCGCardLocation::Hand);
+	const int32 GraveAfter = CountPlayerCardsInLocation(GameState, 0, ETCGCardLocation::Graveyard);
+	const int32 DeckAfter = CountPlayerCardsInLocation(GameState, 0, ETCGCardLocation::Deck);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: BattleDestroyReveal summary Battle=%s DefenderDestroyed=%s Mill=%s Deck=%d/%d Hand=%d/%d Grave=%d/%d"),
+		bBattleResolved ? TEXT("true") : TEXT("false"),
+		bDefenderDestroyed ? TEXT("true") : TEXT("false"),
+		bMillResolved ? TEXT("true") : TEXT("false"),
+		DeckBefore,
+		DeckAfter,
+		HandBefore,
+		HandAfter,
+		GraveBefore,
+		GraveAfter);
+
+	GameState->EndMatch(ETCGMatchResult::Draw);
+}
