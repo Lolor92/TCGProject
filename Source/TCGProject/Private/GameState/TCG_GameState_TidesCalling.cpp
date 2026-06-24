@@ -36,6 +36,8 @@ namespace
 		FTCGEffectStep RecycleStep;
 		RecycleStep.StepType = ETCGEffectStepType::MoveGraveyardCardToBottomDeck;
 		RecycleStep.TargetMode = ETCGEffectTargetMode::Controller;
+		RecycleStep.SelectionMode = ETCGEffectSelectionMode::PlayerChoice;
+		RecycleStep.Value = 1;
 		RecycleStep.bRequiresPreviousStepSuccess = true;
 		EffectRef.Steps.Add(RecycleStep);
 
