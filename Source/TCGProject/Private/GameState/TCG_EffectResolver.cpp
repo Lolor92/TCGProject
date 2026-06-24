@@ -2,7 +2,7 @@
 
 namespace
 {
-	constexpr bool bLogEffectResolverChainHelpers = true;
+	constexpr bool bLogEffectResolverChainHelpers = false;
 
 	const FName ResolverLegacyDebugEffect_Draw1 = "Debug_Draw1";
 	const FName ResolverLegacyDebugEffect_GainAttackForCardsUnderneath = "Debug_GainAttackForCardsUnderneath";
