@@ -48,11 +48,21 @@ The normal no-Units lose condition is still checked first after battle.
 
 The round-limit Unit-count rule only applies if both players still have at least one Unit after the battle phase.
 
+## Starting Hand
+
+At the start of the match, both players draw their starting hand.
+
+By default, each player draws 4 cards as their starting hand.
+
+The starting hand size is a game rule setting and can be changed in Blueprint through the GameState defaults.
+
+Starting hand draw happens once at match start, before the first round's placement phase begins.
+
 ## Round Structure
 
 The match is played in rounds.
 
-A round is one full cycle where both players place cards onto the board through alternating placement steps, then battle resolves.
+A round is one full cycle where both players place cards onto the board through alternating placement turns, then battle resolves.
 
 A round contains:
 
@@ -61,7 +71,7 @@ A round contains:
 * Battle Phase
 * Round End
 
-During the Placement Phase, players do not each take a full traditional turn. Instead, they alternate placement steps.
+During the Placement Phase, players do not each take a full traditional turn. Instead, they alternate placement turns.
 
 If no player loses after the Battle Phase and the maximum round has not been reached, the match proceeds to the next round.
 
@@ -69,25 +79,30 @@ If no player loses after the Battle Phase and the maximum round has not been rea
 
 During the Placement Phase, players take turns placing cards onto their board.
 
-A placement step is one player's chance to place one card.
+A placement turn is one player's chance to draw and place one card.
 
-By default, Player 0 takes the first placement step of the round.
+By default, Player 0 takes the first placement turn of the round.
+
+Each placement turn has this flow:
+
+* Draw Phase: the active player draws 1 card.
+* Place Phase: the active player may place 1 card.
+
+The number of cards drawn per placement turn is a game rule setting and can be changed in Blueprint through the GameState defaults.
 
 The placement order is:
 
-* Placement Step 1: Player 0 places 1 card.
-* Placement Step 2: Player 1 draws 1 card, then places 1 card.
-* Placement Step 3: Player 0 draws 1 card, then places 1 card.
-* Placement Step 4: Player 1 draws 1 card, then places 1 card.
-* This continues until both players have had 4 placement steps.
+* Placement Turn 1: Player 0 draws 1 card, then places 1 card.
+* Placement Turn 2: Player 1 draws 1 card, then places 1 card.
+* Placement Turn 3: Player 0 draws 1 card, then places 1 card.
+* Placement Turn 4: Player 1 draws 1 card, then places 1 card.
+* This continues until both players have had 4 placement turns.
 
-After Player 1 completes the 8th total placement step of the round, the Placement Phase ends and the Battle Phase begins.
+After Player 1 completes the 8th total placement turn of the round, the Placement Phase ends and the Battle Phase begins.
 
-The first player does not draw at the start of the first placement step of the round unless a card effect or future rule says otherwise.
+If a player cannot draw because their deck is empty, the placement turn still continues.
 
-If a player cannot draw because their deck is empty, the placement step still continues.
-
-If a player cannot place because they have no legal card or no legal empty field zone, that placement step is skipped for now.
+If a player cannot place because they have no legal card or no legal empty field zone, that placement turn is skipped after the draw phase.
 
 The match still only checks win/loss conditions after the Battle Phase.
 
@@ -126,13 +141,15 @@ Examples of possible future exceptions:
 
 These exceptions should be handled through card effects or explicit rule modifiers, not by changing the default placement rule.
 
-## Placement Step Completion
+## Placement Turn Completion
 
-A placement step normally ends after the active player places one card.
+A placement turn normally ends after the active player draws and then places one card.
 
-If the active player cannot place a card, the placement step is skipped for now.
+If the active player cannot draw, the placement turn still continues to the place step.
 
-When both players have completed or skipped 4 placement steps each, the round proceeds to the Battle Phase.
+If the active player cannot place a card, the placement turn ends after the failed or skipped place step.
+
+When both players have completed or skipped 4 placement turns each, the round proceeds to the Battle Phase.
 
 ## Card Elements
 
@@ -566,6 +583,8 @@ The current implementation is still a debug skeleton.
 
 The current goal is to prove:
 
+* starting hand draw
+* placement-turn draw flow
 * round flow
 * ordered placement
 * battle declaration order
