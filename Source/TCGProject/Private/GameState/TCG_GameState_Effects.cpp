@@ -42,6 +42,7 @@ namespace
 		case ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck: return TEXT("MoveGraveyardCardsToHandAndTopDeck");
 		case ETCGEffectStepType::RemoveMaterialFromTargetUnit: return TEXT("RemoveMaterialFromTargetUnit");
 		case ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit: return TEXT("AttackMillTwoWaterBounceBattlingUnit");
+		case ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget: return TEXT("DiscardSourceDetachUpToTwoMaterialsFromTarget");
 		default: return TEXT("None");
 		}
 	}
@@ -142,6 +143,49 @@ namespace
 		GetFilteredGraveyardCards(GameState, PlayerIndex, TargetFilter, ChainEntry, Options);
 		if (Options.Num() <= 0) return false;
 		return GameState->MoveCardToTopOfDeck(Options[0]);
+	}
+
+	static bool DiscardSourceDetachUpToTwoMaterialsFromTarget(ATCG_GameState* GameState, const FTCGEffectChainEntry& ChainEntry)
+	{
+		if (!GameState) return false;
+
+		const FTCGCardInstance* SourceCard = GameState->FindCardInstance(ChainEntry.SourceCardInstanceId);
+		const FTCGCardInstance* TargetCard = GameState->FindCardInstance(ChainEntry.TargetCardInstanceId);
+		if (!SourceCard || SourceCard->OwnerPlayerIndex != ChainEntry.ControllerPlayerIndex || SourceCard->Location != ETCGCardLocation::Hand)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Discard source detach failed Source=%s Reason=SourceNotInHand"), ChainEntry.SourceCardDefinitionId.IsNone() ? TEXT("None") : *ChainEntry.SourceCardDefinitionId.ToString());
+			return false;
+		}
+		if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Discard source detach failed Source=%s Reason=TargetNotOnBoard"), *SourceCard->CardDefinitionId.ToString());
+			return false;
+		}
+
+		const FGuid TargetCardId = ChainEntry.TargetCardInstanceId;
+		const FName SourceDefinitionId = SourceCard->CardDefinitionId;
+		const FName TargetDefinitionId = TargetCard->CardDefinitionId;
+		const bool bDiscardedSource = GameState->MoveCardToLocation(ChainEntry.SourceCardInstanceId, ETCGCardLocation::Graveyard);
+		if (!bDiscardedSource)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Discard source detach failed Source=%s Reason=DiscardFailed"), *SourceDefinitionId.ToString());
+			return false;
+		}
+
+		int32 DetachedCount = 0;
+		for (int32 MaterialIndex = 0; MaterialIndex < 2; ++MaterialIndex)
+		{
+			if (!GameState->MoveBottomOverlayToGraveyard(TargetCardId)) break;
+			DetachedCount++;
+		}
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: Discard source detach Source=%s Target=%s Discarded=true Detached=%d"),
+			*SourceDefinitionId.ToString(),
+			*TargetDefinitionId.ToString(),
+			DetachedCount);
+
+		return true;
 	}
 }
 
@@ -369,6 +413,12 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 	{
 		bStepSucceeded = ResolveAttackMillTwoWaterBounceBattlingUnit(ChainEntry.SourceCardInstanceId, ChainEntry.TargetCardInstanceId);
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step AttackMillTwoWaterBounceBattlingUnit Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
+		break;
+	}
+	case ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget:
+	{
+		bStepSucceeded = DiscardSourceDetachUpToTwoMaterialsFromTarget(this, ChainEntry);
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardSourceDetachUpToTwoMaterialsFromTarget Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
 	case ETCGEffectStepType::AttachSourceToWaterUnitMaterial:
