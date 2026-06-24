@@ -852,21 +852,62 @@ bool ATCG_GameState::ResolveBattleBetweenZones(FName Player0ZoneId, FName Player
 	const FTCGCardInstance* Player1Card = FindTopCardInZone(Player1ZoneId);
 	if (!Player0Card || !Player1Card) return false;
 
+	const FGuid Player0WinnerId = Player0Card->CardInstanceId;
+	const FGuid Player1WinnerId = Player1Card->CardInstanceId;
+	const FGuid Player0LoserStackId = Player0Card->StackId;
+	const FGuid Player1LoserStackId = Player1Card->StackId;
+
 	const int32 Player0Attack = GetFinalAttack(Player0Card->CardInstanceId);
 	const int32 Player1Attack = GetFinalAttack(Player1Card->CardInstanceId);
+
 	if (Player0Attack > Player1Attack)
 	{
-		MoveStackToLocation(Player1Card->StackId, ETCGCardLocation::Graveyard);
+		MoveStackToLocation(Player1LoserStackId, ETCGCardLocation::Graveyard);
+
+		if (const FTCGCardInstance* WinnerCard = FindCardInstance(Player0WinnerId))
+		{
+			TArray<FTCGEffectChainEntry> Chain;
+			TArray<FTCGCardEffectRef> EffectRefs;
+			GetPrintedEffectRefsForCard(*WinnerCard, EffectRefs);
+
+			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+			{
+				if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnBattleDestroy))
+				{
+					AddCardEffectRefToChain(Chain, Player0WinnerId, Player0WinnerId, EffectRef);
+				}
+			}
+
+			ResolveEffectChain(Chain);
+		}
 	}
 	else if (Player1Attack > Player0Attack)
 	{
-		MoveStackToLocation(Player0Card->StackId, ETCGCardLocation::Graveyard);
+		MoveStackToLocation(Player0LoserStackId, ETCGCardLocation::Graveyard);
+
+		if (const FTCGCardInstance* WinnerCard = FindCardInstance(Player1WinnerId))
+		{
+			TArray<FTCGEffectChainEntry> Chain;
+			TArray<FTCGCardEffectRef> EffectRefs;
+			GetPrintedEffectRefsForCard(*WinnerCard, EffectRefs);
+
+			for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+			{
+				if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnBattleDestroy))
+				{
+					AddCardEffectRefToChain(Chain, Player1WinnerId, Player1WinnerId, EffectRef);
+				}
+			}
+
+			ResolveEffectChain(Chain);
+		}
 	}
 	else
 	{
-		MoveStackToLocation(Player0Card->StackId, ETCGCardLocation::Graveyard);
-		MoveStackToLocation(Player1Card->StackId, ETCGCardLocation::Graveyard);
+		MoveStackToLocation(Player0LoserStackId, ETCGCardLocation::Graveyard);
+		MoveStackToLocation(Player1LoserStackId, ETCGCardLocation::Graveyard);
 	}
+
 	return true;
 }
 
