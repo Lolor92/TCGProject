@@ -3,6 +3,8 @@
 namespace
 {
 	const FName DebugCard_TidesCalling = "Debug_Water_TidesCalling";
+	TArray<TWeakObjectPtr<ATCG_GameState>> QueuedGameStates;
+	TMap<TWeakObjectPtr<ATCG_GameState>, TArray<FGuid>> QueuedOnPlayCardsByGameState;
 
 	FTCGCardEffectRef MakeTidesCallingFromDeckToGraveyardEffect()
 	{
@@ -47,6 +49,44 @@ namespace
 	bool IsTidesCallingCard(const FTCGCardInstance* Card)
 	{
 		return Card && Card->CardDefinitionId == DebugCard_TidesCalling;
+	}
+
+	void QueuePostChainOnPlay(ATCG_GameState* GameState, const FGuid& CardInstanceId)
+	{
+		if (!GameState || !CardInstanceId.IsValid()) return;
+
+		TWeakObjectPtr<ATCG_GameState> GameStateKey(GameState);
+		QueuedOnPlayCardsByGameState.FindOrAdd(GameStateKey).Add(CardInstanceId);
+		QueuedGameStates.AddUnique(GameStateKey);
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Queued post-chain OnPlay trigger Card=%s"), *CardInstanceId.ToString());
+	}
+}
+
+void TCGDrainQueuedPostChainTriggers(ATCG_GameState* GameState)
+{
+	if (!GameState) return;
+
+	TWeakObjectPtr<ATCG_GameState> GameStateKey(GameState);
+	TArray<FGuid>* QueuedCards = QueuedOnPlayCardsByGameState.Find(GameStateKey);
+	if (!QueuedCards || QueuedCards->Num() <= 0) return;
+
+	TArray<FGuid> CardsToProcess = *QueuedCards;
+	QueuedCards->Reset();
+
+	for (const FGuid& CardInstanceId : CardsToProcess)
+	{
+		const FTCGCardInstance* Card = GameState->FindCardInstance(CardInstanceId);
+		if (!IsTidesCallingCard(Card) || Card->Location != ETCGCardLocation::Board)
+		{
+			continue;
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Starting queued OnPlay chain Source=%s"), *Card->CardDefinitionId.ToString());
+
+		TArray<FTCGEffectChainEntry> Chain;
+		GameState->AddCardEffectRefToChain(Chain, CardInstanceId, CardInstanceId, MakeTidesCallingOnPlayEffect());
+		GameState->ResolveEffectChain(Chain);
 	}
 }
 
@@ -97,9 +137,7 @@ bool ATCG_GameState::PlaySourceCardToFirstEmptyZone(const FGuid& SourceCardInsta
 
 			if (IsTidesCallingCard(SourceCard))
 			{
-				TArray<FTCGEffectChainEntry> Chain;
-				AddCardEffectRefToChain(Chain, SourceCardInstanceId, SourceCardInstanceId, MakeTidesCallingOnPlayEffect());
-				ResolveEffectChain(Chain);
+				QueuePostChainOnPlay(this, SourceCardInstanceId);
 			}
 		}
 		return bPlayed;
