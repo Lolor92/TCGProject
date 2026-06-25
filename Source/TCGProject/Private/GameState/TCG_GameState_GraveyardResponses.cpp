@@ -38,3 +38,50 @@ int32 ATCG_GameState::BuildYourUnitDestroyedGraveyardResponseChain(
 
 	return OutChain.Num() - StartingCount;
 }
+
+int32 ATCG_GameState::BuildYourUnitDestroyedByOpponentCardEffectGraveyardResponseChain(
+int32 DestroyedUnitOwnerPlayerIndex,
+const FGuid& DestroyedTopCardInstanceId,
+const FGuid& DestroyingUnitCardInstanceId,
+TArray<FTCGEffectChainEntry>& OutChain)
+{
+OutChain.Reset();
+
+if (!IsValidPlayerIndex(DestroyedUnitOwnerPlayerIndex)
+|| !DestroyedTopCardInstanceId.IsValid()
+|| !DestroyingUnitCardInstanceId.IsValid())
+{
+return 0;
+}
+
+const FTCGCardInstance* DestroyingUnit = FindCardInstance(DestroyingUnitCardInstanceId);
+if (!DestroyingUnit
+|| DestroyingUnit->Location != ETCGCardLocation::Board
+|| DestroyingUnit->OwnerPlayerIndex == DestroyedUnitOwnerPlayerIndex)
+{
+return 0;
+}
+
+TArray<FTCGCardInstance> GraveyardCards;
+GetCardsInLocation(DestroyedUnitOwnerPlayerIndex, ETCGCardLocation::Graveyard, GraveyardCards);
+
+for (const FTCGCardInstance& GraveyardCard : GraveyardCards)
+{
+TArray<FTCGCardEffectRef> EffectRefs;
+GetPrintedEffectRefsForCard(GraveyardCard, EffectRefs);
+
+for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+{
+if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnYourUnitDestroyedByOpponentCardEffect))
+{
+AddCardEffectRefToChain(
+OutChain,
+GraveyardCard.CardInstanceId,
+DestroyingUnitCardInstanceId,
+EffectRef);
+}
+}
+}
+
+return OutChain.Num();
+}

@@ -192,6 +192,12 @@ public:
 		int32 DestroyedUnitOwnerPlayerIndex,
 		const FGuid& DestroyedTopCardInstanceId,
 		TArray<FTCGEffectChainEntry>& OutChain);
+
+	int32 BuildYourUnitDestroyedByOpponentCardEffectGraveyardResponseChain(
+		int32 DestroyedUnitOwnerPlayerIndex,
+		const FGuid& DestroyedTopCardInstanceId,
+		const FGuid& DestroyingUnitCardInstanceId,
+		TArray<FTCGEffectChainEntry>& OutChain);
 	bool ResolveEffectChain(const TArray<FTCGEffectChainEntry>& Chain);
 	bool ResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);
 	bool ResolveModularEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);

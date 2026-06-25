@@ -50,7 +50,8 @@ enum class ETCGEffectTrigger : uint8
 	OnOpponentUnitEffectActivatedWhenYourUnitAttacks UMETA(DisplayName = "19 - On Opponent Unit Effect Activated When Your Unit Attacks"),
 	OnYourUnitWouldBeDestroyedByCardEffect UMETA(DisplayName = "20 - On Your Unit Would Be Destroyed By Card Effect"),
 	OnYourUnitDestroyed UMETA(DisplayName = "21 - On Your Unit Destroyed"),
-	OnYourUnitWouldLoseMaterialByCardEffect UMETA(DisplayName = "22 - On Your Unit Would Lose Material By Card Effect")
+	OnYourUnitWouldLoseMaterialByCardEffect UMETA(DisplayName = "22 - On Your Unit Would Lose Material By Card Effect"),
+	OnYourUnitDestroyedByOpponentCardEffect UMETA(DisplayName = "23 - On Your Unit Destroyed By Opponent Card Effect")
 };
 
 UENUM(BlueprintType)
