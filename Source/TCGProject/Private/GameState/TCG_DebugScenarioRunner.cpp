@@ -140,11 +140,11 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		GameState->DebugCardDefinitions.RemoveAll([](const TObjectPtr<UTCG_CardDefinition>& Definition)
 		{
 			return Definition
-				&& (Definition->CardDefinitionId == "Debug_MachineMaterialRecovery_Card"
+				&& (Definition->CardDefinitionId == "Debug_MaterialRecovery_Card"
 					|| Definition->CardDefinitionId == "Debug_MachineMaterialRecovery_Machine"
-					|| Definition->CardDefinitionId == "Debug_MachineMaterialRecovery_EarthHand"
-					|| Definition->CardDefinitionId == "Debug_MachineMaterialRecovery_EarthGraveyard"
-					|| Definition->CardDefinitionId == "Debug_MachineMaterialRecovery_Host");
+					|| Definition->CardDefinitionId == "Debug_MaterialRecovery_EarthHand"
+					|| Definition->CardDefinitionId == "Debug_MaterialRecovery_EarthGraveyard"
+					|| Definition->CardDefinitionId == "Debug_MaterialRecovery_Host");
 		});
 
 		auto MakeDefinition = [GameState](
@@ -162,7 +162,7 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		};
 
 		UTCG_CardDefinition* EffectCardDefinition = MakeDefinition(
-			"Debug_MachineMaterialRecovery_Card",
+			"Debug_MaterialRecovery_Card",
 			TEXT("Debug Machine Material Recovery Card"),
 			ETCGCardElement::Wind,
 			1);
@@ -230,19 +230,19 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 			3);
 
 		UTCG_CardDefinition* EarthHandDefinition = MakeDefinition(
-			"Debug_MachineMaterialRecovery_EarthHand",
+			"Debug_MaterialRecovery_EarthHand",
 			TEXT("Debug Earth Hand Unit"),
 			ETCGCardElement::Earth,
 			2);
 
 		UTCG_CardDefinition* EarthGraveyardDefinition = MakeDefinition(
-			"Debug_MachineMaterialRecovery_EarthGraveyard",
+			"Debug_MaterialRecovery_EarthGraveyard",
 			TEXT("Debug Earth Graveyard Unit"),
 			ETCGCardElement::Earth,
 			2);
 
 		UTCG_CardDefinition* HostDefinition = MakeDefinition(
-			"Debug_MachineMaterialRecovery_Host",
+			"Debug_MaterialRecovery_Host",
 			TEXT("Debug Host Unit"),
 			ETCGCardElement::Water,
 			1);
