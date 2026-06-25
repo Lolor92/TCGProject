@@ -169,6 +169,7 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		FTCGCardEffectRef PlayMachineFromGraveyardEffect;
 		PlayMachineFromGraveyardEffect.Trigger = ETCGEffectTrigger::OnPlay;
 		PlayMachineFromGraveyardEffect.bOptional = true;
+		PlayMachineFromGraveyardEffect.TriggerFilter.bRequireTopCard = true;
 
 		FTCGEffectStep PlayMachineStep;
 		PlayMachineStep.StepType = ETCGEffectStepType::PlayGraveyardCardOnUnit;
