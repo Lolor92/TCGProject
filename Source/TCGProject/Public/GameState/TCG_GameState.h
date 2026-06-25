@@ -1,84 +1,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Cards/TCG_CardDefinition.h"
 #include "Cards/TCG_CardTypes.h"
 #include "GameFramework/GameState.h"
-#include "Cards/TCG_CardDefinition.h"
+#include "GameState/TCG_EffectChainTypes.h"
+#include "GameState/TCG_MatchTypes.h"
+#include "GameState/TCG_PendingChoiceTypes.h"
 #include "TCG_GameState.generated.h"
 
-UENUM(BlueprintType)
-enum class ETCGMatchPhase : uint8
-{
-	WaitingForPlayers UMETA(DisplayName = "Waiting For Players"),
-	RoundStart UMETA(DisplayName = "Round Start"),
-	Placement UMETA(DisplayName = "Placement"),
-	Battle UMETA(DisplayName = "Battle"),
-	RoundEnd UMETA(DisplayName = "Round End"),
-	GameOver UMETA(DisplayName = "Game Over")
-};
-
-UENUM(BlueprintType)
-enum class ETCGMatchResult : uint8
-{
-	None UMETA(DisplayName = "None"),
-	Player0Wins UMETA(DisplayName = "Player 0 Wins"),
-	Player1Wins UMETA(DisplayName = "Player 1 Wins"),
-	Draw UMETA(DisplayName = "Draw")
-};
-
-USTRUCT(BlueprintType)
-struct FTCGEffectChainEntry
-{
-	GENERATED_BODY()
-public:
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") int32 ChainIndex = INDEX_NONE;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") FGuid SourceCardInstanceId;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") FGuid TargetCardInstanceId;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") FGuid SecondaryTargetCardInstanceId;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") FName SourceCardDefinitionId = NAME_None;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") ETCGEffectTrigger Trigger = ETCGEffectTrigger::None;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") FName EffectId = NAME_None;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") FTCGCardEffectRef EffectRef;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") int32 ControllerPlayerIndex = INDEX_NONE;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") bool bRequiresSourceOnBoard = true;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") bool bRequiresTargetOnBoard = true;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") bool bRequiresSourceInTargetStack = false;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") bool bRequiresSourceUnderTarget = false;
-};
-
-USTRUCT(BlueprintType) struct FTCGPendingDiscardChoice { GENERATED_BODY() public: UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") bool bIsPending=false; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 PlayerIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 RequiredCount=0; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FGuid SourceCardInstanceId; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 ChainIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") TArray<FGuid> EligibleCardInstanceIds; void Reset(){ bIsPending=false; PlayerIndex=INDEX_NONE; RequiredCount=0; SourceCardInstanceId.Invalidate(); ChainIndex=INDEX_NONE; EligibleCardInstanceIds.Reset(); } };
-USTRUCT(BlueprintType) struct FTCGPendingGraveyardToDeckChoice { GENERATED_BODY() public: UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") bool bIsPending=false; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 PlayerIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 RequiredCount=0; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FGuid SourceCardInstanceId; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 ChainIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") TArray<FGuid> EligibleCardInstanceIds; void Reset(){ bIsPending=false; PlayerIndex=INDEX_NONE; RequiredCount=0; SourceCardInstanceId.Invalidate(); ChainIndex=INDEX_NONE; EligibleCardInstanceIds.Reset(); } };
-USTRUCT(BlueprintType) struct FTCGPendingHandToTopDeckChoice { GENERATED_BODY() public: UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") bool bIsPending=false; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 PlayerIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 RequiredCount=0; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FGuid SourceCardInstanceId; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 ChainIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") TArray<FGuid> EligibleCardInstanceIds; void Reset(){ bIsPending=false; PlayerIndex=INDEX_NONE; RequiredCount=0; SourceCardInstanceId.Invalidate(); ChainIndex=INDEX_NONE; EligibleCardInstanceIds.Reset(); } };
-USTRUCT(BlueprintType) struct FTCGPendingPlayToEmptyZoneChoice { GENERATED_BODY() public: UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") bool bIsPending=false; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 PlayerIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FGuid SourceCardInstanceId; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 ChainIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") TArray<FName> EligibleZoneIds; void Reset(){ bIsPending=false; PlayerIndex=INDEX_NONE; SourceCardInstanceId.Invalidate(); ChainIndex=INDEX_NONE; EligibleZoneIds.Reset(); } };
-USTRUCT(BlueprintType) struct FTCGPendingAttachSourceToWaterUnitChoice { GENERATED_BODY() public: UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") bool bIsPending=false; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 PlayerIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FGuid SourceCardInstanceId; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 ChainIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") TArray<FGuid> EligibleTargetCardInstanceIds; void Reset(){ bIsPending=false; PlayerIndex=INDEX_NONE; SourceCardInstanceId.Invalidate(); ChainIndex=INDEX_NONE; EligibleTargetCardInstanceIds.Reset(); } };
-USTRUCT(BlueprintType) struct FTCGPendingRevealDeckChoice { GENERATED_BODY() public: UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") bool bIsPending=false; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 PlayerIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 RequiredCount=1; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FGuid SourceCardInstanceId; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 ChainIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") TArray<FGuid> RevealedCardInstanceIds; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") TArray<FGuid> EligibleCardInstanceIds; void Reset(){ bIsPending=false; PlayerIndex=INDEX_NONE; RequiredCount=1; SourceCardInstanceId.Invalidate(); ChainIndex=INDEX_NONE; RevealedCardInstanceIds.Reset(); EligibleCardInstanceIds.Reset(); } };
-USTRUCT(BlueprintType) struct FTCGPendingPlayGraveyardCardToEmptyZoneChoice { GENERATED_BODY() public: UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") bool bIsPending=false; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 PlayerIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FGuid SourceCardInstanceId; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 ChainIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") TArray<FGuid> EligibleCardInstanceIds; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") TArray<FName> EligibleZoneIds; void Reset(){ bIsPending=false; PlayerIndex=INDEX_NONE; SourceCardInstanceId.Invalidate(); ChainIndex=INDEX_NONE; EligibleCardInstanceIds.Reset(); EligibleZoneIds.Reset(); } };
-USTRUCT(BlueprintType) struct FTCGPendingGraveyardCardsToHandAndTopDeckChoice { GENERATED_BODY() public: UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") bool bIsPending=false; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 PlayerIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FGuid SourceCardInstanceId; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 ChainIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") TArray<FGuid> EligibleCardInstanceIds; void Reset(){ bIsPending=false; PlayerIndex=INDEX_NONE; SourceCardInstanceId.Invalidate(); ChainIndex=INDEX_NONE; EligibleCardInstanceIds.Reset(); } };
-USTRUCT(BlueprintType) struct FTCGPendingRemoveMaterialChoice { GENERATED_BODY() public: UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") bool bIsPending=false; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 PlayerIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FGuid SourceCardInstanceId; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FGuid TargetCardInstanceId; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 ChainIndex=INDEX_NONE; UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") TArray<FGuid> EligibleMaterialCardInstanceIds; void Reset(){ bIsPending=false; PlayerIndex=INDEX_NONE; SourceCardInstanceId.Invalidate(); TargetCardInstanceId.Invalidate(); ChainIndex=INDEX_NONE; EligibleMaterialCardInstanceIds.Reset(); } };
-USTRUCT(BlueprintType)
-struct FTCGPendingSwapOpponentUnitZonesChoice
-{
-	GENERATED_BODY()
-
-public:
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") bool bIsPending = false;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 PlayerIndex = INDEX_NONE;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") FGuid SourceCardInstanceId;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") int32 ChainIndex = INDEX_NONE;
-	UPROPERTY(BlueprintReadOnly, Category = "TCG|Choice") TArray<FGuid> EligibleTargetCardInstanceIds;
-
-	void Reset()
-	{
-		bIsPending = false;
-		PlayerIndex = INDEX_NONE;
-		SourceCardInstanceId.Invalidate();
-		ChainIndex = INDEX_NONE;
-		EligibleTargetCardInstanceIds.Reset();
-	}
-};
-
-USTRUCT(BlueprintType)
-struct FTCGTemporaryAttackBoost { GENERATED_BODY() public: UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") FGuid TargetCardInstanceId; UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") int32 Amount=0; UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects") int32 RoundApplied=0; };
 
 UCLASS()
 class TCGPROJECT_API ATCG_GameState : public AGameState
