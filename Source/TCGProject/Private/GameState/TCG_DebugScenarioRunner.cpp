@@ -150,9 +150,17 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		FTCGCardEffectRef ResponseEffect;
 		ResponseEffect.Trigger = ETCGEffectTrigger::OnYourUnitDestroyedByBattle;
 		ResponseEffect.bOptional = true;
-		FTCGEffectStep ResponseStep;
-		ResponseStep.StepType = ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget;
-		ResponseEffect.Steps.Add(ResponseStep);
+		FTCGEffectStep DiscardStep;
+		DiscardStep.StepType = ETCGEffectStepType::DiscardSource;
+		ResponseEffect.Steps.Add(DiscardStep);
+
+		FTCGEffectStep DetachStep;
+		DetachStep.StepType = ETCGEffectStepType::DetachMaterials;
+		DetachStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+		DetachStep.Value = 2;
+		DetachStep.bAllowPartialSuccess = true;
+		DetachStep.bRequiresPreviousStepSuccess = true;
+		ResponseEffect.Steps.Add(DetachStep);
 		ResponseCardDefinition->Effects.Add(ResponseEffect);
 		GameState->DebugCardDefinitions.Add(ResponseCardDefinition);
 

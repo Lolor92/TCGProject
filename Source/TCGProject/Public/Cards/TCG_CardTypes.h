@@ -90,6 +90,7 @@ enum class ETCGEffectStepType : uint8
 	// Generic material steps. Prefer these over rigid one-card effect steps.
 	DetachMaterials UMETA(DisplayName = "54 - Generic: Detach Materials"),
 	StealMaterials UMETA(DisplayName = "55 - Generic: Steal Materials"),
+	DiscardSource UMETA(DisplayName = "56 - Generic: Discard Source"),
 
 	// Legacy/debug-only rigid step. Keep temporarily while migrating old effects.
 	AttackDetachTwoStealOneMaterial UMETA(DisplayName = "53 - Legacy Attack: Detach 2, Steal 1 Material")
@@ -195,6 +196,13 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "5. Chain")
 	bool bRequiresPreviousStepSuccess = false;
+
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "5. Chain",
+		meta = (EditCondition = "StepType == ETCGEffectStepType::DetachMaterials", EditConditionHides))
+	bool bAllowPartialSuccess = false;
 
 	UPROPERTY(
 		EditDefaultsOnly,

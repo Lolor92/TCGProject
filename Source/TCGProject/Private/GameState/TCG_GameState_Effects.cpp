@@ -63,6 +63,7 @@ constexpr bool bLogEffectResolution = false;
 		case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect: return TEXT("DiscardSourcePreventMaterialLossByCardEffect");
 		case ETCGEffectStepType::DetachMaterials: return TEXT("DetachMaterials");
 		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
+		case ETCGEffectStepType::DiscardSource: return TEXT("DiscardSource");
 case ETCGEffectStepType::AttackDetachTwoStealOneMaterial: return TEXT("AttackDetachTwoStealOneMaterial");
 default: return TEXT("None");
 		}
@@ -604,6 +605,55 @@ Count++;
 return Count;
 }
 
+static bool DiscardSourceGeneric(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry)
+{
+if (!GameState)
+{
+return false;
+}
+
+const FTCGCardInstance* SourceCard = GameState->FindCardInstance(ChainEntry.SourceCardInstanceId);
+if (!SourceCard)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DiscardSource failed Source=%s Reason=SourceMissing"),
+ChainEntry.SourceCardDefinitionId.IsNone() ? TEXT("None") : *ChainEntry.SourceCardDefinitionId.ToString());
+
+return false;
+}
+
+const FName SourceDefinitionId = SourceCard->CardDefinitionId;
+
+if (SourceCard->OwnerPlayerIndex != ChainEntry.ControllerPlayerIndex)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DiscardSource failed Source=%s Reason=WrongController"),
+*SourceDefinitionId.ToString());
+
+return false;
+}
+
+if (SourceCard->Location != ETCGCardLocation::Hand)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DiscardSource failed Source=%s Reason=SourceNotInHand"),
+*SourceDefinitionId.ToString());
+
+return false;
+}
+
+const bool bDiscarded = GameState->MoveCardToLocation(ChainEntry.SourceCardInstanceId, ETCGCardLocation::Graveyard);
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DiscardSource Source=%s Discarded=%s"),
+*SourceDefinitionId.ToString(),
+bDiscarded ? TEXT("true") : TEXT("false"));
+
+return bDiscarded;
+}
+
 static FGuid ResolveUnitTargetForMaterialStep(
 const FTCGEffectChainEntry& ChainEntry,
 const FTCGEffectStep& Step)
@@ -641,28 +691,45 @@ return false;
 
 const FName TargetDefinitionId = TargetCard->CardDefinitionId;
 
-if (CountMaterialsUnderUnitForEffect(GameState, TargetCardInstanceId) < DetachCount)
+const int32 AvailableMaterialCount = CountMaterialsUnderUnitForEffect(GameState, TargetCardInstanceId);
+if (AvailableMaterialCount <= 0)
 {
 UE_LOG(LogTemp, Warning,
-TEXT("TCG Effect: DetachMaterials failed Target=%s Requested=%d Reason=NotEnoughMaterials"),
+TEXT("TCG Effect: DetachMaterials failed Target=%s Requested=%d Reason=NoMaterials"),
 *TargetDefinitionId.ToString(),
 DetachCount);
 
 return false;
 }
 
+if (!Step.bAllowPartialSuccess && AvailableMaterialCount < DetachCount)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DetachMaterials failed Target=%s Requested=%d Available=%d Reason=NotEnoughMaterials"),
+*TargetDefinitionId.ToString(),
+DetachCount,
+AvailableMaterialCount);
+
+return false;
+}
+
+const int32 ActualDetachCount = Step.bAllowPartialSuccess
+? FMath::Min(DetachCount, AvailableMaterialCount)
+: DetachCount;
+
 if (TryHandMaterialLossReplacementForCardEffect(GameState, TargetCardInstanceId))
 {
 UE_LOG(LogTemp, Warning,
-TEXT("TCG Effect: DetachMaterials prevented Target=%s Requested=%d"),
+TEXT("TCG Effect: DetachMaterials prevented Target=%s Requested=%d Actual=%d"),
 *TargetDefinitionId.ToString(),
-DetachCount);
+DetachCount,
+ActualDetachCount);
 
 return false;
 }
 
 int32 DetachedCount = 0;
-for (int32 Index = 0; Index < DetachCount; ++Index)
+for (int32 Index = 0; Index < ActualDetachCount; ++Index)
 {
 if (GameState->MoveBottomOverlayToGraveyard(TargetCardInstanceId))
 {
@@ -670,16 +737,20 @@ DetachedCount++;
 }
 }
 
-const bool bDetachedAll = DetachedCount == DetachCount;
+const bool bStepSuccess = Step.bAllowPartialSuccess
+? DetachedCount > 0
+: DetachedCount == DetachCount;
 
 UE_LOG(LogTemp, Warning,
-TEXT("TCG Effect: DetachMaterials Target=%s Requested=%d Detached=%d Success=%s"),
+TEXT("TCG Effect: DetachMaterials Target=%s Requested=%d Actual=%d Detached=%d PartialAllowed=%s Success=%s"),
 *TargetDefinitionId.ToString(),
 DetachCount,
+ActualDetachCount,
 DetachedCount,
-bDetachedAll ? TEXT("true") : TEXT("false"));
+Step.bAllowPartialSuccess ? TEXT("true") : TEXT("false"),
+bStepSuccess ? TEXT("true") : TEXT("false"));
 
-return bDetachedAll;
+return bStepSuccess;
 }
 
 static bool StealMaterialsGeneric(
@@ -1165,6 +1236,18 @@ break;
 		}
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step RemoveMaterialFromTargetUnit Player=%d Pending=%s AutoSubmitted=%s"), ChainEntry.ControllerPlayerIndex, bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
 		bStepSucceeded = bAutoSubmittedChoice;
+		break;
+	}
+	case ETCGEffectStepType::DiscardSource:
+	{
+		bStepSucceeded = DiscardSourceGeneric(this, ChainEntry);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Step DiscardSource Player=%d Success=%s"),
+				ChainEntry.ControllerPlayerIndex,
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
 		break;
 	}
 	case ETCGEffectStepType::DetachMaterials:
