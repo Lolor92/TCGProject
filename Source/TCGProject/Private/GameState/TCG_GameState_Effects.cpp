@@ -1298,8 +1298,32 @@ break;
 	}
 	case ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget:
 	{
-		bStepSucceeded = DiscardSourceDetachUpToTwoMaterialsFromTarget(this, ChainEntry);
-		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardSourceDetachUpToTwoMaterialsFromTarget Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
+		// Legacy alias. Keep old data assets working, but resolve through generic steps.
+		const bool bDiscardedSource = DiscardSourceGeneric(this, ChainEntry);
+
+		if (bDiscardedSource)
+		{
+			FTCGEffectStep LegacyDetachStep;
+			LegacyDetachStep.StepType = ETCGEffectStepType::DetachMaterials;
+			LegacyDetachStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+			LegacyDetachStep.Value = 2;
+			LegacyDetachStep.bAllowPartialSuccess = true;
+
+			bStepSucceeded = DetachMaterialsGeneric(this, ChainEntry, LegacyDetachStep);
+		}
+		else
+		{
+			bStepSucceeded = false;
+		}
+
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Step DiscardSourceDetachUpToTwoMaterialsFromTarget LegacyAlias Player=%d Discarded=%s Success=%s"),
+				ChainEntry.ControllerPlayerIndex,
+				bDiscardedSource ? TEXT("true") : TEXT("false"),
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
 		break;
 	}
 	case ETCGEffectStepType::DestroyTargetUnitByCardEffect:
