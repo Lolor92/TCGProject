@@ -97,6 +97,7 @@ enum class ETCGEffectStepType : uint8
 	BanishSource UMETA(DisplayName = "60 - Generic: Banish Source"),
 	DrawCardsForBothPlayers UMETA(DisplayName = "61 - Generic: Draw Cards For Both Players"),
 	NegateActivation UMETA(DisplayName = "62 - Generic: Negate Activation"),
+	SwapUnitZones UMETA(DisplayName = "63 - Generic: Swap Unit Zones"),
 
 	// Legacy/debug-only rigid step. Keep temporarily while migrating old effects.
 	AttackDetachTwoStealOneMaterial UMETA(DisplayName = "53 - Legacy Attack: Detach 2, Steal 1 Material")

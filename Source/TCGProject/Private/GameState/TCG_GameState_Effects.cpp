@@ -60,6 +60,7 @@ constexpr bool bLogEffectResolution = false;
 		case ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials: return TEXT("DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials");
 		case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw: return TEXT("BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw");
 		case ETCGEffectStepType::SwapTwoOpponentUnitsZones: return TEXT("SwapTwoOpponentUnitsZones");
+		case ETCGEffectStepType::SwapUnitZones: return TEXT("SwapUnitZones");
 		case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect: return TEXT("DiscardSourcePreventMaterialLossByCardEffect");
 		case ETCGEffectStepType::DetachMaterials: return TEXT("DetachMaterials");
 		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
@@ -1239,6 +1240,40 @@ bool ATCG_GameState::ResolveModularEffectChainEntry(const FTCGEffectChainEntry& 
 	return bResolvedAnyStep;
 }
 
+
+static bool ResolveSwapUnitZonesStep(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry,
+bool bAutoSubmitDebugSwapChoice)
+{
+if (!GameState)
+{
+return false;
+}
+
+const bool bChoiceStarted = GameState->BeginPendingSwapOpponentUnitZonesChoice(
+ChainEntry.ControllerPlayerIndex,
+ChainEntry);
+
+bool bAutoSubmittedChoice = false;
+
+if (bChoiceStarted && bAutoSubmitDebugSwapChoice)
+{
+TArray<FGuid> ChoiceOptions;
+GameState->GetPendingSwapOpponentUnitZonesChoiceOptions(ChoiceOptions);
+
+if (ChoiceOptions.Num() >= 2)
+{
+bAutoSubmittedChoice = GameState->SubmitPendingSwapOpponentUnitZonesChoice(
+ChainEntry.ControllerPlayerIndex,
+ChoiceOptions[0],
+ChoiceOptions[1]);
+}
+}
+
+return bAutoSubmittedChoice;
+}
+
 bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step, bool bPreviousStepSucceeded)
 {
 	bool bStepSucceeded = false;
@@ -1724,37 +1759,31 @@ case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw
 		break;
 	}
 	case ETCGEffectStepType::SwapTwoOpponentUnitsZones:
-	{
-		const bool bChoiceStarted = BeginPendingSwapOpponentUnitZonesChoice(ChainEntry.ControllerPlayerIndex, ChainEntry);
-		bool bAutoSubmittedChoice = false;
-
-		if (bChoiceStarted && bAutoSubmitDebugSwapOpponentUnitZonesChoice)
-		{
-			TArray<FGuid> ChoiceOptions;
-			GetPendingSwapOpponentUnitZonesChoiceOptions(ChoiceOptions);
-
-			if (ChoiceOptions.Num() >= 2)
-			{
-				bAutoSubmittedChoice = SubmitPendingSwapOpponentUnitZonesChoice(
-					ChainEntry.ControllerPlayerIndex,
-					ChoiceOptions[0],
-					ChoiceOptions[1]);
-			}
-		}
-
-		if (bLogEffectResolution)
-		{
-			UE_LOG(LogTemp, Warning,
-				TEXT("TCG Effect: Step SwapTwoOpponentUnitsZones Player=%d Pending=%s AutoSubmitted=%s"),
-				ChainEntry.ControllerPlayerIndex,
-				bChoiceStarted ? TEXT("true") : TEXT("false"),
-				bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
-		}
-
-		bStepSucceeded = bAutoSubmittedChoice;
-		break;
-	}
-	case ETCGEffectStepType::AttachSourceToWaterUnitMaterial:
+{
+// Legacy alias. Keep old data assets working, but prefer generic SwapUnitZones.
+bStepSucceeded = ResolveSwapUnitZonesStep(this, ChainEntry, bAutoSubmitDebugSwapOpponentUnitZonesChoice);
+if (bLogEffectResolution)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Step SwapTwoOpponentUnitsZones LegacyAlias Player=%d Success=%s"),
+ChainEntry.ControllerPlayerIndex,
+bStepSucceeded ? TEXT("true") : TEXT("false"));
+}
+break;
+}
+case ETCGEffectStepType::SwapUnitZones:
+{
+bStepSucceeded = ResolveSwapUnitZonesStep(this, ChainEntry, bAutoSubmitDebugSwapOpponentUnitZonesChoice);
+if (bLogEffectResolution)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Step SwapUnitZones Player=%d Success=%s"),
+ChainEntry.ControllerPlayerIndex,
+bStepSucceeded ? TEXT("true") : TEXT("false"));
+}
+break;
+}
+case ETCGEffectStepType::AttachSourceToWaterUnitMaterial:
 	case ETCGEffectStepType::AttachSourceToUnitMaterial:
 	{
 		const bool bChoiceStarted = BeginPendingAttachSourceToWaterUnitChoice(ChainEntry.ControllerPlayerIndex, ChainEntry);
