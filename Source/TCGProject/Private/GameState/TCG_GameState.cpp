@@ -103,7 +103,14 @@ void ATCG_GameState::StartMatch()
 	MatchResult = ETCGMatchResult::None;
 	ClearPendingDiscardChoice();
 	ClearPendingGraveyardToDeckChoice();
+	ClearPendingHandToTopDeckChoice();
+	ClearPendingPlayToEmptyZoneChoice();
+	ClearPendingAttachSourceToWaterUnitChoice();
 	ClearPendingRevealDeckChoice();
+	ClearPendingPlayGraveyardCardToEmptyZoneChoice();
+	ClearPendingGraveyardCardsToHandAndTopDeckChoice();
+	ClearPendingRemoveMaterialChoice();
+	ClearPendingSwapOpponentUnitZonesChoice();
 }
 
 void ATCG_GameState::SetPhase(ETCGMatchPhase NewPhase)

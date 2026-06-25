@@ -11,6 +11,7 @@ namespace
 	constexpr bool bAutoSubmitDebugAttachSourceToUnitChoice = true;
 	constexpr bool bAutoSubmitDebugPlayGraveyardCardToEmptyZoneChoice = true;
 	constexpr bool bAutoSubmitDebugDestroyedRecoveryChoice = true;
+	constexpr bool bAutoSubmitDebugSwapOpponentUnitZonesChoice = true;
 
 	const FName LegacyDebugEffect_Draw1 = "Debug_Draw1";
 	const FName LegacyDebugEffect_GainAttackForCardsUnderneath = "Debug_GainAttackForCardsUnderneath";
@@ -46,6 +47,7 @@ namespace
 		case ETCGEffectStepType::DestroyTargetUnitByCardEffect: return TEXT("DestroyTargetUnitByCardEffect");
 		case ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials: return TEXT("DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials");
 		case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw: return TEXT("BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw");
+		case ETCGEffectStepType::SwapTwoOpponentUnitsZones: return TEXT("SwapTwoOpponentUnitsZones");
 		default: return TEXT("None");
 		}
 	}
@@ -699,6 +701,37 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 				ChainEntry.ControllerPlayerIndex,
 				bStepSucceeded ? TEXT("true") : TEXT("false"));
 		}
+		break;
+	}
+	case ETCGEffectStepType::SwapTwoOpponentUnitsZones:
+	{
+		const bool bChoiceStarted = BeginPendingSwapOpponentUnitZonesChoice(ChainEntry.ControllerPlayerIndex, ChainEntry);
+		bool bAutoSubmittedChoice = false;
+
+		if (bChoiceStarted && bAutoSubmitDebugSwapOpponentUnitZonesChoice)
+		{
+			TArray<FGuid> ChoiceOptions;
+			GetPendingSwapOpponentUnitZonesChoiceOptions(ChoiceOptions);
+
+			if (ChoiceOptions.Num() >= 2)
+			{
+				bAutoSubmittedChoice = SubmitPendingSwapOpponentUnitZonesChoice(
+					ChainEntry.ControllerPlayerIndex,
+					ChoiceOptions[0],
+					ChoiceOptions[1]);
+			}
+		}
+
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Step SwapTwoOpponentUnitsZones Player=%d Pending=%s AutoSubmitted=%s"),
+				ChainEntry.ControllerPlayerIndex,
+				bChoiceStarted ? TEXT("true") : TEXT("false"),
+				bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
+		}
+
+		bStepSucceeded = bAutoSubmittedChoice;
 		break;
 	}
 	case ETCGEffectStepType::AttachSourceToWaterUnitMaterial:
