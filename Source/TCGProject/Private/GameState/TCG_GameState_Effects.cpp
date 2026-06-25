@@ -65,6 +65,7 @@ constexpr bool bLogEffectResolution = false;
 		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
 		case ETCGEffectStepType::DiscardSource: return TEXT("DiscardSource");
 		case ETCGEffectStepType::DestroyUnit: return TEXT("DestroyUnit");
+		case ETCGEffectStepType::ReturnUnitToHand: return TEXT("ReturnUnitToHand");
 case ETCGEffectStepType::AttackDetachTwoStealOneMaterial: return TEXT("AttackDetachTwoStealOneMaterial");
 default: return TEXT("None");
 		}
@@ -253,7 +254,54 @@ const bool bDiscardedSource = GameState->MoveCardToLocation(ChainEntry.SourceCar
 		return bMovedMaterials && bMovedTop;
 	}
 
-	static bool DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials(ATCG_GameState* GameState, const FTCGEffectChainEntry& ChainEntry)
+	
+	static bool ReturnUnitToHandGeneric(
+		ATCG_GameState* GameState,
+		const FTCGEffectChainEntry& ChainEntry,
+		const FTCGEffectStep& Step)
+	{
+		if (!GameState)
+		{
+			return false;
+		}
+
+		const FGuid TargetCardInstanceId =
+			Step.TargetMode == ETCGEffectTargetMode::SourceCard
+				? ChainEntry.SourceCardInstanceId
+				: ChainEntry.TargetCardInstanceId;
+
+		const FTCGCardInstance* TargetCard = GameState->FindCardInstance(TargetCardInstanceId);
+		if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: ReturnUnitToHand failed Target=%s Reason=TargetInvalid"),
+				TargetCard ? *TargetCard->CardDefinitionId.ToString() : TEXT("None"));
+			return false;
+		}
+
+		const FName TargetDefinitionId = TargetCard->CardDefinitionId;
+
+		int32 MaterialCount = 0;
+		const bool bReturnedUnit = ReturnUnitToHandMaterialsToGraveyard(GameState, TargetCardInstanceId, MaterialCount);
+
+		const int32 DrawThreshold = Step.Value;
+		const int32 DrawnCount =
+			bReturnedUnit && DrawThreshold > 0 && MaterialCount >= DrawThreshold
+				? GameState->DrawCards(ChainEntry.ControllerPlayerIndex, 1)
+				: 0;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: ReturnUnitToHand Target=%s Returned=%s Materials=%d DrawThreshold=%d Drawn=%d"),
+			*TargetDefinitionId.ToString(),
+			bReturnedUnit ? TEXT("true") : TEXT("false"),
+			MaterialCount,
+			DrawThreshold,
+			DrawnCount);
+
+		return bReturnedUnit;
+	}
+
+static bool DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials(ATCG_GameState* GameState, const FTCGEffectChainEntry& ChainEntry)
 	{
 		if (!GameState) return false;
 
@@ -521,7 +569,14 @@ return false;
 					continue;
 				}
 
-				if (!EffectRefHasStep(EffectRef, ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials))
+				const bool bHasLegacySaveStep =
+					EffectRefHasStep(EffectRef, ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials);
+
+				const bool bHasGenericSaveSteps =
+					EffectRefHasStep(EffectRef, ETCGEffectStepType::DiscardSource)
+					&& EffectRefHasStep(EffectRef, ETCGEffectStepType::ReturnUnitToHand);
+
+				if (!bHasLegacySaveStep && !bHasGenericSaveSteps)
 				{
 					continue;
 				}
@@ -537,7 +592,41 @@ return false;
 				ReplacementEntry.bRequiresSourceOnBoard = false;
 				ReplacementEntry.bRequiresTargetOnBoard = true;
 
-				return DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials(GameState, ReplacementEntry);
+				if (bHasLegacySaveStep)
+				{
+					return DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials(GameState, ReplacementEntry);
+				}
+
+				const FTCGCardInstance* ReplacementSourceCard = GameState->FindCardInstance(ReplacementEntry.SourceCardInstanceId);
+				if (!ReplacementSourceCard
+					|| ReplacementSourceCard->OwnerPlayerIndex != ReplacementEntry.ControllerPlayerIndex
+					|| ReplacementSourceCard->Location != ETCGCardLocation::Hand)
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("TCG Effect: DiscardSource failed Source=%s Reason=SourceNotInHand"),
+						ReplacementEntry.SourceCardDefinitionId.IsNone() ? TEXT("None") : *ReplacementEntry.SourceCardDefinitionId.ToString());
+					return false;
+				}
+
+				const FName ReplacementSourceDefinitionId = ReplacementSourceCard->CardDefinitionId;
+				const bool bDiscardedSource = GameState->MoveCardToLocation(ReplacementEntry.SourceCardInstanceId, ETCGCardLocation::Graveyard);
+
+				UE_LOG(LogTemp, Warning,
+					TEXT("TCG Effect: DiscardSource Source=%s Discarded=%s"),
+					*ReplacementSourceDefinitionId.ToString(),
+					bDiscardedSource ? TEXT("true") : TEXT("false"));
+
+				if (!bDiscardedSource)
+				{
+					return false;
+				}
+
+				FTCGEffectStep ReturnStep;
+				ReturnStep.StepType = ETCGEffectStepType::ReturnUnitToHand;
+				ReturnStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+				ReturnStep.Value = 2;
+
+				return ReturnUnitToHandGeneric(GameState, ReplacementEntry, ReturnStep);
 			}
 		}
 

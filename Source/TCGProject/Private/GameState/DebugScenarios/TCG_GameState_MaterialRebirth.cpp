@@ -416,9 +416,16 @@ namespace
 		ResponseEffect.Trigger = ETCGEffectTrigger::OnYourUnitWouldBeDestroyedByCardEffect;
 		ResponseEffect.bOptional = true;
 
-		FTCGEffectStep ResponseStep;
-		ResponseStep.StepType = ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials;
-		ResponseEffect.Steps.Add(ResponseStep);
+		FTCGEffectStep DiscardStep;
+		DiscardStep.StepType = ETCGEffectStepType::DiscardSource;
+		ResponseEffect.Steps.Add(DiscardStep);
+
+		FTCGEffectStep ReturnStep;
+		ReturnStep.StepType = ETCGEffectStepType::ReturnUnitToHand;
+		ReturnStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+		ReturnStep.Value = 2;
+		ReturnStep.bRequiresPreviousStepSuccess = true;
+		ResponseEffect.Steps.Add(ReturnStep);
 
 		ResponseDefinition->Effects.Add(ResponseEffect);
 		GameState->DebugCardDefinitions.Add(ResponseDefinition);
@@ -476,6 +483,8 @@ namespace
 
 void ATCG_GameState::RunDebugMaterialRebirthScenario()
 {
+	RunDebugCardEffectSaveReplacementScenario(this);
+
 	UE_LOG(LogTemp, Warning, TEXT("TCG Debug: MaterialRebirth scenario start"));
 
 	MatchCards.Empty();
