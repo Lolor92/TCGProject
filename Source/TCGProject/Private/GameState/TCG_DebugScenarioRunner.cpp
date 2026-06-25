@@ -10,10 +10,12 @@ namespace
 		WraparoundBattle,
 		RoundLimitTiebreak,
 		OverlayPlacement,
-		HandDetachResponse
-	};
+		HandDetachResponse,
+		MachineMaterialRecovery
+	,
+		OverdrivePilotKaia};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::HandDetachResponse;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::OverdrivePilotKaia;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
@@ -118,6 +120,264 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 
 
 
+
+	if (DebugRunnerScenario == ETCGDebugRunnerScenario::MachineMaterialRecovery)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Machine material recovery scenario start"));
+
+		GameState->MatchCards.Empty();
+		GameState->SetMatchResult(ETCGMatchResult::None);
+		GameState->SetPhase(ETCGMatchPhase::Placement);
+		GameState->RoundNumber = 1;
+		GameState->TurnNumber = 1;
+		GameState->PlacementStepIndex = 0;
+		GameState->Player0PlacementFieldZonesUsedThisRound.Reset();
+		GameState->Player1PlacementFieldZonesUsedThisRound.Reset();
+		GameState->SetCurrentTurnPlayer(0);
+		GameState->ClearPendingDiscardChoice();
+		GameState->ClearPendingGraveyardToDeckChoice();
+
+		GameState->DebugCardDefinitions.RemoveAll([](const TObjectPtr<UTCG_CardDefinition>& Definition)
+		{
+			return Definition
+				&& (Definition->CardDefinitionId == "Debug_MachineMaterialRecovery_Card"
+					|| Definition->CardDefinitionId == "Debug_MachineMaterialRecovery_Machine"
+					|| Definition->CardDefinitionId == "Debug_MachineMaterialRecovery_EarthHand"
+					|| Definition->CardDefinitionId == "Debug_MachineMaterialRecovery_EarthGraveyard"
+					|| Definition->CardDefinitionId == "Debug_MachineMaterialRecovery_Host");
+		});
+
+		auto MakeDefinition = [GameState](
+			FName CardDefinitionId,
+			const TCHAR* DisplayName,
+			ETCGCardElement Element,
+			int32 BaseAttack)
+		{
+			UTCG_CardDefinition* Definition = NewObject<UTCG_CardDefinition>(GameState);
+			Definition->CardDefinitionId = CardDefinitionId;
+			Definition->DisplayName = FText::FromString(DisplayName);
+			Definition->Element = Element;
+			Definition->BaseAttack = BaseAttack;
+			return Definition;
+		};
+
+		UTCG_CardDefinition* EffectCardDefinition = MakeDefinition(
+			"Debug_MachineMaterialRecovery_Card",
+			TEXT("Debug Machine Material Recovery Card"),
+			ETCGCardElement::Wind,
+			1);
+
+		FTCGCardEffectRef AttachAndPlayEarthEffect;
+		AttachAndPlayEarthEffect.Trigger = ETCGEffectTrigger::OnYourUnitPlayed;
+		AttachAndPlayEarthEffect.bOptional = true;
+		AttachAndPlayEarthEffect.TriggerFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		AttachAndPlayEarthEffect.TriggerFilter.RequiredLocation = ETCGCardLocation::Board;
+		AttachAndPlayEarthEffect.TriggerFilter.bRequireTopCard = true;
+		AttachAndPlayEarthEffect.TriggerFilter.NameContains = "Machine";
+		AttachAndPlayEarthEffect.bUseSourceFilter = true;
+		AttachAndPlayEarthEffect.SourceFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		AttachAndPlayEarthEffect.SourceFilter.RequiredLocation = ETCGCardLocation::Hand;
+		AttachAndPlayEarthEffect.SourceFilter.bRequireTopCard = false;
+
+		FTCGEffectStep AttachStep;
+		AttachStep.StepType = ETCGEffectStepType::AttachSourceToUnitMaterial;
+		AttachStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+		AttachAndPlayEarthEffect.Steps.Add(AttachStep);
+
+		FTCGEffectStep PlayEarthOnUnitStep;
+		PlayEarthOnUnitStep.StepType = ETCGEffectStepType::PlayHandCardOnUnit;
+		PlayEarthOnUnitStep.bRequiresPreviousStepSuccess = true;
+		PlayEarthOnUnitStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		PlayEarthOnUnitStep.TargetFilter.RequiredLocation = ETCGCardLocation::Hand;
+		PlayEarthOnUnitStep.TargetFilter.bRequireTopCard = false;
+		PlayEarthOnUnitStep.TargetFilter.bRequireElement = true;
+		PlayEarthOnUnitStep.TargetFilter.RequiredElement = ETCGCardElement::Earth;
+		PlayEarthOnUnitStep.SecondaryTargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		PlayEarthOnUnitStep.SecondaryTargetFilter.RequiredLocation = ETCGCardLocation::Board;
+		PlayEarthOnUnitStep.SecondaryTargetFilter.bRequireTopCard = true;
+		PlayEarthOnUnitStep.SecondaryTargetFilter.NameContains = "Host";
+		AttachAndPlayEarthEffect.Steps.Add(PlayEarthOnUnitStep);
+
+		EffectCardDefinition->Effects.Add(AttachAndPlayEarthEffect);
+
+		FTCGCardEffectRef MaterialRecoveryEffect;
+		MaterialRecoveryEffect.Trigger = ETCGEffectTrigger::OnMaterialOfDestroyedUnit;
+		MaterialRecoveryEffect.TriggerFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		MaterialRecoveryEffect.TriggerFilter.RequiredLocation = ETCGCardLocation::Board;
+		MaterialRecoveryEffect.TriggerFilter.bRequireTopCard = true;
+		MaterialRecoveryEffect.TriggerFilter.NameContains = "Machine";
+		MaterialRecoveryEffect.bUseSourceFilter = true;
+		MaterialRecoveryEffect.SourceFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		MaterialRecoveryEffect.SourceFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+		MaterialRecoveryEffect.SourceFilter.bRequireTopCard = false;
+
+		FTCGEffectStep RecoverEarthStep;
+		RecoverEarthStep.StepType = ETCGEffectStepType::MoveGraveyardCardToHand;
+		RecoverEarthStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		RecoverEarthStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+		RecoverEarthStep.TargetFilter.bRequireTopCard = false;
+		RecoverEarthStep.TargetFilter.bRequireElement = true;
+		RecoverEarthStep.TargetFilter.RequiredElement = ETCGCardElement::Earth;
+		RecoverEarthStep.TargetFilter.bExcludeSourceCard = true;
+		MaterialRecoveryEffect.Steps.Add(RecoverEarthStep);
+
+		EffectCardDefinition->Effects.Add(MaterialRecoveryEffect);
+
+		UTCG_CardDefinition* MachineDefinition = MakeDefinition(
+			"Debug_MachineMaterialRecovery_Machine",
+			TEXT("Debug Machine Unit"),
+			ETCGCardElement::Fire,
+			3);
+
+		UTCG_CardDefinition* EarthHandDefinition = MakeDefinition(
+			"Debug_MachineMaterialRecovery_EarthHand",
+			TEXT("Debug Earth Hand Unit"),
+			ETCGCardElement::Earth,
+			2);
+
+		UTCG_CardDefinition* EarthGraveyardDefinition = MakeDefinition(
+			"Debug_MachineMaterialRecovery_EarthGraveyard",
+			TEXT("Debug Earth Graveyard Unit"),
+			ETCGCardElement::Earth,
+			2);
+
+		UTCG_CardDefinition* HostDefinition = MakeDefinition(
+			"Debug_MachineMaterialRecovery_Host",
+			TEXT("Debug Host Unit"),
+			ETCGCardElement::Water,
+			1);
+
+		GameState->DebugCardDefinitions.Add(EffectCardDefinition);
+		GameState->DebugCardDefinitions.Add(MachineDefinition);
+		GameState->DebugCardDefinitions.Add(EarthHandDefinition);
+		GameState->DebugCardDefinitions.Add(EarthGraveyardDefinition);
+		GameState->DebugCardDefinitions.Add(HostDefinition);
+
+		FTCGCardInstance* HostCard = GameState->AddCardInstanceFromDefinition(
+			HostDefinition,
+			0,
+			ETCGCardLocation::Hand);
+
+		FTCGCardInstance* EffectCard = GameState->AddCardInstanceFromDefinition(
+			EffectCardDefinition,
+			0,
+			ETCGCardLocation::Hand);
+
+		FTCGCardInstance* MachineCard = GameState->AddCardInstanceFromDefinition(
+			MachineDefinition,
+			0,
+			ETCGCardLocation::Hand);
+
+		FTCGCardInstance* EarthHandCard = GameState->AddCardInstanceFromDefinition(
+			EarthHandDefinition,
+			0,
+			ETCGCardLocation::Hand);
+
+		FTCGCardInstance* EarthGraveyardCard = GameState->AddCardInstanceFromDefinition(
+			EarthGraveyardDefinition,
+			0,
+			ETCGCardLocation::Graveyard);
+
+		if (!HostCard || !EffectCard || !MachineCard || !EarthHandCard || !EarthGraveyardCard)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Machine material recovery setup failed"));
+			GameState->EndMatch(ETCGMatchResult::Draw);
+			return;
+		}
+
+		const FGuid HostId = HostCard->CardInstanceId;
+		const FGuid EffectCardId = EffectCard->CardInstanceId;
+		const FGuid MachineId = MachineCard->CardInstanceId;
+		const FGuid EarthHandId = EarthHandCard->CardInstanceId;
+		const FGuid EarthGraveyardId = EarthGraveyardCard->CardInstanceId;
+
+		const bool bPlayedHost = GameState->PlayCardToZone(
+			HostId,
+			ATCG_GameState::GetFieldZoneId(0, 0));
+
+		// Simulate the normal placement rule already using this zone this round.
+		// The later effect-based overlay should still be allowed.
+		GameState->Player0PlacementFieldZonesUsedThisRound.AddUnique(0);
+		const bool bZoneAlreadyUsedBeforeEffect = GameState->Player0PlacementFieldZonesUsedThisRound.Contains(0);
+
+		const bool bPlayedMachine = GameState->PlayCardToZone(
+			MachineId,
+			ATCG_GameState::GetFieldZoneId(0, 1));
+
+		const FTCGCardInstance* MachineAfterPlay = GameState->FindCardInstance(MachineId);
+		const FTCGCardInstance* EffectAfterMachine = GameState->FindCardInstance(EffectCardId);
+		const FTCGCardInstance* EarthHandAfterEffect = GameState->FindCardInstance(EarthHandId);
+		const FTCGCardInstance* HostAfterEffect = GameState->FindCardInstance(HostId);
+
+		const bool bEffectAttachedToMachine =
+			MachineAfterPlay
+			&& EffectAfterMachine
+			&& MachineAfterPlay->Location == ETCGCardLocation::Board
+			&& EffectAfterMachine->Location == ETCGCardLocation::Board
+			&& MachineAfterPlay->StackId.IsValid()
+			&& EffectAfterMachine->StackId == MachineAfterPlay->StackId
+			&& EffectAfterMachine->StackIndex < MachineAfterPlay->StackIndex;
+
+		const bool bEarthPlayedOnHost =
+			EarthHandAfterEffect
+			&& HostAfterEffect
+			&& EarthHandAfterEffect->Location == ETCGCardLocation::Board
+			&& HostAfterEffect->Location == ETCGCardLocation::Board
+			&& EarthHandAfterEffect->StackId.IsValid()
+			&& EarthHandAfterEffect->StackId == HostAfterEffect->StackId
+			&& HostAfterEffect->StackIndex < EarthHandAfterEffect->StackIndex;
+
+		bool bDestroyedMachineStack = false;
+		if (MachineAfterPlay && MachineAfterPlay->StackId.IsValid())
+		{
+			bDestroyedMachineStack = GameState->MoveStackToLocation(
+				MachineAfterPlay->StackId,
+				ETCGCardLocation::Graveyard);
+		}
+
+		const FTCGCardInstance* MachineAfterDestroy = GameState->FindCardInstance(MachineId);
+		const FTCGCardInstance* EffectAfterDestroy = GameState->FindCardInstance(EffectCardId);
+		const FTCGCardInstance* EarthRecoveredAfterDestroy = GameState->FindCardInstance(EarthGraveyardId);
+
+		const bool bMachineDestroyed =
+			MachineAfterDestroy
+			&& MachineAfterDestroy->Location == ETCGCardLocation::Graveyard;
+
+		const bool bEffectCardInGraveyard =
+			EffectAfterDestroy
+			&& EffectAfterDestroy->Location == ETCGCardLocation::Graveyard;
+
+		const bool bEarthRecovered =
+			EarthRecoveredAfterDestroy
+			&& EarthRecoveredAfterDestroy->Location == ETCGCardLocation::Hand;
+
+		const bool bExpectedAll =
+			bPlayedHost
+			&& bZoneAlreadyUsedBeforeEffect
+			&& bPlayedMachine
+			&& bEffectAttachedToMachine
+			&& bEarthPlayedOnHost
+			&& bDestroyedMachineStack
+			&& bMachineDestroyed
+			&& bEffectCardInGraveyard
+			&& bEarthRecovered;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: MachineMaterialRecovery summary PlayedHost=%s ZoneAlreadyUsed=%s PlayedMachine=%s Attached=%s EarthPlayedOnHost=%s DestroyedStack=%s MachineGraveyard=%s EffectGraveyard=%s EarthRecovered=%s ExpectedAll=%s"),
+			bPlayedHost ? TEXT("true") : TEXT("false"),
+			bZoneAlreadyUsedBeforeEffect ? TEXT("true") : TEXT("false"),
+			bPlayedMachine ? TEXT("true") : TEXT("false"),
+			bEffectAttachedToMachine ? TEXT("true") : TEXT("false"),
+			bEarthPlayedOnHost ? TEXT("true") : TEXT("false"),
+			bDestroyedMachineStack ? TEXT("true") : TEXT("false"),
+			bMachineDestroyed ? TEXT("true") : TEXT("false"),
+			bEffectCardInGraveyard ? TEXT("true") : TEXT("false"),
+			bEarthRecovered ? TEXT("true") : TEXT("false"),
+			bExpectedAll ? TEXT("true") : TEXT("false"));
+
+		GameState->EndMatch(ETCGMatchResult::Draw);
+		return;
+	}
 
 	if (DebugRunnerScenario == ETCGDebugRunnerScenario::HandDetachResponse)
 	{
