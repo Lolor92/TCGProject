@@ -3,7 +3,15 @@
 
 namespace
 {
-	constexpr bool bLogEffectResolution = false;
+	static bool DiscardSourcePreventMaterialLossByCardEffect(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry);
+
+static bool TryHandMaterialLossReplacementForCardEffect(
+ATCG_GameState* GameState,
+const FGuid& TargetTopCardInstanceId);
+
+constexpr bool bLogEffectResolution = false;
 	constexpr bool bAutoSubmitDebugDiscardChoice = true;
 	constexpr bool bAutoSubmitDebugGraveyardToDeckChoice = true;
 	constexpr bool bAutoSubmitDebugHandToTopDeckChoice = true;
@@ -48,7 +56,8 @@ namespace
 		case ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials: return TEXT("DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials");
 		case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw: return TEXT("BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw");
 		case ETCGEffectStepType::SwapTwoOpponentUnitsZones: return TEXT("SwapTwoOpponentUnitsZones");
-		default: return TEXT("None");
+		case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect: return TEXT("DiscardSourcePreventMaterialLossByCardEffect");
+default: return TEXT("None");
 		}
 	}
 
@@ -170,7 +179,17 @@ namespace
 		const FGuid TargetCardId = ChainEntry.TargetCardInstanceId;
 		const FName SourceDefinitionId = SourceCard->CardDefinitionId;
 		const FName TargetDefinitionId = TargetCard->CardDefinitionId;
-		const bool bDiscardedSource = GameState->MoveCardToLocation(ChainEntry.SourceCardInstanceId, ETCGCardLocation::Graveyard);
+		
+if (TryHandMaterialLossReplacementForCardEffect(GameState, TargetCardId))
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Discard source detach prevented Target=%s"),
+*TargetDefinitionId.ToString());
+
+return true;
+}
+
+const bool bDiscardedSource = GameState->MoveCardToLocation(ChainEntry.SourceCardInstanceId, ETCGCardLocation::Graveyard);
 		if (!bDiscardedSource)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Discard source detach failed Source=%s Reason=DiscardFailed"), *SourceDefinitionId.ToString());
@@ -351,7 +370,122 @@ namespace
 		}
 
 		return false;
-	}
+	}static bool DiscardSourcePreventMaterialLossByCardEffect(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry)
+{
+if (!GameState)
+{
+return false;
+}
+
+const FTCGCardInstance* SourceCard = GameState->FindCardInstance(ChainEntry.SourceCardInstanceId);
+const FTCGCardInstance* TargetCard = GameState->FindCardInstance(ChainEntry.TargetCardInstanceId);
+
+if (!SourceCard
+|| SourceCard->OwnerPlayerIndex != ChainEntry.ControllerPlayerIndex
+|| SourceCard->Location != ETCGCardLocation::Hand)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Material loss save failed Source=%s Reason=SourceNotInHand"),
+ChainEntry.SourceCardDefinitionId.IsNone() ? TEXT("None") : *ChainEntry.SourceCardDefinitionId.ToString());
+
+return false;
+}
+
+if (!TargetCard
+|| TargetCard->Location != ETCGCardLocation::Board
+|| TargetCard->OwnerPlayerIndex != ChainEntry.ControllerPlayerIndex)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Material loss save failed Source=%s Reason=TargetInvalid"),
+*SourceCard->CardDefinitionId.ToString());
+
+return false;
+}
+
+const FName SourceDefinitionId = SourceCard->CardDefinitionId;
+const FName TargetDefinitionId = TargetCard->CardDefinitionId;
+
+const bool bDiscardedSource = GameState->MoveCardToLocation(
+ChainEntry.SourceCardInstanceId,
+ETCGCardLocation::Graveyard);
+
+if (!bDiscardedSource)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Material loss save failed Source=%s Reason=DiscardFailed"),
+*SourceDefinitionId.ToString());
+
+return false;
+}
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Material loss save Source=%s Target=%s Discarded=true Prevented=true"),
+*SourceDefinitionId.ToString(),
+*TargetDefinitionId.ToString());
+
+return true;
+}
+
+static bool TryHandMaterialLossReplacementForCardEffect(
+ATCG_GameState* GameState,
+const FGuid& TargetTopCardInstanceId)
+{
+if (!GameState)
+{
+return false;
+}
+
+const FTCGCardInstance* TargetCard = GameState->FindCardInstance(TargetTopCardInstanceId);
+if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board)
+{
+return false;
+}
+
+TArray<FTCGCardInstance> HandCards;
+GameState->GetCardsInHand(TargetCard->OwnerPlayerIndex, HandCards);
+
+for (const FTCGCardInstance& HandCard : HandCards)
+{
+TArray<FTCGCardEffectRef> EffectRefs;
+GameState->GetPrintedEffectRefsForCard(HandCard, EffectRefs);
+
+for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+{
+if (!GameState->DoesCardEffectMatchTrigger(
+EffectRef,
+ETCGEffectTrigger::OnYourUnitWouldLoseMaterialByCardEffect))
+{
+continue;
+}
+
+if (!EffectRefHasStep(
+EffectRef,
+ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect))
+{
+continue;
+}
+
+FTCGEffectChainEntry ReplacementEntry;
+ReplacementEntry.ChainIndex = 1;
+ReplacementEntry.SourceCardInstanceId = HandCard.CardInstanceId;
+ReplacementEntry.TargetCardInstanceId = TargetTopCardInstanceId;
+ReplacementEntry.SourceCardDefinitionId = HandCard.CardDefinitionId;
+ReplacementEntry.Trigger = ETCGEffectTrigger::OnYourUnitWouldLoseMaterialByCardEffect;
+ReplacementEntry.EffectRef = EffectRef;
+ReplacementEntry.ControllerPlayerIndex = HandCard.OwnerPlayerIndex;
+ReplacementEntry.bRequiresSourceOnBoard = false;
+ReplacementEntry.bRequiresTargetOnBoard = true;
+
+return DiscardSourcePreventMaterialLossByCardEffect(GameState, ReplacementEntry);
+}
+}
+
+return false;
+}
+
+
 
 	static bool TryHandSaveReplacementForCardEffect(ATCG_GameState* GameState, const FGuid& TargetTopCardInstanceId)
 	{
@@ -561,12 +695,34 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		break;
 	}
 	case ETCGEffectStepType::MoveBottomOverlayToGraveyard:
-	{
-		const FGuid TargetCardInstanceId = Step.TargetMode == ETCGEffectTargetMode::SourceCard ? ChainEntry.SourceCardInstanceId : ChainEntry.TargetCardInstanceId;
-		bStepSucceeded = MoveBottomOverlayToGraveyard(TargetCardInstanceId);
-		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step MoveBottomOverlayToGraveyard TargetMode=%s Success=%s"), GetTCGEffectTargetModeDebugName(Step.TargetMode), bStepSucceeded ? TEXT("true") : TEXT("false"));
-		break;
-	}
+{
+const FGuid TargetCardInstanceId =
+Step.TargetMode == ETCGEffectTargetMode::SourceCard
+? ChainEntry.SourceCardInstanceId
+: ChainEntry.TargetCardInstanceId;
+
+if (TryHandMaterialLossReplacementForCardEffect(this, TargetCardInstanceId))
+{
+bStepSucceeded = true;
+if (bLogEffectResolution)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Step MoveBottomOverlayToGraveyard TargetMode=%s Prevented=true Success=true"),
+GetTCGEffectTargetModeDebugName(Step.TargetMode));
+}
+break;
+}
+
+bStepSucceeded = MoveBottomOverlayToGraveyard(TargetCardInstanceId);
+if (bLogEffectResolution)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Step MoveBottomOverlayToGraveyard TargetMode=%s Success=%s"),
+GetTCGEffectTargetModeDebugName(Step.TargetMode),
+bStepSucceeded ? TEXT("true") : TEXT("false"));
+}
+break;
+}
 	case ETCGEffectStepType::PlaySourceToEmptyZone:
 	{
 		if (Step.SelectionMode == ETCGEffectSelectionMode::PlayerChoice)
@@ -691,7 +847,19 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
-	case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw:
+	case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect:
+{
+bStepSucceeded = DiscardSourcePreventMaterialLossByCardEffect(this, ChainEntry);
+if (bLogEffectResolution)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Step DiscardSourcePreventMaterialLossByCardEffect Player=%d Success=%s"),
+ChainEntry.ControllerPlayerIndex,
+bStepSucceeded ? TEXT("true") : TEXT("false"));
+}
+break;
+}
+case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw:
 	{
 		bStepSucceeded = BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw(this, ChainEntry);
 		if (bLogEffectResolution)
