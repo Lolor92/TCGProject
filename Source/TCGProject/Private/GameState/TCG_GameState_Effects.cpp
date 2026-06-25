@@ -1158,44 +1158,56 @@ return true;
 }
 
 static bool DestroyTargetUnitByCardEffect(ATCG_GameState* GameState, const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step)
-	{
-		if (!GameState) return false;
+{
+if (!GameState) return false;
 
-		const FGuid TargetCardInstanceId =
-			Step.TargetMode == ETCGEffectTargetMode::SourceCard
-				? ChainEntry.SourceCardInstanceId
-				: ChainEntry.TargetCardInstanceId;
+const FGuid TargetCardInstanceId =
+Step.TargetMode == ETCGEffectTargetMode::SourceCard
+? ChainEntry.SourceCardInstanceId
+: ChainEntry.TargetCardInstanceId;
 
-		const FTCGCardInstance* TargetCard = GameState->FindCardInstance(TargetCardInstanceId);
-		if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board || !TargetCard->StackId.IsValid())
-		{
-			return false;
-		}
+const FTCGCardInstance* TargetCard = GameState->FindCardInstance(TargetCardInstanceId);
+if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board || !TargetCard->StackId.IsValid())
+{
+return false;
+}
 
-		if (TryHandSaveReplacementForCardEffect(GameState, TargetCardInstanceId))
-		{
-			return true;
-		}
+if (TryHandSaveReplacementForCardEffect(GameState, TargetCardInstanceId))
+{
+return true;
+}
 
-		TArray<FTCGEffectChainEntry> DestroyedResponseChain;
-		GameState->BuildYourUnitDestroyedGraveyardResponseChain(
-			TargetCard->OwnerPlayerIndex,
-			TargetCardInstanceId,
-			DestroyedResponseChain);
+const int32 DestroyedUnitOwnerPlayerIndex = TargetCard->OwnerPlayerIndex;
+const FGuid DestroyedStackId = TargetCard->StackId;
 
-		const bool bDestroyed = GameState->MoveStackToLocation(TargetCard->StackId, ETCGCardLocation::Graveyard);
-		if (bDestroyed && DestroyedResponseChain.Num() > 0)
-		{
-			UE_LOG(LogTemp, Warning,
-				TEXT("TCG Effect: Card effect destruction graveyard responses Player=%d Count=%d"),
-				TargetCard->OwnerPlayerIndex,
-				DestroyedResponseChain.Num());
+TArray<FTCGEffectChainEntry> DestroyedResponseChain;
+GameState->BuildYourUnitDestroyedGraveyardResponseChain(
+DestroyedUnitOwnerPlayerIndex,
+TargetCardInstanceId,
+DestroyedResponseChain);
 
-			GameState->ResolveEffectChain(DestroyedResponseChain);
-		}
+TArray<FTCGEffectChainEntry> OpponentCardEffectDestroyedResponseChain;
+GameState->BuildYourUnitDestroyedByOpponentCardEffectGraveyardResponseChain(
+DestroyedUnitOwnerPlayerIndex,
+TargetCardInstanceId,
+ChainEntry.SourceCardInstanceId,
+OpponentCardEffectDestroyedResponseChain);
 
-		return bDestroyed;
-	}
+DestroyedResponseChain.Append(OpponentCardEffectDestroyedResponseChain);
+
+const bool bDestroyed = GameState->MoveStackToLocation(DestroyedStackId, ETCGCardLocation::Graveyard);
+if (bDestroyed && DestroyedResponseChain.Num() > 0)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Card effect destruction graveyard responses Player=%d Count=%d"),
+DestroyedUnitOwnerPlayerIndex,
+DestroyedResponseChain.Num());
+
+GameState->ResolveEffectChain(DestroyedResponseChain);
+}
+
+return bDestroyed;
+}
 }
 
 bool ATCG_GameState::AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId, const FTCGCardEffectRef& EffectRef)
