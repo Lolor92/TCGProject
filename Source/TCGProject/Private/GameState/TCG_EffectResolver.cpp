@@ -1,4 +1,4 @@
-﻿#include "GameState/TCG_EffectResolver.h"
+#include "GameState/TCG_EffectResolver.h"
 
 namespace
 {
@@ -51,6 +51,57 @@ return true;
 }
 
 return false;
+}
+
+static bool DoesSourceCardMatchSourceFilterForEffect(
+	const ATCG_GameState* GameState,
+	const FTCGCardInstance& SourceCard,
+	const FTCGCardEffectRef& EffectRef)
+{
+	if (!EffectRef.bUseSourceFilter)
+	{
+		return true;
+	}
+
+	const FTCGEffectTargetFilter& Filter = EffectRef.SourceFilter;
+	const int32 SourceControllerPlayerIndex = SourceCard.OwnerPlayerIndex;
+	const int32 RequiredOwner =
+		Filter.OwnerMode == ETCGEffectTargetMode::Opponent
+			? 1 - SourceControllerPlayerIndex
+			: SourceControllerPlayerIndex;
+
+	if (SourceCard.OwnerPlayerIndex != RequiredOwner)
+	{
+		return false;
+	}
+
+	if (Filter.RequiredLocation != ETCGCardLocation::None
+		&& SourceCard.Location != Filter.RequiredLocation)
+	{
+		return false;
+	}
+
+	if (Filter.bRequireElement && SourceCard.Element != Filter.RequiredElement)
+	{
+		return false;
+	}
+
+	if (!Filter.NameContains.IsEmpty()
+		&& !SourceCard.CardDefinitionId.ToString().Contains(Filter.NameContains, ESearchCase::IgnoreCase))
+	{
+		return false;
+	}
+
+	if (Filter.bRequireTopCard && SourceCard.Location == ETCGCardLocation::Board)
+	{
+		const FTCGCardInstance* TopCard = GameState ? GameState->FindTopCardInStack(SourceCard.StackId) : nullptr;
+		if (!TopCard || TopCard->CardInstanceId != SourceCard.CardInstanceId)
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 }
 
@@ -137,6 +188,7 @@ bool UTCG_EffectResolver::CanResolveEffectChainEntry(const ATCG_GameState* GameS
 	const FTCGCardInstance* TargetCard = GameState->FindCardInstance(ChainEntry.TargetCardInstanceId);
 
 	if (!SourceCard || !TargetCard) return false;
+	if (!DoesSourceCardMatchSourceFilterForEffect(GameState, *SourceCard, ChainEntry.EffectRef)) return false;
 	if (ChainEntry.bRequiresSourceOnBoard && SourceCard->Location != ETCGCardLocation::Board) return false;
 	if (ChainEntry.bRequiresTargetOnBoard && TargetCard->Location != ETCGCardLocation::Board) return false;
 	if (ChainEntry.bRequiresSourceInTargetStack && (!SourceCard->StackId.IsValid() || SourceCard->StackId != TargetCard->StackId)) return false;
@@ -154,6 +206,7 @@ bool UTCG_EffectResolver::AddCardEffectRefToChain(ATCG_GameState* GameState, TAr
 	FTCGCardEffectRef ResolvedEffectRef = EffectRef;
 	const bool bConvertedLegacyEffect = ConvertEffectResolverLegacyDebugEffectToSteps(ResolvedEffectRef);
 	if (ResolvedEffectRef.Steps.Num() <= 0) return false;
+	if (!DoesSourceCardMatchSourceFilterForEffect(GameState, *SourceCard, ResolvedEffectRef)) return false;
 
 	FTCGEffectChainEntry NewEntry;
 	NewEntry.ChainIndex = Chain.Num() + 1;

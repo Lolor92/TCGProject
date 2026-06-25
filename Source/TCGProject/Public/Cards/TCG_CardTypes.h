@@ -250,6 +250,16 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "5. Trigger Filter")
 	FTCGEffectTargetFilter TriggerFilter;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "6. Source Filter")
+	bool bUseSourceFilter = false;
+
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "6. Source Filter",
+		meta = (EditCondition = "bUseSourceFilter", EditConditionHides))
+	FTCGEffectTargetFilter SourceFilter;
 };
 
 USTRUCT(BlueprintType)

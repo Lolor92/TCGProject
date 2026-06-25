@@ -101,13 +101,6 @@ void RunDebugOverdrivePilotKaiaScenario(ATCG_GameState* GameState)
 
 	PlayedKaiaDefinition->Effects.Add(KaiaOnPlay);
 
-	UTCG_CardDefinition* HandKaiaDefinition = MakeDebugDefinition(
-		GameState,
-		"Debug_OverdrivePilotKaia_Stormflare_Hand",
-		TEXT("Overdrive Pilot - Kaia Stormflare"),
-		ETCGCardElement::Wind,
-		1);
-
 	FTCGCardEffectRef KaiaMachinePlayed;
 	KaiaMachinePlayed.Trigger = ETCGEffectTrigger::OnYourUnitPlayed;
 	KaiaMachinePlayed.bOptional = true;
@@ -115,13 +108,17 @@ void RunDebugOverdrivePilotKaiaScenario(ATCG_GameState* GameState)
 	KaiaMachinePlayed.TriggerFilter.RequiredLocation = ETCGCardLocation::Board;
 	KaiaMachinePlayed.TriggerFilter.bRequireTopCard = true;
 	KaiaMachinePlayed.TriggerFilter.NameContains = "Machine";
+	KaiaMachinePlayed.bUseSourceFilter = true;
+	KaiaMachinePlayed.SourceFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+	KaiaMachinePlayed.SourceFilter.RequiredLocation = ETCGCardLocation::Hand;
+	KaiaMachinePlayed.SourceFilter.bRequireTopCard = false;
 
 	FTCGEffectStep AttachStep;
 	AttachStep.StepType = ETCGEffectStepType::AttachSourceToUnitMaterial;
 	AttachStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
 	KaiaMachinePlayed.Steps.Add(AttachStep);
 
-	HandKaiaDefinition->Effects.Add(KaiaMachinePlayed);
+	PlayedKaiaDefinition->Effects.Add(KaiaMachinePlayed);
 
 	UTCG_CardDefinition* Machine = MakeDebugDefinition(
 		GameState,
@@ -131,7 +128,6 @@ void RunDebugOverdrivePilotKaiaScenario(ATCG_GameState* GameState)
 		2);
 
 	GameState->DebugCardDefinitions.Add(PlayedKaiaDefinition);
-	GameState->DebugCardDefinitions.Add(HandKaiaDefinition);
 	GameState->DebugCardDefinitions.Add(Machine);
 
 	FTCGCardInstance* PlayedKaia = GameState->AddCardInstanceFromDefinition(PlayedKaiaDefinition, 0, ETCGCardLocation::Hand);
@@ -151,7 +147,7 @@ void RunDebugOverdrivePilotKaiaScenario(ATCG_GameState* GameState)
 	}
 	const FGuid MachineId = MachineCard->CardInstanceId;
 
-	FTCGCardInstance* HandKaia = GameState->AddCardInstanceFromDefinition(HandKaiaDefinition, 0, ETCGCardLocation::Hand);
+	FTCGCardInstance* HandKaia = GameState->AddCardInstanceFromDefinition(PlayedKaiaDefinition, 0, ETCGCardLocation::Hand);
 	if (!HandKaia)
 	{
 		return;
