@@ -44,7 +44,7 @@ constexpr bool bLogEffectResolution = false;
 		case ETCGEffectStepType::ModifyAttack: return TEXT("ModifyAttack");
 		case ETCGEffectStepType::SelectTarget: return TEXT("SelectTarget");
 		case ETCGEffectStepType::MoveBottomOverlayToGraveyard: return TEXT("MoveBottomOverlayToGraveyard");
-		case ETCGEffectStepType::PlaySourceToEmptyZone: return TEXT("PlaySourceToEmptyZone");
+case ETCGEffectStepType::PlaySourceToEmptyZone: return TEXT("PlaySourceToEmptyZone");
 		case ETCGEffectStepType::SendTopDeckCardToGraveyard: return TEXT("SendTopDeckCardToGraveyard");
 		case ETCGEffectStepType::MoveGraveyardCardToHand: return TEXT("MoveGraveyardCardToHand");
 		case ETCGEffectStepType::MoveGraveyardCardToTopDeck: return TEXT("MoveGraveyardCardToTopDeck");
@@ -68,6 +68,7 @@ constexpr bool bLogEffectResolution = false;
 		case ETCGEffectStepType::SwapUnitZones: return TEXT("SwapUnitZones");
 		case ETCGEffectStepType::CheckMaterialCount: return TEXT("CheckMaterialCount");
 		case ETCGEffectStepType::DiscardRandomCards: return TEXT("DiscardRandomCards");
+		case ETCGEffectStepType::PlayCardToEmptyZone: return TEXT("PlayCardToEmptyZone");
 		case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect: return TEXT("DiscardSourcePreventMaterialLossByCardEffect");
 		case ETCGEffectStepType::DetachMaterials: return TEXT("DetachMaterials");
 		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
@@ -1178,6 +1179,44 @@ TEXT("TCG Effect: Attack detach steal Source=%s Target=%s Detached=2 Stolen=%s")
 return true;
 }
 
+static int32 BuildYourUnitDestroyedByCardEffectHandResponseChainForEffect(
+ATCG_GameState* GameState,
+int32 DestroyedUnitOwnerPlayerIndex,
+const FGuid& DestroyedTopCardInstanceId,
+TArray<FTCGEffectChainEntry>& OutChain)
+{
+if (!GameState || !GameState->IsValidPlayerIndex(DestroyedUnitOwnerPlayerIndex))
+{
+return 0;
+}
+
+TArray<FTCGCardInstance> HandCards;
+GameState->GetCardsInHand(DestroyedUnitOwnerPlayerIndex, HandCards);
+
+for (const FTCGCardInstance& HandCard : HandCards)
+{
+TArray<FTCGCardEffectRef> EffectRefs;
+GameState->GetPrintedEffectRefsForCard(HandCard, EffectRefs);
+
+for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+{
+if (!GameState->DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnYourUnitDestroyed))
+{
+continue;
+}
+
+GameState->AddCardEffectRefToChain(
+OutChain,
+HandCard.CardInstanceId,
+DestroyedTopCardInstanceId,
+EffectRef);
+}
+}
+
+return OutChain.Num();
+}
+
+
 static bool DestroyTargetUnitByCardEffect(ATCG_GameState* GameState, const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step)
 {
 if (!GameState) return false;
@@ -1203,6 +1242,12 @@ const FGuid DestroyedStackId = TargetCard->StackId;
 
 TArray<FTCGEffectChainEntry> DestroyedResponseChain;
 GameState->BuildYourUnitDestroyedGraveyardResponseChain(
+DestroyedUnitOwnerPlayerIndex,
+TargetCardInstanceId,
+DestroyedResponseChain);
+
+BuildYourUnitDestroyedByCardEffectHandResponseChainForEffect(
+GameState,
 DestroyedUnitOwnerPlayerIndex,
 TargetCardInstanceId,
 DestroyedResponseChain);
@@ -1397,6 +1442,94 @@ return ResponseChain.Num();
 }
 }
 
+
+static FGuid ResolveCardTargetForGenericPlayStep(
+const FTCGEffectChainEntry& ChainEntry,
+const FTCGEffectStep& Step)
+{
+if (Step.TargetMode == ETCGEffectTargetMode::SourceCard || Step.TargetMode == ETCGEffectTargetMode::None)
+{
+return ChainEntry.SourceCardInstanceId;
+}
+
+return ChainEntry.TargetCardInstanceId;
+}
+
+static bool PlayTargetCardToFirstEmptyZoneForEffect(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry,
+const FTCGEffectStep& Step)
+{
+if (!GameState)
+{
+return false;
+}
+
+const FGuid TargetCardInstanceId = ResolveCardTargetForGenericPlayStep(ChainEntry, Step);
+const FTCGCardInstance* TargetCard = GameState->FindCardInstance(TargetCardInstanceId);
+
+if (!TargetCard)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: PlayCardToEmptyZone failed TargetMode=%s Reason=TargetMissing"),
+GetTCGEffectTargetModeDebugName(Step.TargetMode));
+
+return false;
+}
+
+const FName TargetDefinitionId = TargetCard->CardDefinitionId;
+
+if (TargetCard->OwnerPlayerIndex != ChainEntry.ControllerPlayerIndex)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: PlayCardToEmptyZone failed Target=%s Reason=WrongController"),
+*TargetDefinitionId.ToString());
+
+return false;
+}
+
+if (TargetCard->Location == ETCGCardLocation::Board)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: PlayCardToEmptyZone failed Target=%s Reason=AlreadyOnBoard"),
+*TargetDefinitionId.ToString());
+
+return false;
+}
+
+FName ChosenZoneId = NAME_None;
+for (int32 FieldIndex = 0; FieldIndex < ATCG_GameState::FieldZoneCount; ++FieldIndex)
+{
+const FName CandidateZoneId = ATCG_GameState::GetFieldZoneId(ChainEntry.ControllerPlayerIndex, FieldIndex);
+
+FGuid ExistingStackId;
+if (!GameState->FindStackIdInZone(CandidateZoneId, ExistingStackId))
+{
+ChosenZoneId = CandidateZoneId;
+break;
+}
+}
+
+if (ChosenZoneId.IsNone())
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: PlayCardToEmptyZone failed Target=%s Reason=NoEmptyZone"),
+*TargetDefinitionId.ToString());
+
+return false;
+}
+
+const bool bPlayed = GameState->PlaceCardAsNewStack(TargetCardInstanceId, ChosenZoneId);
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: PlayCardToEmptyZone Target=%s Zone=%s Played=%s"),
+*TargetDefinitionId.ToString(),
+*ChosenZoneId.ToString(),
+bPlayed ? TEXT("true") : TEXT("false"));
+
+return bPlayed;
+}
+
 bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step, bool bPreviousStepSucceeded)
 {
 	bool bStepSucceeded = false;
@@ -1546,7 +1679,12 @@ GetTCGEffectTargetModeDebugName(Step.TargetMode),
 bStepSucceeded ? TEXT("true") : TEXT("false"));
 }
 break;
-}
+}	case ETCGEffectStepType::PlayCardToEmptyZone:
+	{
+		bStepSucceeded = PlayTargetCardToFirstEmptyZoneForEffect(this, ChainEntry, Step);
+		break;
+	}
+
 	case ETCGEffectStepType::PlaySourceToEmptyZone:
 	{
 		if (Step.SelectionMode == ETCGEffectSelectionMode::PlayerChoice)
