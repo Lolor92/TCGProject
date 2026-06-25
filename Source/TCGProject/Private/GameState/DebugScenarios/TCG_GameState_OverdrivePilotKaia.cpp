@@ -148,31 +148,9 @@ if (!HandKaia)
 return;
 }
 const FGuid HandKaiaId = HandKaia->CardInstanceId;
-
-UE_LOG(LogTemp, Warning,
-TEXT("TCG Debug: Kaia definition effects Effects=%d OnPlaySteps=%d HandAttachSteps=%d"),
-Kaia->Effects.Num(),
-Kaia->Effects.IsValidIndex(0) ? Kaia->Effects[0].Steps.Num() : -1,
-Kaia->Effects.IsValidIndex(1) ? Kaia->Effects[1].Steps.Num() : -1);
-
-TArray<FTCGEffectChainEntry> KaiaPreviewChain;
-const int32 KaiaPreviewChainCount = GameState->BuildStackOnPlayEffectChain(PlayedKaiaId, KaiaPreviewChain);
-UE_LOG(LogTemp, Warning,
-TEXT("TCG Debug: Kaia preview OnPlay chain Count=%d"),
-KaiaPreviewChainCount);
-
 const bool bPlayedKaia = GameState->PlayCardToZone(PlayedKaiaId, ATCG_GameState::GetFieldZoneId(0, 0));
-
-const FTCGCardInstance* PlayedKaiaAfterPlay = GameState->FindCardInstance(PlayedKaiaId);
 const FTCGCardInstance* MachineAfterSearch = GameState->FindCardInstance(MachineId);
 const FTCGCardInstance* JunkAfterDiscard = GameState->FindCardInstance(DiscardJunkId);
-
-UE_LOG(LogTemp, Warning,
-TEXT("TCG Debug: Kaia after OnPlay PlayedKaiaLoc=%d MachineLoc=%d JunkLoc=%d"),
-PlayedKaiaAfterPlay ? static_cast<int32>(PlayedKaiaAfterPlay->Location) : -1,
-MachineAfterSearch ? static_cast<int32>(MachineAfterSearch->Location) : -1,
-JunkAfterDiscard ? static_cast<int32>(JunkAfterDiscard->Location) : -1);
-
 const bool bMachineAddedToHand = MachineAfterSearch && MachineAfterSearch->Location == ETCGCardLocation::Hand;
 const bool bJunkDiscarded = JunkAfterDiscard && JunkAfterDiscard->Location == ETCGCardLocation::Graveyard;
 

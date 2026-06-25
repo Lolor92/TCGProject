@@ -1,4 +1,4 @@
-#include "GameState/TCG_EffectResolver.h"
+﻿#include "GameState/TCG_EffectResolver.h"
 
 namespace
 {
@@ -39,6 +39,19 @@ namespace
 		}
 		return false;
 	}
+static bool IsHandAttachToPlayedUnitEffect(const FTCGCardEffectRef& EffectRef)
+{
+for (const FTCGEffectStep& Step : EffectRef.Steps)
+{
+if (Step.StepType == ETCGEffectStepType::AttachSourceToUnitMaterial
+&& Step.TargetMode == ETCGEffectTargetMode::TriggerTarget)
+{
+return true;
+}
+}
+
+return false;
+}
 }
 
 bool UTCG_EffectResolver::DoesCardEffectMatchTrigger(const FTCGCardEffectRef& EffectRef, ETCGEffectTrigger Trigger)
@@ -103,7 +116,13 @@ void UTCG_EffectResolver::ApplyDebugEffectChainEntryRequirements(ATCG_GameState*
 		ChainEntry.bRequiresTargetOnBoard = false;
 	}
 
-	if (ChainEntry.EffectId == ResolverLegacyDebugEffect_Draw1 && SourceCard->CardInstanceId != TargetCard->CardInstanceId)
+	if (ChainEntry.Trigger == ETCGEffectTrigger::OnYourUnitPlayed
+&& IsHandAttachToPlayedUnitEffect(ChainEntry.EffectRef))
+{
+ChainEntry.bRequiresSourceOnBoard = false;
+ChainEntry.bRequiresTargetOnBoard = true;
+}
+if (ChainEntry.EffectId == ResolverLegacyDebugEffect_Draw1 && SourceCard->CardInstanceId != TargetCard->CardInstanceId)
 	{
 		ChainEntry.bRequiresSourceInTargetStack = true;
 		ChainEntry.bRequiresSourceUnderTarget = true;
@@ -173,7 +192,13 @@ bool UTCG_EffectResolver::AddCardEffectRefToChain(ATCG_GameState* GameState, TAr
 		NewEntry.bRequiresSourceOnBoard = false;
 		NewEntry.bRequiresTargetOnBoard = false;
 	}
-	Chain.Add(NewEntry);
+	if (NewEntry.Trigger == ETCGEffectTrigger::OnYourUnitPlayed
+&& IsHandAttachToPlayedUnitEffect(NewEntry.EffectRef))
+{
+NewEntry.bRequiresSourceOnBoard = false;
+NewEntry.bRequiresTargetOnBoard = true;
+}
+Chain.Add(NewEntry);
 
 	if (bLogEffectResolverChainHelpers)
 	{
@@ -181,3 +206,4 @@ bool UTCG_EffectResolver::AddCardEffectRefToChain(ATCG_GameState* GameState, TAr
 	}
 	return true;
 }
+

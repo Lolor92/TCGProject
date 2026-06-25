@@ -1737,11 +1737,119 @@ bPlayed ? TEXT("true") : TEXT("false"));
 return bPlayed;
 }
 
+
+static bool MoveFirstFilteredDeckCardToHandForEffect(
+    ATCG_GameState* GameState,
+    const FTCGEffectChainEntry& ChainEntry,
+    const FTCGEffectStep& Step)
+{
+    if (!GameState)
+    {
+        return false;
+    }
+
+    const int32 ControllerPlayerIndex = ChainEntry.ControllerPlayerIndex;
+    const int32 WantedOwnerPlayerIndex =
+        Step.TargetFilter.OwnerMode == ETCGEffectTargetMode::Opponent
+            ? 1 - ControllerPlayerIndex
+            : ControllerPlayerIndex;
+
+    FTCGCardInstance* ChosenCard = nullptr;
+
+    for (FTCGCardInstance& CandidateCard : GameState->MatchCards)
+    {
+        if (CandidateCard.OwnerPlayerIndex != WantedOwnerPlayerIndex)
+        {
+            continue;
+        }
+
+        if (CandidateCard.Location != ETCGCardLocation::Deck)
+        {
+            continue;
+        }
+
+        if (Step.TargetFilter.RequiredLocation != ETCGCardLocation::None
+            && CandidateCard.Location != Step.TargetFilter.RequiredLocation)
+        {
+            continue;
+        }
+
+        if (Step.TargetFilter.bRequireElement
+            && CandidateCard.Element != Step.TargetFilter.RequiredElement)
+        {
+            continue;
+        }
+
+        if (Step.TargetFilter.bExcludeSourceCard
+            && CandidateCard.CardInstanceId == ChainEntry.SourceCardInstanceId)
+        {
+            continue;
+        }
+
+        if (!Step.TargetFilter.NameContains.IsEmpty())
+        {
+            const FString CardDefinitionIdString = CandidateCard.CardDefinitionId.ToString();
+            FString DisplayNameString;
+
+            if (const UTCG_CardDefinition* CardDefinition = GameState->FindDebugCardDefinitionById(CandidateCard.CardDefinitionId))
+            {
+                DisplayNameString = CardDefinition->DisplayName.ToString();
+            }
+
+            const bool bMatchesDefinitionId =
+                CardDefinitionIdString.Contains(Step.TargetFilter.NameContains, ESearchCase::IgnoreCase);
+
+            const bool bMatchesDisplayName =
+                DisplayNameString.Contains(Step.TargetFilter.NameContains, ESearchCase::IgnoreCase);
+
+            if (!bMatchesDefinitionId && !bMatchesDisplayName)
+            {
+                continue;
+            }
+        }
+
+        if (!ChosenCard || CandidateCard.LocationIndex > ChosenCard->LocationIndex)
+        {
+            ChosenCard = &CandidateCard;
+        }
+    }
+
+    if (!ChosenCard)
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("TCG Effect: MoveDeckCardToHand NoMatchingCard Player=%d NameContains=%s"),
+            WantedOwnerPlayerIndex,
+            *Step.TargetFilter.NameContains);
+
+        return false;
+    }
+
+    const FName MovedCardDefinitionId = ChosenCard->CardDefinitionId;
+
+    ChosenCard->Location = ETCGCardLocation::Hand;
+    ChosenCard->LocationIndex = GameState->GetNextLocationIndex(ChosenCard->OwnerPlayerIndex, ETCGCardLocation::Hand);
+    ChosenCard->ZoneId = NAME_None;
+    ChosenCard->StackId.Invalidate();
+    ChosenCard->StackIndex = INDEX_NONE;
+
+    UE_LOG(LogTemp, Warning,
+        TEXT("TCG Effect: MoveDeckCardToHand Card=%s Moved=true"),
+        *MovedCardDefinitionId.ToString());
+
+    return true;
+}
+
 bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step, bool bPreviousStepSucceeded)
 {
 	bool bStepSucceeded = false;
 	switch (Step.StepType)
 	{
+    case ETCGEffectStepType::MoveDeckCardToHand:
+    {
+        bStepSucceeded = MoveFirstFilteredDeckCardToHandForEffect(this, ChainEntry, Step);
+        break;
+    }
+
 	case ETCGEffectStepType::DrawCards:
 	{
 		const int32 DrawCount = FMath::Max(0, Step.Value);
