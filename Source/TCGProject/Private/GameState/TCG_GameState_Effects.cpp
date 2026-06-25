@@ -70,6 +70,7 @@ case ETCGEffectStepType::PlaySourceToEmptyZone: return TEXT("PlaySourceToEmptyZo
 		case ETCGEffectStepType::DiscardRandomCards: return TEXT("DiscardRandomCards");
 		case ETCGEffectStepType::PlayCardToEmptyZone: return TEXT("PlayCardToEmptyZone");
 		case ETCGEffectStepType::PlayHandCardToEmptyZone: return TEXT("PlayHandCardToEmptyZone");
+case ETCGEffectStepType::MoveDeckCardToHand: return TEXT("MoveDeckCardToHand");
 		case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect: return TEXT("DiscardSourcePreventMaterialLossByCardEffect");
 		case ETCGEffectStepType::DetachMaterials: return TEXT("DetachMaterials");
 		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
@@ -1596,6 +1597,13 @@ return false;
 }
 
 FTCGCardInstance* TargetTopCard = nullptr;
+
+if (Step.TargetMode == ETCGEffectTargetMode::TriggerTarget)
+{
+TargetTopCard = GameState->FindCardInstance(ChainEntry.TargetCardInstanceId);
+}
+else
+{
 for (FTCGCardInstance& Card : GameState->MatchCards)
 {
 if (!DoesCardMatchGenericEffectFilter(
@@ -1616,12 +1624,24 @@ continue;
 TargetTopCard = &Card;
 break;
 }
+}
 
 if (!TargetTopCard || TargetTopCard->Location != ETCGCardLocation::Board || !TargetTopCard->StackId.IsValid())
 {
 UE_LOG(LogTemp, Warning,
 TEXT("TCG Effect: AttachSourceToUnitMaterial failed Source=%s Reason=NoFilteredTarget"),
 SourceCard ? *SourceCard->CardDefinitionId.ToString() : TEXT("None"));
+
+return false;
+}
+
+if (ChainEntry.Trigger == ETCGEffectTrigger::OnYourUnitPlayed
+&& Step.TargetMode == ETCGEffectTargetMode::TriggerTarget
+&& SourceCard->Location != ETCGCardLocation::Hand)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: AttachSourceToUnitMaterial failed Source=%s Reason=SourceNotInHand"),
+*SourceCard->CardDefinitionId.ToString());
 
 return false;
 }

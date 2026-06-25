@@ -3,7 +3,7 @@
 #include "GameState/TCG_GameState.h"
 #include "PlayerState/TCG_PlayerState.h"
 
-void RunDebugOverdrivePilotRyuScenario(ATCG_GameState* GameState);
+void RunDebugOverdrivePilotKaiaScenario(ATCG_GameState* GameState);
 
 ATCG_GameMode::ATCG_GameMode()
 {
@@ -32,8 +32,8 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		ATCG_GameState* TCGGameState = GetGameState<ATCG_GameState>();
 		if (TCGGameState)
 		{
-			// Dedicated Overdrive Pilot Ryu debug scenario.
-			RunDebugOverdrivePilotRyuScenario(TCGGameState);
+			// Dedicated Overdrive Pilot Kaia debug scenario.
+			RunDebugOverdrivePilotKaiaScenario(TCGGameState);
 		}
 	}
 }

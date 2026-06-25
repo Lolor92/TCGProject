@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "TCG_CardTypes.generated.h"
@@ -105,6 +105,7 @@ enum class ETCGEffectStepType : uint8
 	DiscardRandomCards UMETA(DisplayName = "65 - Generic: Discard Random Cards"),
 	PlayCardToEmptyZone UMETA(DisplayName = "66 - Generic: Play Card To Empty Zone"),
 	PlayHandCardToEmptyZone UMETA(DisplayName = "67 - Generic: Play Hand Card To Empty Zone"),
+	MoveDeckCardToHand UMETA(DisplayName = "68 - Generic: Move Deck Card To Hand"),
 
 	// Legacy/debug-only rigid step. Keep temporarily while migrating old effects.
 	AttackDetachTwoStealOneMaterial UMETA(DisplayName = "53 - Legacy Attack: Detach 2, Steal 1 Material")
@@ -187,7 +188,7 @@ public:
 		EditDefaultsOnly,
 		BlueprintReadOnly,
 		Category = "2. Target",
-		meta = (EditCondition = "StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::MoveBottomOverlayToGraveyard || StepType == ETCGEffectStepType::RemoveMaterialFromTargetUnit || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial || StepType == ETCGEffectStepType::DestroyTargetUnitByCardEffect || StepType == ETCGEffectStepType::DetachMaterials || StepType == ETCGEffectStepType::StealMaterials || StepType == ETCGEffectStepType::DestroyUnit || StepType == ETCGEffectStepType::ReturnUnitToHand || StepType == ETCGEffectStepType::ReturnUnitToBottomDeck || StepType == ETCGEffectStepType::CheckMaterialCount || StepType == ETCGEffectStepType::DiscardRandomCards || StepType == ETCGEffectStepType::PlayCardToEmptyZone", EditConditionHides))
+		meta = (EditCondition = "StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::MoveBottomOverlayToGraveyard || StepType == ETCGEffectStepType::RemoveMaterialFromTargetUnit || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial || StepType == ETCGEffectStepType::AttachSourceToUnitMaterial || StepType == ETCGEffectStepType::DestroyTargetUnitByCardEffect || StepType == ETCGEffectStepType::DetachMaterials || StepType == ETCGEffectStepType::StealMaterials || StepType == ETCGEffectStepType::DestroyUnit || StepType == ETCGEffectStepType::ReturnUnitToHand || StepType == ETCGEffectStepType::ReturnUnitToBottomDeck || StepType == ETCGEffectStepType::CheckMaterialCount || StepType == ETCGEffectStepType::DiscardRandomCards || StepType == ETCGEffectStepType::PlayCardToEmptyZone", EditConditionHides))
 	ETCGEffectTargetMode TargetMode = ETCGEffectTargetMode::None;
 
 	UPROPERTY(
@@ -225,7 +226,7 @@ public:
 		EditDefaultsOnly,
 		BlueprintReadOnly,
 		Category = "6. Filter",
-		meta = (EditCondition = "StepType == ETCGEffectStepType::SelectTarget || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToTopDeck || StepType == ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck || StepType == ETCGEffectStepType::PlayGraveyardCardToEmptyZone || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial || StepType == ETCGEffectStepType::AttachSourceToUnitMaterial || StepType == ETCGEffectStepType::PlayCardToEmptyZone || StepType == ETCGEffectStepType::PlayHandCardToEmptyZone", EditConditionHides))
+		meta = (EditCondition = "StepType == ETCGEffectStepType::SelectTarget || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveDeckCardToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToTopDeck || StepType == ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck || StepType == ETCGEffectStepType::PlayGraveyardCardToEmptyZone || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial || StepType == ETCGEffectStepType::AttachSourceToUnitMaterial || StepType == ETCGEffectStepType::PlayCardToEmptyZone || StepType == ETCGEffectStepType::PlayHandCardToEmptyZone", EditConditionHides))
 	FTCGEffectTargetFilter TargetFilter;
 };
 

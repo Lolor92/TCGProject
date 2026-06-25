@@ -369,7 +369,8 @@ return 0;
 
 for (const FTCGCardInstance& Card : GameState->MatchCards)
 {
-if (Card.OwnerPlayerIndex != PlayerIndex || Card.Location != ETCGCardLocation::Board)
+if (Card.OwnerPlayerIndex != PlayerIndex
+|| (Card.Location != ETCGCardLocation::Board && Card.Location != ETCGCardLocation::Hand))
 {
 continue;
 }
@@ -673,71 +674,141 @@ bool ATCG_GameState::CanResolveEffectChainEntry(const FTCGEffectChainEntry& Chai
 
 int32 ATCG_GameState::BuildStackOnPlayEffectChain(const FGuid& TopCardInstanceId, TArray<FTCGEffectChainEntry>& OutChain)
 {
-	OutChain.Reset();
-	const FTCGCardInstance* TopCard = FindCardInstance(TopCardInstanceId);
-	if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid()) return 0;
+OutChain.Reset();
 
-	TArray<FTCGCardInstance> StackCards;
-	GetCardsInStack(TopCard->StackId, StackCards);
-	for (const FTCGCardInstance& StackCard : StackCards)
-	{
-		if (StackCard.StackIndex > TopCard->StackIndex) continue;
-		ExecuteCardTrigger(StackCard.CardInstanceId, ETCGEffectTrigger::OnPlay);
+const FTCGCardInstance* TopCard = FindCardInstance(TopCardInstanceId);
+if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid())
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Debug: BuildStackOnPlayEffectChain failed TopMissingOrInvalid TopValid=%s"),
+TopCard ? TEXT("true") : TEXT("false"));
 
-		TArray<FTCGCardEffectRef> EffectRefs;
-		GetPrintedEffectRefsForCard(StackCard, EffectRefs);
-		for (const FTCGCardEffectRef& EffectRef : EffectRefs)
-		{
-			if (DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnPlay))
-			{
-				AddCardEffectRefToChain(OutChain, StackCard.CardInstanceId, TopCardInstanceId, EffectRef);
-			}
-		}
-	}
+return 0;
+}
 
-	if (bEnableDebugOverlayRemovalFizzleTest && TopCard->CardDefinitionId == DebugCard_FireDeckA && OutChain.Num() >= 2)
-	{
-		FTCGCardEffectRef DebugEffectRef;
-		DebugEffectRef.Trigger = ETCGEffectTrigger::OnBecomingTopCard;
-		DebugEffectRef.EffectId = DebugEffect_RemoveBottomOverlay;
-		AddCardEffectRefToChain(OutChain, TopCard->CardInstanceId, TopCardInstanceId, DebugEffectRef);
-	}
-	return OutChain.Num();
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Debug: BuildStackOnPlayEffectChain top=%s loc=%d stack=%s"),
+*TopCard->CardDefinitionId.ToString(),
+static_cast<int32>(TopCard->Location),
+TopCard->StackId.IsValid() ? TEXT("valid") : TEXT("invalid"));
+
+TArray<FTCGCardInstance> StackCards;
+GetCardsInStack(TopCard->StackId, StackCards);
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Debug: BuildStackOnPlayEffectChain stack cards=%d"),
+StackCards.Num());
+
+for (const FTCGCardInstance& StackCard : StackCards)
+{
+if (StackCard.StackIndex > TopCard->StackIndex)
+{
+continue;
+}
+
+ExecuteCardTrigger(StackCard.CardInstanceId, ETCGEffectTrigger::OnPlay);
+
+TArray<FTCGCardEffectRef> EffectRefs;
+const int32 PrintedEffectCount = GetPrintedEffectRefsForCard(StackCard, EffectRefs);
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Debug: OnPlay scan Card=%s Loc=%d StackIndex=%d PrintedEffects=%d ArrayEffects=%d"),
+*StackCard.CardDefinitionId.ToString(),
+static_cast<int32>(StackCard.Location),
+StackCard.StackIndex,
+PrintedEffectCount,
+EffectRefs.Num());
+
+for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+{
+const bool bMatchesOnPlay = DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnPlay);
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Debug: OnPlay effect check Card=%s Trigger=%d Steps=%d EffectId=%s Matches=%s"),
+*StackCard.CardDefinitionId.ToString(),
+static_cast<int32>(EffectRef.Trigger),
+EffectRef.Steps.Num(),
+EffectRef.EffectId.IsNone() ? TEXT("None") : *EffectRef.EffectId.ToString(),
+bMatchesOnPlay ? TEXT("true") : TEXT("false"));
+
+if (bMatchesOnPlay)
+{
+const bool bAdded = AddCardEffectRefToChain(
+OutChain,
+StackCard.CardInstanceId,
+TopCardInstanceId,
+EffectRef);
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Debug: OnPlay add chain Card=%s Added=%s ChainCount=%d"),
+*StackCard.CardDefinitionId.ToString(),
+bAdded ? TEXT("true") : TEXT("false"),
+OutChain.Num());
+}
+}
+}
+
+if (bEnableDebugOverlayRemovalFizzleTest && TopCard->CardDefinitionId == DebugCard_FireDeckA && OutChain.Num() >= 2)
+{
+FTCGCardEffectRef DebugEffectRef;
+DebugEffectRef.Trigger = ETCGEffectTrigger::OnBecomingTopCard;
+DebugEffectRef.EffectId = DebugEffect_RemoveBottomOverlay;
+AddCardEffectRefToChain(OutChain, TopCard->CardInstanceId, TopCardInstanceId, DebugEffectRef);
+}
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Debug: BuildStackOnPlayEffectChain final ChainCount=%d"),
+OutChain.Num());
+
+return OutChain.Num();
 }
 
 bool ATCG_GameState::ResolveEffectChain(const TArray<FTCGEffectChainEntry>& Chain)
 {
-	if (Chain.Num() <= 0) return false;
+if (Chain.Num() <= 0)
+{
+UE_LOG(LogTemp, Warning, TEXT("TCG Debug: ResolveEffectChain skipped empty chain"));
+return false;
+}
 
-	if (bLogEffectChains) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Chain resolving count=%d"), Chain.Num());
-	bool bResolvedAny = false;
-	for (int32 ChainIndex = Chain.Num() - 1; ChainIndex >= 0; --ChainIndex)
-	{
-		const FTCGEffectChainEntry& Entry = Chain[ChainIndex];
-		if (bLogEffectChains)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Chain resolve %d Source=%s EffectId=%s Steps=%d"),
-				Entry.ChainIndex,
-				*Entry.SourceCardDefinitionId.ToString(),
-				Entry.EffectId.IsNone() ? TEXT("None") : *Entry.EffectId.ToString(),
-				Entry.EffectRef.Steps.Num());
-		}
+UE_LOG(LogTemp, Warning, TEXT("TCG Debug: ResolveEffectChain count=%d"), Chain.Num());
 
-		if (!CanResolveEffectChainEntry(Entry))
-		{
-			if (bLogEffectChains)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Chain fizzle %d Source=%s EffectId=%s"),
-					Entry.ChainIndex,
-					*Entry.SourceCardDefinitionId.ToString(),
-					Entry.EffectId.IsNone() ? TEXT("None") : *Entry.EffectId.ToString());
-			}
-			continue;
-		}
+bool bResolvedAny = false;
+for (int32 ChainIndex = Chain.Num() - 1; ChainIndex >= 0; --ChainIndex)
+{
+const FTCGEffectChainEntry& Entry = Chain[ChainIndex];
 
-		bResolvedAny |= ResolveEffectChainEntry(Entry);
-	}
-	return bResolvedAny;
+const bool bCanResolve = CanResolveEffectChainEntry(Entry);
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Debug: Chain entry Chain=%d Source=%s Trigger=%d Steps=%d CanResolve=%s RequiresSourceBoard=%s RequiresTargetBoard=%s"),
+Entry.ChainIndex,
+*Entry.SourceCardDefinitionId.ToString(),
+static_cast<int32>(Entry.Trigger),
+Entry.EffectRef.Steps.Num(),
+bCanResolve ? TEXT("true") : TEXT("false"),
+Entry.bRequiresSourceOnBoard ? TEXT("true") : TEXT("false"),
+Entry.bRequiresTargetOnBoard ? TEXT("true") : TEXT("false"));
+
+if (!bCanResolve)
+{
+continue;
+}
+
+const bool bEntryResolved = ResolveEffectChainEntry(Entry);
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Debug: Chain entry resolved Chain=%d Success=%s"),
+Entry.ChainIndex,
+bEntryResolved ? TEXT("true") : TEXT("false"));
+
+bResolvedAny |= bEntryResolved;
+}
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Debug: ResolveEffectChain done Success=%s"),
+bResolvedAny ? TEXT("true") : TEXT("false"));
+
+return bResolvedAny;
 }
 
 bool ATCG_GameState::ResolveDebugEffectChainEntry(const FTCGEffectChainEntry& ChainEntry)
