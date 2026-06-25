@@ -13,6 +13,32 @@ namespace
 		}
 	}
 
+
+static bool EffectRefHasStepForBattleResolver(const FTCGCardEffectRef& EffectRef, ETCGEffectStepType StepType)
+{
+for (const FTCGEffectStep& Step : EffectRef.Steps)
+{
+if (Step.StepType == StepType)
+{
+return true;
+}
+}
+
+return false;
+}
+
+static bool EffectRefCanNegateOpponentAttackActivation(const FTCGCardEffectRef& EffectRef)
+{
+const bool bHasLegacyNegate =
+EffectRefHasStepForBattleResolver(EffectRef, ETCGEffectStepType::BanishSourceNegateOpponentAttackEffectActivation);
+
+const bool bHasGenericNegate =
+EffectRefHasStepForBattleResolver(EffectRef, ETCGEffectStepType::BanishSource)
+&& EffectRefHasStepForBattleResolver(EffectRef, ETCGEffectStepType::NegateActivation);
+
+return bHasLegacyNegate || bHasGenericNegate;
+}
+
 	static int32 ResolveGraveyardNegatesForOpponentAttackEffects(ATCG_GameState* GameState, int32 AttackingPlayerIndex, TArray<FTCGEffectChainEntry>& Chain, const TArray<int32>& OpponentEffectEntryIndices)
 	{
 		if (!GameState || !GameState->IsValidPlayerIndex(AttackingPlayerIndex) || Chain.Num() <= 0 || OpponentEffectEntryIndices.Num() <= 0) return 0;
@@ -46,7 +72,8 @@ namespace
 				bool bHasNegateResponse = false;
 				for (const FTCGCardEffectRef& ResponseEffect : ResponseEffects)
 				{
-					if (GameState->DoesCardEffectMatchTrigger(ResponseEffect, ETCGEffectTrigger::OnOpponentUnitEffectActivatedWhenYourUnitAttacks))
+					if (GameState->DoesCardEffectMatchTrigger(ResponseEffect, ETCGEffectTrigger::OnOpponentUnitEffectActivatedWhenYourUnitAttacks)
+						&& EffectRefCanNegateOpponentAttackActivation(ResponseEffect))
 					{
 						bHasNegateResponse = true;
 						break;

@@ -335,9 +335,14 @@ namespace
 		FTCGCardEffectRef ResponseEffect;
 		ResponseEffect.Trigger = ETCGEffectTrigger::OnOpponentUnitEffectActivatedWhenYourUnitAttacks;
 		ResponseEffect.bOptional = true;
-		FTCGEffectStep ResponseStep;
-		ResponseStep.StepType = ETCGEffectStepType::BanishSourceNegateOpponentAttackEffectActivation;
-		ResponseEffect.Steps.Add(ResponseStep);
+		FTCGEffectStep BanishStep;
+		BanishStep.StepType = ETCGEffectStepType::BanishSource;
+		ResponseEffect.Steps.Add(BanishStep);
+
+		FTCGEffectStep NegateStep;
+		NegateStep.StepType = ETCGEffectStepType::NegateActivation;
+		NegateStep.bRequiresPreviousStepSuccess = true;
+		ResponseEffect.Steps.Add(NegateStep);
 		ResponseDefinition->Effects.Add(ResponseEffect);
 		GameState->DebugCardDefinitions.Add(ResponseDefinition);
 
@@ -571,6 +576,8 @@ void ATCG_GameState::RunDebugMaterialRebirthScenario()
 	RunDebugAttackMillBounceScenario(this);
 
 	RunDebugGraveyardRecycleBothDrawScenario();
+
+	RunDebugGraveyardNegateOpponentAttackScenario(this);
 
 	RunDebugAttackDetachStealMaterialScenario();
 }

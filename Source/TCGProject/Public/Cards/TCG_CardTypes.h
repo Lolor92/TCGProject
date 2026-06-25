@@ -96,6 +96,7 @@ enum class ETCGEffectStepType : uint8
 	ReturnUnitToBottomDeck UMETA(DisplayName = "59 - Generic: Return Unit To Bottom Deck"),
 	BanishSource UMETA(DisplayName = "60 - Generic: Banish Source"),
 	DrawCardsForBothPlayers UMETA(DisplayName = "61 - Generic: Draw Cards For Both Players"),
+	NegateActivation UMETA(DisplayName = "62 - Generic: Negate Activation"),
 
 	// Legacy/debug-only rigid step. Keep temporarily while migrating old effects.
 	AttackDetachTwoStealOneMaterial UMETA(DisplayName = "53 - Legacy Attack: Detach 2, Steal 1 Material")
