@@ -257,39 +257,38 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 			HostDefinition,
 			0,
 			ETCGCardLocation::Hand);
+		const FGuid HostId = HostCard ? HostCard->CardInstanceId : FGuid();
 
 		FTCGCardInstance* EffectCard = GameState->AddCardInstanceFromDefinition(
 			EffectCardDefinition,
 			0,
 			ETCGCardLocation::Hand);
+		const FGuid EffectCardId = EffectCard ? EffectCard->CardInstanceId : FGuid();
 
 		FTCGCardInstance* MachineCard = GameState->AddCardInstanceFromDefinition(
 			MachineDefinition,
 			0,
 			ETCGCardLocation::Hand);
+		const FGuid MachineId = MachineCard ? MachineCard->CardInstanceId : FGuid();
 
 		FTCGCardInstance* EarthHandCard = GameState->AddCardInstanceFromDefinition(
 			EarthHandDefinition,
 			0,
 			ETCGCardLocation::Hand);
+		const FGuid EarthHandId = EarthHandCard ? EarthHandCard->CardInstanceId : FGuid();
 
 		FTCGCardInstance* EarthGraveyardCard = GameState->AddCardInstanceFromDefinition(
 			EarthGraveyardDefinition,
 			0,
 			ETCGCardLocation::Graveyard);
+		const FGuid EarthGraveyardId = EarthGraveyardCard ? EarthGraveyardCard->CardInstanceId : FGuid();
 
-		if (!HostCard || !EffectCard || !MachineCard || !EarthHandCard || !EarthGraveyardCard)
+		if (!HostId.IsValid() || !EffectCardId.IsValid() || !MachineId.IsValid() || !EarthHandId.IsValid() || !EarthGraveyardId.IsValid())
 		{
 			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Machine material recovery setup failed"));
 			GameState->EndMatch(ETCGMatchResult::Draw);
 			return;
 		}
-
-		const FGuid HostId = HostCard->CardInstanceId;
-		const FGuid EffectCardId = EffectCard->CardInstanceId;
-		const FGuid MachineId = MachineCard->CardInstanceId;
-		const FGuid EarthHandId = EarthHandCard->CardInstanceId;
-		const FGuid EarthGraveyardId = EarthGraveyardCard->CardInstanceId;
 
 		const bool bPlayedHost = GameState->PlayCardToZone(
 			HostId,
