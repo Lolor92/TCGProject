@@ -52,7 +52,8 @@ enum class ETCGEffectTrigger : uint8
 	OnYourUnitDestroyed UMETA(DisplayName = "21 - On Your Unit Destroyed"),
 	OnYourUnitWouldLoseMaterialByCardEffect UMETA(DisplayName = "22 - On Your Unit Would Lose Material By Card Effect"),
 	OnYourUnitDestroyedByOpponentCardEffect UMETA(DisplayName = "23 - On Your Unit Destroyed By Opponent Card Effect"),
-	OnOpponentDrawsByCardEffect UMETA(DisplayName = "24 - On Opponent Draws By Card Effect")
+	OnOpponentDrawsByCardEffect UMETA(DisplayName = "24 - On Opponent Draws By Card Effect"),
+	OnYourUnitPlayed UMETA(DisplayName = "25 - On Your Unit Played")
 };
 
 UENUM(BlueprintType)
@@ -103,6 +104,7 @@ enum class ETCGEffectStepType : uint8
 	CheckMaterialCount UMETA(DisplayName = "64 - Generic: Check Material Count"),
 	DiscardRandomCards UMETA(DisplayName = "65 - Generic: Discard Random Cards"),
 	PlayCardToEmptyZone UMETA(DisplayName = "66 - Generic: Play Card To Empty Zone"),
+	PlayHandCardToEmptyZone UMETA(DisplayName = "67 - Generic: Play Hand Card To Empty Zone"),
 
 	// Legacy/debug-only rigid step. Keep temporarily while migrating old effects.
 	AttackDetachTwoStealOneMaterial UMETA(DisplayName = "53 - Legacy Attack: Detach 2, Steal 1 Material")
@@ -167,6 +169,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
 	bool bExcludeSourceCard = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
+	FString NameContains;
 };
 
 USTRUCT(BlueprintType)
@@ -220,7 +225,7 @@ public:
 		EditDefaultsOnly,
 		BlueprintReadOnly,
 		Category = "6. Filter",
-		meta = (EditCondition = "StepType == ETCGEffectStepType::SelectTarget || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToTopDeck || StepType == ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck || StepType == ETCGEffectStepType::PlayGraveyardCardToEmptyZone || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial", EditConditionHides))
+		meta = (EditCondition = "StepType == ETCGEffectStepType::SelectTarget || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToTopDeck || StepType == ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck || StepType == ETCGEffectStepType::PlayGraveyardCardToEmptyZone || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial || StepType == ETCGEffectStepType::AttachSourceToUnitMaterial || StepType == ETCGEffectStepType::PlayCardToEmptyZone || StepType == ETCGEffectStepType::PlayHandCardToEmptyZone", EditConditionHides))
 	FTCGEffectTargetFilter TargetFilter;
 };
 
@@ -241,6 +246,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "4. Timing")
 	bool bOptional = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "5. Trigger Filter")
+	FTCGEffectTargetFilter TriggerFilter;
 };
 
 USTRUCT(BlueprintType)

@@ -69,6 +69,7 @@ case ETCGEffectStepType::PlaySourceToEmptyZone: return TEXT("PlaySourceToEmptyZo
 		case ETCGEffectStepType::CheckMaterialCount: return TEXT("CheckMaterialCount");
 		case ETCGEffectStepType::DiscardRandomCards: return TEXT("DiscardRandomCards");
 		case ETCGEffectStepType::PlayCardToEmptyZone: return TEXT("PlayCardToEmptyZone");
+		case ETCGEffectStepType::PlayHandCardToEmptyZone: return TEXT("PlayHandCardToEmptyZone");
 		case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect: return TEXT("DiscardSourcePreventMaterialLossByCardEffect");
 		case ETCGEffectStepType::DetachMaterials: return TEXT("DetachMaterials");
 		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
@@ -1530,6 +1531,192 @@ bPlayed ? TEXT("true") : TEXT("false"));
 return bPlayed;
 }
 
+
+static bool DoesCardNameMatchFilterForEffect(
+const FTCGCardInstance& Card,
+const FTCGEffectTargetFilter& Filter)
+{
+if (Filter.NameContains.IsEmpty())
+{
+return true;
+}
+
+return Card.CardDefinitionId.ToString().Contains(Filter.NameContains, ESearchCase::IgnoreCase);
+}
+
+static bool DoesCardMatchGenericEffectFilter(
+const ATCG_GameState* GameState,
+const FTCGCardInstance& Card,
+const FTCGEffectTargetFilter& Filter,
+int32 ControllerPlayerIndex,
+const FGuid& SourceCardInstanceId)
+{
+if (!GameState)
+{
+return false;
+}
+
+const int32 RequiredOwner =
+Filter.OwnerMode == ETCGEffectTargetMode::Opponent
+? 1 - ControllerPlayerIndex
+: ControllerPlayerIndex;
+
+if (Card.OwnerPlayerIndex != RequiredOwner) return false;
+if (Card.Location != Filter.RequiredLocation) return false;
+if (Filter.bRequireElement && Card.Element != Filter.RequiredElement) return false;
+if (Filter.bExcludeSourceCard && Card.CardInstanceId == SourceCardInstanceId) return false;
+if (!DoesCardNameMatchFilterForEffect(Card, Filter)) return false;
+
+if (Filter.bRequireTopCard && Card.Location == ETCGCardLocation::Board)
+{
+const FTCGCardInstance* TopCard = GameState->FindTopCardInStack(Card.StackId);
+if (!TopCard || TopCard->CardInstanceId != Card.CardInstanceId)
+{
+return false;
+}
+}
+
+return true;
+}
+
+static bool AttachSourceToFirstFilteredUnitMaterialForEffect(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry,
+const FTCGEffectStep& Step)
+{
+if (!GameState)
+{
+return false;
+}
+
+FTCGCardInstance* SourceCard = GameState->FindCardInstance(ChainEntry.SourceCardInstanceId);
+if (!SourceCard)
+{
+return false;
+}
+
+FTCGCardInstance* TargetTopCard = nullptr;
+for (FTCGCardInstance& Card : GameState->MatchCards)
+{
+if (!DoesCardMatchGenericEffectFilter(
+GameState,
+Card,
+Step.TargetFilter,
+ChainEntry.ControllerPlayerIndex,
+ChainEntry.SourceCardInstanceId))
+{
+continue;
+}
+
+if (Card.CardInstanceId == ChainEntry.SourceCardInstanceId)
+{
+continue;
+}
+
+TargetTopCard = &Card;
+break;
+}
+
+if (!TargetTopCard || TargetTopCard->Location != ETCGCardLocation::Board || !TargetTopCard->StackId.IsValid())
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: AttachSourceToUnitMaterial failed Source=%s Reason=NoFilteredTarget"),
+SourceCard ? *SourceCard->CardDefinitionId.ToString() : TEXT("None"));
+
+return false;
+}
+
+const FName SourceDefinitionId = SourceCard->CardDefinitionId;
+const FName TargetDefinitionId = TargetTopCard->CardDefinitionId;
+
+SourceCard->OwnerPlayerIndex = TargetTopCard->OwnerPlayerIndex;
+SourceCard->Location = ETCGCardLocation::Board;
+SourceCard->ZoneId = TargetTopCard->ZoneId;
+SourceCard->StackId = TargetTopCard->StackId;
+SourceCard->StackIndex = TargetTopCard->StackIndex;
+
+TargetTopCard->StackIndex++;
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: AttachSourceToUnitMaterial Source=%s Target=%s Attached=true"),
+*SourceDefinitionId.ToString(),
+*TargetDefinitionId.ToString());
+
+return true;
+}
+
+static bool PlayFirstFilteredHandCardToEmptyZoneForEffect(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry,
+const FTCGEffectStep& Step)
+{
+if (!GameState)
+{
+return false;
+}
+
+FGuid CardToPlayId;
+FName CardToPlayDefinitionId = NAME_None;
+
+for (const FTCGCardInstance& Card : GameState->MatchCards)
+{
+if (!DoesCardMatchGenericEffectFilter(
+GameState,
+Card,
+Step.TargetFilter,
+ChainEntry.ControllerPlayerIndex,
+ChainEntry.SourceCardInstanceId))
+{
+continue;
+}
+
+CardToPlayId = Card.CardInstanceId;
+CardToPlayDefinitionId = Card.CardDefinitionId;
+break;
+}
+
+if (!CardToPlayId.IsValid())
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: PlayHandCardToEmptyZone failed Player=%d Reason=NoFilteredHandCard"),
+ChainEntry.ControllerPlayerIndex);
+
+return false;
+}
+
+FName ChosenZoneId = NAME_None;
+for (int32 FieldIndex = 0; FieldIndex < ATCG_GameState::FieldZoneCount; ++FieldIndex)
+{
+const FName CandidateZoneId = ATCG_GameState::GetFieldZoneId(ChainEntry.ControllerPlayerIndex, FieldIndex);
+
+FGuid ExistingStackId;
+if (!GameState->FindStackIdInZone(CandidateZoneId, ExistingStackId))
+{
+ChosenZoneId = CandidateZoneId;
+break;
+}
+}
+
+if (ChosenZoneId.IsNone())
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: PlayHandCardToEmptyZone failed Card=%s Reason=NoEmptyZone"),
+*CardToPlayDefinitionId.ToString());
+
+return false;
+}
+
+const bool bPlayed = GameState->PlayCardToZone(CardToPlayId, ChosenZoneId);
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: PlayHandCardToEmptyZone Card=%s Zone=%s Played=%s"),
+*CardToPlayDefinitionId.ToString(),
+*ChosenZoneId.ToString(),
+bPlayed ? TEXT("true") : TEXT("false"));
+
+return bPlayed;
+}
+
 bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step, bool bPreviousStepSucceeded)
 {
 	bool bStepSucceeded = false;
@@ -1640,6 +1827,7 @@ break;
 			if (Card.Location != Step.TargetFilter.RequiredLocation) continue;
 			if (Step.TargetFilter.bRequireElement && Card.Element != Step.TargetFilter.RequiredElement) continue;
 			if (Step.TargetFilter.bExcludeSourceCard && Card.CardInstanceId == ChainEntry.SourceCardInstanceId) continue;
+			if (!DoesCardNameMatchFilterForEffect(Card, Step.TargetFilter)) continue;
 			if (Step.TargetFilter.bRequireTopCard && Card.Location == ETCGCardLocation::Board)
 			{
 				const FTCGCardInstance* TopCard = FindTopCardInStack(Card.StackId);
@@ -1679,7 +1867,12 @@ GetTCGEffectTargetModeDebugName(Step.TargetMode),
 bStepSucceeded ? TEXT("true") : TEXT("false"));
 }
 break;
-}	case ETCGEffectStepType::PlayCardToEmptyZone:
+}	case ETCGEffectStepType::PlayHandCardToEmptyZone:
+	{
+		bStepSucceeded = PlayFirstFilteredHandCardToEmptyZoneForEffect(this, ChainEntry, Step);
+		break;
+	}
+	case ETCGEffectStepType::PlayCardToEmptyZone:
 	{
 		bStepSucceeded = PlayTargetCardToFirstEmptyZoneForEffect(this, ChainEntry, Step);
 		break;
@@ -2104,16 +2297,7 @@ break;
 case ETCGEffectStepType::AttachSourceToWaterUnitMaterial:
 	case ETCGEffectStepType::AttachSourceToUnitMaterial:
 	{
-		const bool bChoiceStarted = BeginPendingAttachSourceToWaterUnitChoice(ChainEntry.ControllerPlayerIndex, ChainEntry);
-		bool bAutoSubmittedChoice = false;
-		if (bChoiceStarted && (Step.SelectionMode == ETCGEffectSelectionMode::Automatic || bAutoSubmitDebugAttachSourceToUnitChoice))
-		{
-			TArray<FGuid> ChoiceOptions;
-			GetPendingAttachSourceToWaterUnitChoiceOptions(ChoiceOptions);
-			if (ChoiceOptions.Num() > 0) bAutoSubmittedChoice = SubmitPendingAttachSourceToWaterUnitChoice(ChainEntry.ControllerPlayerIndex, ChoiceOptions[0]);
-		}
-		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step %s Player=%d Mode=%s Pending=%s AutoSubmitted=%s"), GetTCGEffectStepDebugName(Step.StepType), ChainEntry.ControllerPlayerIndex, GetTCGEffectSelectionModeDebugName(Step.SelectionMode), bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
-		bStepSucceeded = bAutoSubmittedChoice;
+		bStepSucceeded = AttachSourceToFirstFilteredUnitMaterialForEffect(this, ChainEntry, Step);
 		break;
 	}
 	case ETCGEffectStepType::AttachGraveyardCardToSourceMaterial:

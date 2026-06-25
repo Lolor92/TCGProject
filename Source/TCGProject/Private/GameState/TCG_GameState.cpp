@@ -317,6 +317,95 @@ bool ATCG_GameState::PlaceCardOnStack(const FGuid& CardInstanceId, const FGuid& 
 	return true;
 }
 
+
+namespace
+{
+static bool DoesPlayedCardMatchTriggerFilterForEffect(
+const ATCG_GameState* GameState,
+const FTCGCardInstance& PlayedCard,
+const FTCGEffectTargetFilter& Filter,
+int32 ControllerPlayerIndex,
+const FGuid& SourceCardInstanceId)
+{
+const int32 RequiredOwner =
+Filter.OwnerMode == ETCGEffectTargetMode::Opponent
+? 1 - ControllerPlayerIndex
+: ControllerPlayerIndex;
+
+if (PlayedCard.OwnerPlayerIndex != RequiredOwner) return false;
+if (Filter.RequiredLocation != ETCGCardLocation::None && PlayedCard.Location != Filter.RequiredLocation) return false;
+if (Filter.bRequireElement && PlayedCard.Element != Filter.RequiredElement) return false;
+if (Filter.bExcludeSourceCard && PlayedCard.CardInstanceId == SourceCardInstanceId) return false;
+if (!Filter.NameContains.IsEmpty() && !PlayedCard.CardDefinitionId.ToString().Contains(Filter.NameContains, ESearchCase::IgnoreCase)) return false;
+
+if (Filter.bRequireTopCard && PlayedCard.Location == ETCGCardLocation::Board)
+{
+const FTCGCardInstance* TopCard = GameState ? GameState->FindTopCardInStack(PlayedCard.StackId) : nullptr;
+if (!TopCard || TopCard->CardInstanceId != PlayedCard.CardInstanceId)
+{
+return false;
+}
+}
+
+return true;
+}
+
+static int32 BuildYourUnitPlayedResponseChainForEffect(
+ATCG_GameState* GameState,
+int32 PlayerIndex,
+const FGuid& PlayedCardInstanceId,
+TArray<FTCGEffectChainEntry>& OutChain)
+{
+if (!GameState || !GameState->IsValidPlayerIndex(PlayerIndex))
+{
+return 0;
+}
+
+const FTCGCardInstance* PlayedCard = GameState->FindCardInstance(PlayedCardInstanceId);
+if (!PlayedCard || PlayedCard->OwnerPlayerIndex != PlayerIndex || PlayedCard->Location != ETCGCardLocation::Board)
+{
+return 0;
+}
+
+for (const FTCGCardInstance& Card : GameState->MatchCards)
+{
+if (Card.OwnerPlayerIndex != PlayerIndex || Card.Location != ETCGCardLocation::Board)
+{
+continue;
+}
+
+TArray<FTCGCardEffectRef> EffectRefs;
+GameState->GetPrintedEffectRefsForCard(Card, EffectRefs);
+
+for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+{
+if (!GameState->DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnYourUnitPlayed))
+{
+continue;
+}
+
+if (!DoesPlayedCardMatchTriggerFilterForEffect(
+GameState,
+*PlayedCard,
+EffectRef.TriggerFilter,
+PlayerIndex,
+Card.CardInstanceId))
+{
+continue;
+}
+
+GameState->AddCardEffectRefToChain(
+OutChain,
+Card.CardInstanceId,
+PlayedCardInstanceId,
+EffectRef);
+}
+}
+
+return OutChain.Num();
+}
+}
+
 bool ATCG_GameState::PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId)
 {
 	FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
@@ -341,6 +430,20 @@ bool ATCG_GameState::PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId)
 	TArray<FTCGEffectChainEntry> Chain;
 	BuildStackOnPlayEffectChain(CardInstanceId, Chain);
 	ResolveEffectChain(Chain);
+
+	TArray<FTCGEffectChainEntry> YourUnitPlayedChain;
+	BuildYourUnitPlayedResponseChainForEffect(this, Card->OwnerPlayerIndex, CardInstanceId, YourUnitPlayedChain);
+	if (YourUnitPlayedChain.Num() > 0)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: Your unit played responses Player=%d Count=%d Played=%s"),
+			Card->OwnerPlayerIndex,
+			YourUnitPlayedChain.Num(),
+			*Card->CardDefinitionId.ToString());
+
+		ResolveEffectChain(YourUnitPlayedChain);
+	}
+
 	return true;
 }
 
