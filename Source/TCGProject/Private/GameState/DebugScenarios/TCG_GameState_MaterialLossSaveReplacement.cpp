@@ -152,9 +152,16 @@ void ATCG_GameState::RunDebugMaterialLossSaveReplacementScenario()
 		ETCGCardLocation::Hand);
 
 	FTCGCardInstance* RemoveMaterialCard = AddCardInstanceFromDefinition(
-		RemoveMaterialCardDefinition,
-		1,
-		ETCGCardLocation::Hand);
+	RemoveMaterialCardDefinition,
+	1,
+	ETCGCardLocation::Board);
+
+	if (RemoveMaterialCard)
+	{
+		RemoveMaterialCard->ZoneId = ATCG_GameState::GetFieldZoneId(1, 0);
+		RemoveMaterialCard->StackId = FGuid::NewGuid();
+		RemoveMaterialCard->StackIndex = 0;
+	}
 
 	const int32 MaterialsBefore = CountMaterialsUnderUnit(this, ProtectedUnitId);
 
