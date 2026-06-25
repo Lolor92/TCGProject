@@ -445,4 +445,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "TCG|Debug")
 	void RunDebugSwapOpponentUnitZonesScenario();
+	
+	UFUNCTION(BlueprintCallable, Category = "TCG|Debug")
+	void RunDebugMaterialLossSaveReplacementScenario();
 };

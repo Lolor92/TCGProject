@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
 #include "TCG_CardTypes.generated.h"
 
 UENUM(BlueprintType)
@@ -50,7 +49,8 @@ enum class ETCGEffectTrigger : uint8
 	OnOpponentAttack UMETA(DisplayName = "18 - On Opponent Attack"),
 	OnOpponentUnitEffectActivatedWhenYourUnitAttacks UMETA(DisplayName = "19 - On Opponent Unit Effect Activated When Your Unit Attacks"),
 	OnYourUnitWouldBeDestroyedByCardEffect UMETA(DisplayName = "20 - On Your Unit Would Be Destroyed By Card Effect"),
-	OnYourUnitDestroyed UMETA(DisplayName = "21 - On Your Unit Destroyed")
+	OnYourUnitDestroyed UMETA(DisplayName = "21 - On Your Unit Destroyed"),
+	OnYourUnitWouldLoseMaterialByCardEffect UMETA(DisplayName = "22 - On Your Unit Would Lose Material By Card Effect")
 };
 
 UENUM(BlueprintType)
@@ -84,7 +84,8 @@ enum class ETCGEffectStepType : uint8
 	DestroyTargetUnitByCardEffect UMETA(DisplayName = "48 - Destroy Target Unit By Card Effect"),
 	DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials UMETA(DisplayName = "49 - Discard Source, Return Target Unit To Hand, Draw If 2+ Materials"),
 	BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw UMETA(DisplayName = "50 - Banish Source, Return 2 Graveyard Cards To Bottom Deck, Both Draw"),
-	SwapTwoOpponentUnitsZones UMETA(DisplayName = "51 - Choose 2 Opponent Units, Swap Zones")
+	SwapTwoOpponentUnitsZones UMETA(DisplayName = "51 - Choose 2 Opponent Units, Swap Zones"),
+	DiscardSourcePreventMaterialLossByCardEffect UMETA(DisplayName = "52 - Discard Source, Prevent Material Loss By Card Effect")
 };
 
 UENUM(BlueprintType)
@@ -182,7 +183,7 @@ public:
 		EditDefaultsOnly,
 		BlueprintReadOnly,
 		Category = "4. Choice",
-		meta = (EditCondition = "StepType != ETCGEffectStepType::None && StepType != ETCGEffectStepType::Then && StepType != ETCGEffectStepType::ModifyAttack && StepType != ETCGEffectStepType::SendTopDeckCardToGraveyard && StepType != ETCGEffectStepType::SendTopDeckCardsToGraveyard && StepType != ETCGEffectStepType::BoostAllOwnUnitsThisRound && StepType != ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit && StepType != ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget && StepType != ETCGEffectStepType::BanishSourceNegateOpponentAttackEffectActivation && StepType != ETCGEffectStepType::DestroyTargetUnitByCardEffect && StepType != ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials && StepType != ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw && StepType != ETCGEffectStepType::SwapTwoOpponentUnitsZones", EditConditionHides))
+		meta = (EditCondition = "StepType != ETCGEffectStepType::None && StepType != ETCGEffectStepType::Then && StepType != ETCGEffectStepType::ModifyAttack && StepType != ETCGEffectStepType::SendTopDeckCardToGraveyard && StepType != ETCGEffectStepType::SendTopDeckCardsToGraveyard && StepType != ETCGEffectStepType::BoostAllOwnUnitsThisRound && StepType != ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit && StepType != ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget && StepType != ETCGEffectStepType::BanishSourceNegateOpponentAttackEffectActivation && StepType != ETCGEffectStepType::DestroyTargetUnitByCardEffect && StepType != ETCGEffectStepType::DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials && StepType != ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw && StepType != ETCGEffectStepType::SwapTwoOpponentUnitsZones && StepType != ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect", EditConditionHides))
 	ETCGEffectSelectionMode SelectionMode = ETCGEffectSelectionMode::Automatic;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "5. Chain")
