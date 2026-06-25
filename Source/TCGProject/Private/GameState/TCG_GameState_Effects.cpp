@@ -11,6 +11,10 @@ static bool TryHandMaterialLossReplacementForCardEffect(
 ATCG_GameState* GameState,
 const FGuid& TargetTopCardInstanceId);
 
+static bool AttackDetachTwoStealOneMaterial(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry);
+
 constexpr bool bLogEffectResolution = false;
 	constexpr bool bAutoSubmitDebugDiscardChoice = true;
 	constexpr bool bAutoSubmitDebugGraveyardToDeckChoice = true;
@@ -57,6 +61,7 @@ constexpr bool bLogEffectResolution = false;
 		case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw: return TEXT("BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw");
 		case ETCGEffectStepType::SwapTwoOpponentUnitsZones: return TEXT("SwapTwoOpponentUnitsZones");
 		case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect: return TEXT("DiscardSourcePreventMaterialLossByCardEffect");
+case ETCGEffectStepType::AttackDetachTwoStealOneMaterial: return TEXT("AttackDetachTwoStealOneMaterial");
 default: return TEXT("None");
 		}
 	}
@@ -535,7 +540,178 @@ return false;
 		return false;
 	}
 
-	static bool DestroyTargetUnitByCardEffect(ATCG_GameState* GameState, const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step)
+	
+static FTCGCardInstance* FindBottomMaterialUnderUnitForEffect(
+ATCG_GameState* GameState,
+const FGuid& TopCardInstanceId)
+{
+if (!GameState)
+{
+return nullptr;
+}
+
+FTCGCardInstance* TopCard = GameState->FindCardInstance(TopCardInstanceId);
+if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid())
+{
+return nullptr;
+}
+
+FTCGCardInstance* BottomMaterial = nullptr;
+for (FTCGCardInstance& Card : GameState->MatchCards)
+{
+if (Card.Location != ETCGCardLocation::Board) continue;
+if (Card.StackId != TopCard->StackId) continue;
+if (Card.CardInstanceId == TopCard->CardInstanceId) continue;
+if (Card.StackIndex >= TopCard->StackIndex) continue;
+
+if (!BottomMaterial || Card.StackIndex < BottomMaterial->StackIndex)
+{
+BottomMaterial = &Card;
+}
+}
+
+return BottomMaterial;
+}
+
+static int32 CountMaterialsUnderUnitForEffect(
+ATCG_GameState* GameState,
+const FGuid& TopCardInstanceId)
+{
+if (!GameState)
+{
+return 0;
+}
+
+const FTCGCardInstance* TopCard = GameState->FindCardInstance(TopCardInstanceId);
+if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid())
+{
+return 0;
+}
+
+int32 Count = 0;
+for (const FTCGCardInstance& Card : GameState->MatchCards)
+{
+if (Card.Location != ETCGCardLocation::Board) continue;
+if (Card.StackId != TopCard->StackId) continue;
+if (Card.CardInstanceId == TopCard->CardInstanceId) continue;
+if (Card.StackIndex >= TopCard->StackIndex) continue;
+
+Count++;
+}
+
+return Count;
+}
+
+static bool AttackDetachTwoStealOneMaterial(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry)
+{
+if (!GameState)
+{
+return false;
+}
+
+FTCGCardInstance* SourceCard = GameState->FindCardInstance(ChainEntry.SourceCardInstanceId);
+FTCGCardInstance* TargetCard = GameState->FindCardInstance(ChainEntry.TargetCardInstanceId);
+
+if (!SourceCard || SourceCard->Location != ETCGCardLocation::Board || !SourceCard->StackId.IsValid())
+{
+return false;
+}
+
+if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board || !TargetCard->StackId.IsValid())
+{
+return false;
+}
+
+const FName SourceDefinitionId = SourceCard->CardDefinitionId;
+const FName TargetDefinitionId = TargetCard->CardDefinitionId;
+
+if (CountMaterialsUnderUnitForEffect(GameState, ChainEntry.SourceCardInstanceId) < 2)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Attack detach steal failed Source=%s Reason=SourceNeedsTwoMaterials"),
+*SourceDefinitionId.ToString());
+
+return false;
+}
+
+if (TryHandMaterialLossReplacementForCardEffect(GameState, ChainEntry.SourceCardInstanceId))
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Attack detach steal source material loss prevented Source=%s"),
+*SourceDefinitionId.ToString());
+
+return false;
+}
+
+int32 SourceDetachedCount = 0;
+for (int32 Index = 0; Index < 2; ++Index)
+{
+if (GameState->MoveBottomOverlayToGraveyard(ChainEntry.SourceCardInstanceId))
+{
+SourceDetachedCount++;
+}
+}
+
+if (SourceDetachedCount < 2)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Attack detach steal failed Source=%s Reason=DetachFailed Detached=%d"),
+*SourceDefinitionId.ToString(),
+SourceDetachedCount);
+
+return false;
+}
+
+if (!FindBottomMaterialUnderUnitForEffect(GameState, ChainEntry.TargetCardInstanceId))
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Attack detach steal Source=%s Target=%s Detached=2 TargetHasNoMaterial=true"),
+*SourceDefinitionId.ToString(),
+*TargetDefinitionId.ToString());
+
+return true;
+}
+
+if (TryHandMaterialLossReplacementForCardEffect(GameState, ChainEntry.TargetCardInstanceId))
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Attack detach steal Source=%s Target=%s Detached=2 TargetMaterialLossPrevented=true"),
+*SourceDefinitionId.ToString(),
+*TargetDefinitionId.ToString());
+
+return true;
+}
+
+FTCGCardInstance* MaterialToSteal = FindBottomMaterialUnderUnitForEffect(GameState, ChainEntry.TargetCardInstanceId);
+SourceCard = GameState->FindCardInstance(ChainEntry.SourceCardInstanceId);
+
+if (!MaterialToSteal || !SourceCard || SourceCard->Location != ETCGCardLocation::Board || !SourceCard->StackId.IsValid())
+{
+return false;
+}
+
+const FName StolenMaterialDefinitionId = MaterialToSteal->CardDefinitionId;
+
+MaterialToSteal->OwnerPlayerIndex = SourceCard->OwnerPlayerIndex;
+MaterialToSteal->Location = ETCGCardLocation::Board;
+MaterialToSteal->ZoneId = SourceCard->ZoneId;
+MaterialToSteal->StackId = SourceCard->StackId;
+MaterialToSteal->StackIndex = SourceCard->StackIndex;
+
+SourceCard->StackIndex++;
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Attack detach steal Source=%s Target=%s Detached=2 Stolen=%s"),
+*SourceDefinitionId.ToString(),
+*TargetDefinitionId.ToString(),
+*StolenMaterialDefinitionId.ToString());
+
+return true;
+}
+
+static bool DestroyTargetUnitByCardEffect(ATCG_GameState* GameState, const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step)
 	{
 		if (!GameState) return false;
 

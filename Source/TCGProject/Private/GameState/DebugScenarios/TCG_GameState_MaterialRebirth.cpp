@@ -551,12 +551,5 @@ void ATCG_GameState::RunDebugMaterialRebirthScenario()
 
 	EndMatch(ETCGMatchResult::Draw);
 
-	RunDebugAttackMillGraveyardSplitScenario(this);
-	RunDebugAttackMillBounceScenario(this);
-	RunDebugHandDetachResponseScenario(this);
-	RunDebugGraveyardNegateOpponentAttackScenario(this);
-	RunDebugCardEffectSaveReplacementScenario(this);
-	RunDebugGraveyardRecycleBothDrawScenario();
-	RunDebugSwapOpponentUnitZonesScenario();
-	RunDebugMaterialLossSaveReplacementScenario();
+	RunDebugAttackDetachStealMaterialScenario();
 }

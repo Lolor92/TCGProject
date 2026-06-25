@@ -448,4 +448,7 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = "TCG|Debug")
 	void RunDebugMaterialLossSaveReplacementScenario();
+	
+	UFUNCTION(BlueprintCallable, Category = "TCG|Debug")
+	void RunDebugAttackDetachStealMaterialScenario();
 };
