@@ -558,4 +558,5 @@ void ATCG_GameState::RunDebugMaterialRebirthScenario()
 	RunDebugCardEffectSaveReplacementScenario(this);
 	RunDebugGraveyardRecycleBothDrawScenario();
 	RunDebugSwapOpponentUnitZonesScenario();
+	RunDebugMaterialLossSaveReplacementScenario();
 }
