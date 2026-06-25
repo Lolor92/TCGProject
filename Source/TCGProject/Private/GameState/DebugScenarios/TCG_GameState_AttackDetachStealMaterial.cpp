@@ -84,9 +84,18 @@ CardDefinition->Description = FText::FromString(TEXT("When this card attacks a U
 FTCGCardEffectRef EffectRef;
 EffectRef.Trigger = ETCGEffectTrigger::OnAttack;
 
-FTCGEffectStep Step;
-Step.StepType = ETCGEffectStepType::AttackDetachTwoStealOneMaterial;
-EffectRef.Steps.Add(Step);
+FTCGEffectStep DetachStep;
+DetachStep.StepType = ETCGEffectStepType::DetachMaterials;
+DetachStep.TargetMode = ETCGEffectTargetMode::SourceCard;
+DetachStep.Value = 2;
+EffectRef.Steps.Add(DetachStep);
+
+FTCGEffectStep StealStep;
+StealStep.StepType = ETCGEffectStepType::StealMaterials;
+StealStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+StealStep.Value = 1;
+StealStep.bRequiresPreviousStepSuccess = true;
+EffectRef.Steps.Add(StealStep);
 
 CardDefinition->Effects.Add(EffectRef);
 return CardDefinition;

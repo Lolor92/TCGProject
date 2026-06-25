@@ -61,6 +61,8 @@ constexpr bool bLogEffectResolution = false;
 		case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw: return TEXT("BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw");
 		case ETCGEffectStepType::SwapTwoOpponentUnitsZones: return TEXT("SwapTwoOpponentUnitsZones");
 		case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect: return TEXT("DiscardSourcePreventMaterialLossByCardEffect");
+		case ETCGEffectStepType::DetachMaterials: return TEXT("DetachMaterials");
+		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
 case ETCGEffectStepType::AttackDetachTwoStealOneMaterial: return TEXT("AttackDetachTwoStealOneMaterial");
 default: return TEXT("None");
 		}
@@ -602,6 +604,177 @@ Count++;
 return Count;
 }
 
+static FGuid ResolveUnitTargetForMaterialStep(
+const FTCGEffectChainEntry& ChainEntry,
+const FTCGEffectStep& Step)
+{
+if (Step.TargetMode == ETCGEffectTargetMode::SourceCard || Step.TargetMode == ETCGEffectTargetMode::None)
+{
+return ChainEntry.SourceCardInstanceId;
+}
+
+return ChainEntry.TargetCardInstanceId;
+}
+
+static bool DetachMaterialsGeneric(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry,
+const FTCGEffectStep& Step)
+{
+if (!GameState)
+{
+return false;
+}
+
+const FGuid TargetCardInstanceId = ResolveUnitTargetForMaterialStep(ChainEntry, Step);
+const int32 DetachCount = FMath::Max(1, Step.Value <= 0 ? 1 : Step.Value);
+
+const FTCGCardInstance* TargetCard = GameState->FindCardInstance(TargetCardInstanceId);
+if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board || !TargetCard->StackId.IsValid())
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DetachMaterials failed TargetMode=%s Reason=TargetInvalid"),
+GetTCGEffectTargetModeDebugName(Step.TargetMode));
+
+return false;
+}
+
+const FName TargetDefinitionId = TargetCard->CardDefinitionId;
+
+if (CountMaterialsUnderUnitForEffect(GameState, TargetCardInstanceId) < DetachCount)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DetachMaterials failed Target=%s Requested=%d Reason=NotEnoughMaterials"),
+*TargetDefinitionId.ToString(),
+DetachCount);
+
+return false;
+}
+
+if (TryHandMaterialLossReplacementForCardEffect(GameState, TargetCardInstanceId))
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DetachMaterials prevented Target=%s Requested=%d"),
+*TargetDefinitionId.ToString(),
+DetachCount);
+
+return false;
+}
+
+int32 DetachedCount = 0;
+for (int32 Index = 0; Index < DetachCount; ++Index)
+{
+if (GameState->MoveBottomOverlayToGraveyard(TargetCardInstanceId))
+{
+DetachedCount++;
+}
+}
+
+const bool bDetachedAll = DetachedCount == DetachCount;
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DetachMaterials Target=%s Requested=%d Detached=%d Success=%s"),
+*TargetDefinitionId.ToString(),
+DetachCount,
+DetachedCount,
+bDetachedAll ? TEXT("true") : TEXT("false"));
+
+return bDetachedAll;
+}
+
+static bool StealMaterialsGeneric(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry,
+const FTCGEffectStep& Step)
+{
+if (!GameState)
+{
+return false;
+}
+
+const FGuid FromUnitCardInstanceId = ResolveUnitTargetForMaterialStep(ChainEntry, Step);
+const FGuid ToUnitCardInstanceId = ChainEntry.SourceCardInstanceId;
+const int32 StealCount = FMath::Max(1, Step.Value <= 0 ? 1 : Step.Value);
+
+FTCGCardInstance* FromUnitCard = GameState->FindCardInstance(FromUnitCardInstanceId);
+FTCGCardInstance* ToUnitCard = GameState->FindCardInstance(ToUnitCardInstanceId);
+
+if (!FromUnitCard || FromUnitCard->Location != ETCGCardLocation::Board || !FromUnitCard->StackId.IsValid())
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: StealMaterials failed FromMode=%s Reason=FromInvalid"),
+GetTCGEffectTargetModeDebugName(Step.TargetMode));
+
+return false;
+}
+
+if (!ToUnitCard || ToUnitCard->Location != ETCGCardLocation::Board || !ToUnitCard->StackId.IsValid())
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: StealMaterials failed Reason=ToInvalid"));
+
+return false;
+}
+
+const FName FromDefinitionId = FromUnitCard->CardDefinitionId;
+const FName ToDefinitionId = ToUnitCard->CardDefinitionId;
+
+if (!FindBottomMaterialUnderUnitForEffect(GameState, FromUnitCardInstanceId))
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: StealMaterials From=%s To=%s Requested=%d FromHasNoMaterial=true"),
+*FromDefinitionId.ToString(),
+*ToDefinitionId.ToString(),
+StealCount);
+
+return true;
+}
+
+if (TryHandMaterialLossReplacementForCardEffect(GameState, FromUnitCardInstanceId))
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: StealMaterials From=%s To=%s Requested=%d MaterialLossPrevented=true"),
+*FromDefinitionId.ToString(),
+*ToDefinitionId.ToString(),
+StealCount);
+
+return true;
+}
+
+int32 StolenCount = 0;
+for (int32 Index = 0; Index < StealCount; ++Index)
+{
+FTCGCardInstance* MaterialToSteal = FindBottomMaterialUnderUnitForEffect(GameState, FromUnitCardInstanceId);
+ToUnitCard = GameState->FindCardInstance(ToUnitCardInstanceId);
+
+if (!MaterialToSteal || !ToUnitCard || ToUnitCard->Location != ETCGCardLocation::Board || !ToUnitCard->StackId.IsValid())
+{
+break;
+}
+
+MaterialToSteal->OwnerPlayerIndex = ToUnitCard->OwnerPlayerIndex;
+MaterialToSteal->Location = ETCGCardLocation::Board;
+MaterialToSteal->ZoneId = ToUnitCard->ZoneId;
+MaterialToSteal->StackId = ToUnitCard->StackId;
+MaterialToSteal->StackIndex = ToUnitCard->StackIndex;
+
+ToUnitCard->StackIndex++;
+StolenCount++;
+}
+
+const bool bStoleAny = StolenCount > 0;
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: StealMaterials From=%s To=%s Requested=%d Stolen=%d Success=%s"),
+*FromDefinitionId.ToString(),
+*ToDefinitionId.ToString(),
+StealCount,
+StolenCount,
+bStoleAny ? TEXT("true") : TEXT("false"));
+
+return bStoleAny;
+}
+
 static bool AttackDetachTwoStealOneMaterial(
 ATCG_GameState* GameState,
 const FTCGEffectChainEntry& ChainEntry)
@@ -992,6 +1165,34 @@ break;
 		}
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step RemoveMaterialFromTargetUnit Player=%d Pending=%s AutoSubmitted=%s"), ChainEntry.ControllerPlayerIndex, bChoiceStarted ? TEXT("true") : TEXT("false"), bAutoSubmittedChoice ? TEXT("true") : TEXT("false"));
 		bStepSucceeded = bAutoSubmittedChoice;
+		break;
+	}
+	case ETCGEffectStepType::DetachMaterials:
+	{
+		bStepSucceeded = DetachMaterialsGeneric(this, ChainEntry, Step);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Step DetachMaterials Player=%d TargetMode=%s Value=%d Success=%s"),
+				ChainEntry.ControllerPlayerIndex,
+				GetTCGEffectTargetModeDebugName(Step.TargetMode),
+				Step.Value,
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
+		break;
+	}
+	case ETCGEffectStepType::StealMaterials:
+	{
+		bStepSucceeded = StealMaterialsGeneric(this, ChainEntry, Step);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Step StealMaterials Player=%d FromMode=%s Value=%d Success=%s"),
+				ChainEntry.ControllerPlayerIndex,
+				GetTCGEffectTargetModeDebugName(Step.TargetMode),
+				Step.Value,
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
 		break;
 	}
 	case ETCGEffectStepType::AttackDetachTwoStealOneMaterial:
