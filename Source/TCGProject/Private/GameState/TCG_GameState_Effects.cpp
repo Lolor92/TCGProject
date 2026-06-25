@@ -61,6 +61,7 @@ constexpr bool bLogEffectResolution = false;
 		case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw: return TEXT("BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw");
 		case ETCGEffectStepType::SwapTwoOpponentUnitsZones: return TEXT("SwapTwoOpponentUnitsZones");
 		case ETCGEffectStepType::SwapUnitZones: return TEXT("SwapUnitZones");
+		case ETCGEffectStepType::CheckMaterialCount: return TEXT("CheckMaterialCount");
 		case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect: return TEXT("DiscardSourcePreventMaterialLossByCardEffect");
 		case ETCGEffectStepType::DetachMaterials: return TEXT("DetachMaterials");
 		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
@@ -1668,6 +1669,30 @@ break;
 				bDiscardedSource ? TEXT("true") : TEXT("false"),
 				bStepSucceeded ? TEXT("true") : TEXT("false"));
 		}
+		break;
+	}
+	case ETCGEffectStepType::CheckMaterialCount:
+	{
+		const FGuid TargetCardInstanceId =
+			Step.TargetMode == ETCGEffectTargetMode::TriggerTarget
+			? ChainEntry.TargetCardInstanceId
+			: ChainEntry.SourceCardInstanceId;
+
+		const FTCGCardInstance* TargetCard = FindCardInstance(TargetCardInstanceId);
+		const int32 ExpectedMaterialCount = FMath::Max(0, Step.Value);
+		const int32 ActualMaterialCount = TargetCard ? GetCardsUnderneathCount(TargetCardInstanceId) : INDEX_NONE;
+
+		bStepSucceeded = TargetCard
+			&& TargetCard->Location == ETCGCardLocation::Board
+			&& ActualMaterialCount == ExpectedMaterialCount;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: CheckMaterialCount Target=%s TargetMode=%s Expected=%d Actual=%d Success=%s"),
+			TargetCard ? *TargetCard->CardDefinitionId.ToString() : TEXT("None"),
+			GetTCGEffectTargetModeDebugName(Step.TargetMode),
+			ExpectedMaterialCount,
+			ActualMaterialCount,
+			bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
 	case ETCGEffectStepType::DestroyUnit:
