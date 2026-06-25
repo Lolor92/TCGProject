@@ -85,7 +85,8 @@ enum class ETCGEffectStepType : uint8
 	DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials UMETA(DisplayName = "49 - Discard Source, Return Target Unit To Hand, Draw If 2+ Materials"),
 	BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw UMETA(DisplayName = "50 - Banish Source, Return 2 Graveyard Cards To Bottom Deck, Both Draw"),
 	SwapTwoOpponentUnitsZones UMETA(DisplayName = "51 - Choose 2 Opponent Units, Swap Zones"),
-	DiscardSourcePreventMaterialLossByCardEffect UMETA(DisplayName = "52 - Discard Source, Prevent Material Loss By Card Effect")
+	DiscardSourcePreventMaterialLossByCardEffect UMETA(DisplayName = "52 - Discard Source, Prevent Material Loss By Card Effect"),
+	AttackDetachTwoStealOneMaterial UMETA(DisplayName = "53 - Attack: Detach 2, Steal 1 Material")
 };
 
 UENUM(BlueprintType)
