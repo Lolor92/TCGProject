@@ -150,6 +150,8 @@ public:
 	bool PlaceCardAsNewStack(const FGuid& CardInstanceId, FName ZoneId);
 	bool PlaceCardOnStack(const FGuid& CardInstanceId, const FGuid& TargetStackId);
 	bool PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId);
+	bool PlayCardOnUnitByEffect(const FGuid& CardInstanceId, const FGuid& TargetUnitCardInstanceId);
+	bool DoesUnitHaveInheritedCannotBeDestroyedByCardEffects(const FGuid& TopCardInstanceId);
 	bool IsValidPlayerIndex(int32 PlayerIndex) const;
 	bool IsCurrentTurnPlayer(int32 PlayerIndex) const;
 	bool CanPlayerActInCurrentPhase(int32 PlayerIndex) const;

@@ -48,6 +48,7 @@ namespace
 		case ETCGEffectTrigger::OnBattleEnd: return TEXT("OnBattleEnd");
 		case ETCGEffectTrigger::OnStackAdded: return TEXT("OnStackAdded");
 		case ETCGEffectTrigger::OnBecomingTopCard: return TEXT("OnBecomingTopCard");
+		case ETCGEffectTrigger::OnMaterialOfDestroyedUnit: return TEXT("OnMaterialOfDestroyedUnit");
 		default: return TEXT("None");
 		}
 	}
@@ -407,6 +408,43 @@ return OutChain.Num();
 }
 }
 
+bool ATCG_GameState::DoesUnitHaveInheritedCannotBeDestroyedByCardEffects(const FGuid& TopCardInstanceId)
+{
+const FTCGCardInstance* TopCard = FindCardInstance(TopCardInstanceId);
+if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid())
+{
+return false;
+}
+
+for (const FTCGCardInstance& StackCard : MatchCards)
+{
+if (StackCard.Location != ETCGCardLocation::Board) continue;
+if (StackCard.StackId != TopCard->StackId) continue;
+if (StackCard.StackIndex > TopCard->StackIndex) continue;
+
+TArray<FTCGCardEffectRef> EffectRefs;
+GetPrintedEffectRefsForCard(StackCard, EffectRefs);
+
+for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+{
+for (const FTCGEffectStep& Step : EffectRef.Steps)
+{
+if (Step.StepType == ETCGEffectStepType::CannotBeDestroyedByCardEffects)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Destroy protection inherited Top=%s Source=%s"),
+*TopCard->CardDefinitionId.ToString(),
+*StackCard.CardDefinitionId.ToString());
+
+return true;
+}
+}
+}
+}
+
+return false;
+}
+
 bool ATCG_GameState::PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId)
 {
 	FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
@@ -444,6 +482,68 @@ bool ATCG_GameState::PlayCardToZone(const FGuid& CardInstanceId, FName ZoneId)
 
 		ResolveEffectChain(YourUnitPlayedChain);
 	}
+
+	return true;
+}
+
+bool ATCG_GameState::PlayCardOnUnitByEffect(const FGuid& CardInstanceId, const FGuid& TargetUnitCardInstanceId)
+{
+	FTCGCardInstance* Card = FindCardInstance(CardInstanceId);
+	FTCGCardInstance* TargetUnit = FindCardInstance(TargetUnitCardInstanceId);
+
+	if (!Card || (Card->Location != ETCGCardLocation::Hand && Card->Location != ETCGCardLocation::Graveyard))
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: PlayCardOnUnitByEffect rejected Card=%s Reason=InvalidSourceLocation Location=%d"),
+			Card ? *Card->CardDefinitionId.ToString() : TEXT("None"),
+			Card ? static_cast<int32>(Card->Location) : -1);
+
+		return false;
+	}
+
+	if (!TargetUnit || TargetUnit->Location != ETCGCardLocation::Board || !TargetUnit->StackId.IsValid())
+	{
+		return false;
+	}
+
+	if (Card->OwnerPlayerIndex != TargetUnit->OwnerPlayerIndex)
+	{
+		return false;
+	}
+
+	const int32 ControllerPlayerIndex = Card->OwnerPlayerIndex;
+	const FName PlayedCardDefinitionId = Card->CardDefinitionId;
+	const FName TargetDefinitionId = TargetUnit->CardDefinitionId;
+
+	Card->Location = ETCGCardLocation::Board;
+	Card->ZoneId = TargetUnit->ZoneId;
+	Card->StackId = TargetUnit->StackId;
+	Card->StackIndex = TargetUnit->StackIndex + 1;
+
+	ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnStackAdded);
+	ExecuteCardTrigger(CardInstanceId, ETCGEffectTrigger::OnBecomingTopCard);
+
+	TArray<FTCGEffectChainEntry> Chain;
+	BuildStackOnPlayEffectChain(CardInstanceId, Chain);
+	ResolveEffectChain(Chain);
+
+	TArray<FTCGEffectChainEntry> YourUnitPlayedChain;
+	BuildYourUnitPlayedResponseChainForEffect(this, ControllerPlayerIndex, CardInstanceId, YourUnitPlayedChain);
+	if (YourUnitPlayedChain.Num() > 0)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: Your unit played responses Player=%d Count=%d Played=%s"),
+			ControllerPlayerIndex,
+			YourUnitPlayedChain.Num(),
+			*PlayedCardDefinitionId.ToString());
+
+		ResolveEffectChain(YourUnitPlayedChain);
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("TCG Effect: PlayCardOnUnitByEffect Card=%s Target=%s Played=true"),
+		*PlayedCardDefinitionId.ToString(),
+		*TargetDefinitionId.ToString());
 
 	return true;
 }

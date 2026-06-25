@@ -12,10 +12,11 @@ namespace
 		OverlayPlacement,
 		HandDetachResponse,
 		MachineMaterialRecovery,
+		GraveyardMachineProtection,
 		OverdrivePilotKaia
 	};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::MachineMaterialRecovery;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::GraveyardMachineProtection;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
@@ -120,6 +121,196 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 
 
 
+
+	if (DebugRunnerScenario == ETCGDebugRunnerScenario::GraveyardMachineProtection)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Graveyard machine protection scenario start"));
+
+		GameState->MatchCards.Empty();
+		GameState->SetMatchResult(ETCGMatchResult::None);
+		GameState->SetPhase(ETCGMatchPhase::Placement);
+		GameState->RoundNumber = 1;
+		GameState->TurnNumber = 1;
+		GameState->PlacementStepIndex = 0;
+		GameState->Player0PlacementFieldZonesUsedThisRound.Reset();
+		GameState->Player1PlacementFieldZonesUsedThisRound.Reset();
+		GameState->SetCurrentTurnPlayer(0);
+		GameState->ClearPendingDiscardChoice();
+		GameState->ClearPendingGraveyardToDeckChoice();
+
+		GameState->DebugCardDefinitions.RemoveAll([](const TObjectPtr<UTCG_CardDefinition>& Definition)
+		{
+			return Definition
+				&& (Definition->CardDefinitionId == "Debug_GraveyardMachineProtection_Card"
+					|| Definition->CardDefinitionId == "Debug_GraveyardMachineProtection_Machine"
+					|| Definition->CardDefinitionId == "Debug_GraveyardMachineProtection_Destroyer");
+		});
+
+		auto MakeDefinition = [GameState](
+			FName CardDefinitionId,
+			const TCHAR* DisplayName,
+			ETCGCardElement Element,
+			int32 BaseAttack)
+		{
+			UTCG_CardDefinition* Definition = NewObject<UTCG_CardDefinition>(GameState);
+			Definition->CardDefinitionId = CardDefinitionId;
+			Definition->DisplayName = FText::FromString(DisplayName);
+			Definition->Element = Element;
+			Definition->BaseAttack = BaseAttack;
+			return Definition;
+		};
+
+		UTCG_CardDefinition* ProtectionCardDefinition = MakeDefinition(
+			"Debug_GraveyardMachineProtection_Card",
+			TEXT("Debug Graveyard Machine Protection Card"),
+			ETCGCardElement::Light,
+			1);
+
+		FTCGCardEffectRef PlayMachineFromGraveyardEffect;
+		PlayMachineFromGraveyardEffect.Trigger = ETCGEffectTrigger::OnPlay;
+		PlayMachineFromGraveyardEffect.bOptional = true;
+
+		FTCGEffectStep PlayMachineStep;
+		PlayMachineStep.StepType = ETCGEffectStepType::PlayGraveyardCardOnUnit;
+		PlayMachineStep.TargetMode = ETCGEffectTargetMode::SourceCard;
+		PlayMachineStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		PlayMachineStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+		PlayMachineStep.TargetFilter.bRequireTopCard = false;
+		PlayMachineStep.TargetFilter.NameContains = "Machine";
+		PlayMachineFromGraveyardEffect.Steps.Add(PlayMachineStep);
+
+		ProtectionCardDefinition->Effects.Add(PlayMachineFromGraveyardEffect);
+
+		FTCGCardEffectRef CannotBeDestroyedEffect;
+		CannotBeDestroyedEffect.Trigger = ETCGEffectTrigger::None;
+
+		FTCGEffectStep CannotBeDestroyedStep;
+		CannotBeDestroyedStep.StepType = ETCGEffectStepType::CannotBeDestroyedByCardEffects;
+		CannotBeDestroyedEffect.Steps.Add(CannotBeDestroyedStep);
+
+		ProtectionCardDefinition->Effects.Add(CannotBeDestroyedEffect);
+
+		UTCG_CardDefinition* MachineDefinition = MakeDefinition(
+			"Debug_GraveyardMachineProtection_Machine",
+			TEXT("Debug Graveyard Machine Unit"),
+			ETCGCardElement::Fire,
+			3);
+
+		UTCG_CardDefinition* DestroyerDefinition = MakeDefinition(
+			"Debug_GraveyardMachineProtection_Destroyer",
+			TEXT("Debug Card Effect Destroyer"),
+			ETCGCardElement::Dark,
+			2);
+
+		GameState->DebugCardDefinitions.Add(ProtectionCardDefinition);
+		GameState->DebugCardDefinitions.Add(MachineDefinition);
+		GameState->DebugCardDefinitions.Add(DestroyerDefinition);
+
+		FTCGCardInstance* ProtectionCard = GameState->AddCardInstanceFromDefinition(
+			ProtectionCardDefinition,
+			0,
+			ETCGCardLocation::Hand);
+		const FGuid ProtectionCardId = ProtectionCard ? ProtectionCard->CardInstanceId : FGuid();
+
+		FTCGCardInstance* MachineCard = GameState->AddCardInstanceFromDefinition(
+			MachineDefinition,
+			0,
+			ETCGCardLocation::Graveyard);
+		const FGuid MachineCardId = MachineCard ? MachineCard->CardInstanceId : FGuid();
+
+		FTCGCardInstance* DestroyerCard = GameState->AddCardInstanceFromDefinition(
+			DestroyerDefinition,
+			1,
+			ETCGCardLocation::Board);
+		const FGuid DestroyerCardId = DestroyerCard ? DestroyerCard->CardInstanceId : FGuid();
+
+		if (!ProtectionCardId.IsValid() || !MachineCardId.IsValid() || !DestroyerCardId.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Graveyard machine protection setup failed"));
+			GameState->EndMatch(ETCGMatchResult::Draw);
+			return;
+		}
+
+		FTCGCardInstance* DestroyerOnBoard = GameState->FindCardInstance(DestroyerCardId);
+		if (DestroyerOnBoard)
+		{
+			DestroyerOnBoard->ZoneId = ATCG_GameState::GetFieldZoneId(1, 0);
+			DestroyerOnBoard->StackId = FGuid::NewGuid();
+			DestroyerOnBoard->StackIndex = 0;
+		}
+
+		const bool bPlayedProtectionCard = GameState->PlayCardToZone(
+			ProtectionCardId,
+			ATCG_GameState::GetFieldZoneId(0, 0));
+
+		const FTCGCardInstance* ProtectionAfterPlay = GameState->FindCardInstance(ProtectionCardId);
+		const FTCGCardInstance* MachineAfterPlay = GameState->FindCardInstance(MachineCardId);
+
+		const bool bMachinePlayedFromGraveyard =
+			ProtectionAfterPlay
+			&& MachineAfterPlay
+			&& ProtectionAfterPlay->Location == ETCGCardLocation::Board
+			&& MachineAfterPlay->Location == ETCGCardLocation::Board
+			&& ProtectionAfterPlay->StackId.IsValid()
+			&& MachineAfterPlay->StackId == ProtectionAfterPlay->StackId
+			&& ProtectionAfterPlay->StackIndex < MachineAfterPlay->StackIndex;
+
+		FTCGCardEffectRef DestroyByCardEffect;
+		DestroyByCardEffect.Trigger = ETCGEffectTrigger::OnPlay;
+
+		FTCGEffectStep DestroyStep;
+		DestroyStep.StepType = ETCGEffectStepType::DestroyTargetUnitByCardEffect;
+		DestroyStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+		DestroyByCardEffect.Steps.Add(DestroyStep);
+
+		TArray<FTCGEffectChainEntry> DestroyChain;
+		GameState->AddCardEffectRefToChain(
+			DestroyChain,
+			DestroyerCardId,
+			MachineCardId,
+			DestroyByCardEffect);
+
+		const bool bDestroyAttemptResolved = GameState->ResolveEffectChain(DestroyChain);
+
+		const FTCGCardInstance* ProtectionAfterDestroyAttempt = GameState->FindCardInstance(ProtectionCardId);
+		const FTCGCardInstance* MachineAfterDestroyAttempt = GameState->FindCardInstance(MachineCardId);
+
+		const bool bMachineStillOnBoard =
+			MachineAfterDestroyAttempt
+			&& MachineAfterDestroyAttempt->Location == ETCGCardLocation::Board;
+
+		const bool bProtectionStillMaterial =
+			ProtectionAfterDestroyAttempt
+			&& MachineAfterDestroyAttempt
+			&& ProtectionAfterDestroyAttempt->Location == ETCGCardLocation::Board
+			&& ProtectionAfterDestroyAttempt->StackId == MachineAfterDestroyAttempt->StackId
+			&& ProtectionAfterDestroyAttempt->StackIndex < MachineAfterDestroyAttempt->StackIndex;
+
+		const bool bInheritedProtection =
+			MachineAfterDestroyAttempt
+			&& GameState->DoesUnitHaveInheritedCannotBeDestroyedByCardEffects(MachineAfterDestroyAttempt->CardInstanceId);
+
+		const bool bExpectedAll =
+			bPlayedProtectionCard
+			&& bMachinePlayedFromGraveyard
+			&& bDestroyAttemptResolved
+			&& bMachineStillOnBoard
+			&& bProtectionStillMaterial
+			&& bInheritedProtection;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: GraveyardMachineProtection summary PlayedProtection=%s MachineFromGraveyard=%s DestroyAttemptResolved=%s MachineStillBoard=%s ProtectionStillMaterial=%s InheritedProtection=%s ExpectedAll=%s"),
+			bPlayedProtectionCard ? TEXT("true") : TEXT("false"),
+			bMachinePlayedFromGraveyard ? TEXT("true") : TEXT("false"),
+			bDestroyAttemptResolved ? TEXT("true") : TEXT("false"),
+			bMachineStillOnBoard ? TEXT("true") : TEXT("false"),
+			bProtectionStillMaterial ? TEXT("true") : TEXT("false"),
+			bInheritedProtection ? TEXT("true") : TEXT("false"),
+			bExpectedAll ? TEXT("true") : TEXT("false"));
+
+		GameState->EndMatch(ETCGMatchResult::Draw);
+		return;
+	}
 
 	if (DebugRunnerScenario == ETCGDebugRunnerScenario::MachineMaterialRecovery)
 	{

@@ -57,6 +57,8 @@ case ETCGEffectStepType::PlaySourceToEmptyZone: return TEXT("PlaySourceToEmptyZo
 		case ETCGEffectStepType::BoostAllOwnUnitsThisRound: return TEXT("BoostAllOwnUnitsThisRound");
 		case ETCGEffectStepType::RevealTopDeckCardsAddElementToHand: return TEXT("RevealTopDeckCardsAddElementToHand");
 		case ETCGEffectStepType::PlayGraveyardCardToEmptyZone: return TEXT("PlayGraveyardCardToEmptyZone");
+case ETCGEffectStepType::PlayGraveyardCardOnUnit: return TEXT("PlayGraveyardCardOnUnit");
+case ETCGEffectStepType::CannotBeDestroyedByCardEffects: return TEXT("CannotBeDestroyedByCardEffects");
 		case ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck: return TEXT("MoveGraveyardCardsToHandAndTopDeck");
 		case ETCGEffectStepType::RemoveMaterialFromTargetUnit: return TEXT("RemoveMaterialFromTargetUnit");
 		case ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit: return TEXT("AttackMillTwoWaterBounceBattlingUnit");
@@ -71,6 +73,7 @@ case ETCGEffectStepType::PlaySourceToEmptyZone: return TEXT("PlaySourceToEmptyZo
 		case ETCGEffectStepType::PlayCardToEmptyZone: return TEXT("PlayCardToEmptyZone");
 		case ETCGEffectStepType::PlayHandCardToEmptyZone: return TEXT("PlayHandCardToEmptyZone");
 case ETCGEffectStepType::MoveDeckCardToHand: return TEXT("MoveDeckCardToHand");
+		case ETCGEffectStepType::PlayHandCardOnUnit: return TEXT("PlayHandCardOnUnit");
 		case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect: return TEXT("DiscardSourcePreventMaterialLossByCardEffect");
 		case ETCGEffectStepType::DetachMaterials: return TEXT("DetachMaterials");
 		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
@@ -1234,6 +1237,15 @@ if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board || !TargetCar
 return false;
 }
 
+if (GameState->DoesUnitHaveInheritedCannotBeDestroyedByCardEffects(TargetCardInstanceId))
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DestroyTargetUnitByCardEffect prevented Target=%s Reason=InheritedCannotBeDestroyedByCardEffects"),
+*TargetCard->CardDefinitionId.ToString());
+
+return true;
+}
+
 if (TryHandSaveReplacementForCardEffect(GameState, TargetCardInstanceId))
 {
 return true;
@@ -1738,6 +1750,194 @@ return bPlayed;
 }
 
 
+static bool PlayFirstFilteredHandCardOnFirstFilteredUnitForEffect(
+	ATCG_GameState* GameState,
+	const FTCGEffectChainEntry& ChainEntry,
+	const FTCGEffectStep& Step)
+{
+	if (!GameState)
+	{
+		return false;
+	}
+
+	FGuid CardToPlayId;
+	FName CardToPlayDefinitionId = NAME_None;
+
+	for (const FTCGCardInstance& Card : GameState->MatchCards)
+	{
+		if (!DoesCardMatchGenericEffectFilter(
+			GameState,
+			Card,
+			Step.TargetFilter,
+			ChainEntry.ControllerPlayerIndex,
+			ChainEntry.SourceCardInstanceId))
+		{
+			continue;
+		}
+
+		if (Card.Location != ETCGCardLocation::Hand)
+		{
+			continue;
+		}
+
+		CardToPlayId = Card.CardInstanceId;
+		CardToPlayDefinitionId = Card.CardDefinitionId;
+		break;
+	}
+
+	if (!CardToPlayId.IsValid())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: PlayHandCardOnUnit failed Player=%d Reason=NoFilteredHandCard"),
+			ChainEntry.ControllerPlayerIndex);
+
+		return false;
+	}
+
+	FGuid TargetUnitId;
+	FName TargetUnitDefinitionId = NAME_None;
+
+	for (const FTCGCardInstance& Card : GameState->MatchCards)
+	{
+		if (Card.CardInstanceId == CardToPlayId)
+		{
+			continue;
+		}
+
+		if (!DoesCardMatchGenericEffectFilter(
+			GameState,
+			Card,
+			Step.SecondaryTargetFilter,
+			ChainEntry.ControllerPlayerIndex,
+			ChainEntry.SourceCardInstanceId))
+		{
+			continue;
+		}
+
+		if (Card.Location != ETCGCardLocation::Board || !Card.StackId.IsValid())
+		{
+			continue;
+		}
+
+		TargetUnitId = Card.CardInstanceId;
+		TargetUnitDefinitionId = Card.CardDefinitionId;
+		break;
+	}
+
+	if (!TargetUnitId.IsValid())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: PlayHandCardOnUnit failed Card=%s Reason=NoFilteredUnitTarget"),
+			*CardToPlayDefinitionId.ToString());
+
+		return false;
+	}
+
+	const bool bPlayed = GameState->PlayCardOnUnitByEffect(CardToPlayId, TargetUnitId);
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("TCG Effect: PlayHandCardOnUnit Card=%s Target=%s Played=%s"),
+		*CardToPlayDefinitionId.ToString(),
+		*TargetUnitDefinitionId.ToString(),
+		bPlayed ? TEXT("true") : TEXT("false"));
+
+	return bPlayed;
+}
+
+static bool PlayFirstFilteredGraveyardCardOnUnitForEffect(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry,
+const FTCGEffectStep& Step)
+{
+if (!GameState)
+{
+return false;
+}
+
+FGuid CardToPlayId;
+FName CardToPlayDefinitionId = NAME_None;
+
+for (const FTCGCardInstance& Card : GameState->MatchCards)
+{
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Debug: PlayGraveyardCardOnUnit scan Card=%s Owner=%d Location=%d RequiredLocation=%d NameContains=%s"),
+*Card.CardDefinitionId.ToString(),
+Card.OwnerPlayerIndex,
+static_cast<int32>(Card.Location),
+static_cast<int32>(Step.TargetFilter.RequiredLocation),
+*Step.TargetFilter.NameContains);
+
+if (!DoesCardMatchGenericEffectFilter(
+GameState,
+Card,
+Step.TargetFilter,
+ChainEntry.ControllerPlayerIndex,
+ChainEntry.SourceCardInstanceId))
+{
+continue;
+}
+
+if (Card.Location != ETCGCardLocation::Graveyard)
+{
+continue;
+}
+
+CardToPlayId = Card.CardInstanceId;
+CardToPlayDefinitionId = Card.CardDefinitionId;
+break;
+}
+
+if (!CardToPlayId.IsValid())
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: PlayGraveyardCardOnUnit failed Player=%d Reason=NoFilteredGraveyardCard"),
+ChainEntry.ControllerPlayerIndex);
+
+return false;
+}
+
+FGuid TargetUnitId;
+
+if (Step.TargetMode == ETCGEffectTargetMode::SourceCard || Step.TargetMode == ETCGEffectTargetMode::None)
+{
+TargetUnitId = ChainEntry.SourceCardInstanceId;
+}
+else if (Step.TargetMode == ETCGEffectTargetMode::TriggerTarget)
+{
+TargetUnitId = ChainEntry.TargetCardInstanceId;
+}
+else
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: PlayGraveyardCardOnUnit failed Card=%s Reason=UnsupportedTargetMode"),
+*CardToPlayDefinitionId.ToString());
+
+return false;
+}
+
+const FTCGCardInstance* TargetUnit = GameState->FindCardInstance(TargetUnitId);
+if (!TargetUnit || TargetUnit->Location != ETCGCardLocation::Board || !TargetUnit->StackId.IsValid())
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: PlayGraveyardCardOnUnit failed Card=%s Reason=InvalidTargetUnit"),
+*CardToPlayDefinitionId.ToString());
+
+return false;
+}
+
+const FName TargetDefinitionId = TargetUnit->CardDefinitionId;
+const bool bPlayed = GameState->PlayCardOnUnitByEffect(CardToPlayId, TargetUnitId);
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: PlayGraveyardCardOnUnit Card=%s Target=%s Played=%s"),
+*CardToPlayDefinitionId.ToString(),
+*TargetDefinitionId.ToString(),
+bPlayed ? TEXT("true") : TEXT("false"));
+
+return bPlayed;
+}
+
 static bool MoveFirstFilteredDeckCardToHandForEffect(
     ATCG_GameState* GameState,
     const FTCGEffectChainEntry& ChainEntry,
@@ -1841,9 +2041,19 @@ static bool MoveFirstFilteredDeckCardToHandForEffect(
 
 bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step, bool bPreviousStepSucceeded)
 {
+	UE_LOG(LogTemp, Warning,
+		TEXT("TCG Debug: ResolveEffectStep Type=%s Source=%s"),
+		GetTCGEffectStepDebugName(Step.StepType),
+		*ChainEntry.SourceCardDefinitionId.ToString());
+
 	bool bStepSucceeded = false;
 	switch (Step.StepType)
 	{
+	case ETCGEffectStepType::PlayHandCardOnUnit:
+	{
+		bStepSucceeded = PlayFirstFilteredHandCardOnFirstFilteredUnitForEffect(this, ChainEntry, Step);
+		break;
+	}
     case ETCGEffectStepType::MoveDeckCardToHand:
     {
         bStepSucceeded = MoveFirstFilteredDeckCardToHandForEffect(this, ChainEntry, Step);
@@ -2031,6 +2241,12 @@ break;
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step PlaySourceToEmptyZone Success=%s"), bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
+	case ETCGEffectStepType::PlayGraveyardCardOnUnit:
+	{
+		bStepSucceeded = PlayFirstFilteredGraveyardCardOnUnitForEffect(this, ChainEntry, Step);
+		break;
+	}
+
 	case ETCGEffectStepType::PlayGraveyardCardToEmptyZone:
 	{
 		const bool bChoiceStarted = BeginPendingPlayGraveyardCardToEmptyZoneChoice(ChainEntry.ControllerPlayerIndex, Step.TargetFilter, ChainEntry);
