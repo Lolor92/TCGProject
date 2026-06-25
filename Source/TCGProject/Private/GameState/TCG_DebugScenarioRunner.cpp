@@ -11,11 +11,11 @@ namespace
 		RoundLimitTiebreak,
 		OverlayPlacement,
 		HandDetachResponse,
-		MachineMaterialRecovery
-	,
-		OverdrivePilotKaia};
+		MachineMaterialRecovery,
+		OverdrivePilotKaia
+	};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::OverdrivePilotKaia;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::MachineMaterialRecovery;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
