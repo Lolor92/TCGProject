@@ -64,6 +64,7 @@ constexpr bool bLogEffectResolution = false;
 		case ETCGEffectStepType::DetachMaterials: return TEXT("DetachMaterials");
 		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
 		case ETCGEffectStepType::DiscardSource: return TEXT("DiscardSource");
+		case ETCGEffectStepType::DestroyUnit: return TEXT("DestroyUnit");
 case ETCGEffectStepType::AttackDetachTwoStealOneMaterial: return TEXT("AttackDetachTwoStealOneMaterial");
 default: return TEXT("None");
 		}
@@ -1326,12 +1327,26 @@ break;
 		}
 		break;
 	}
-	case ETCGEffectStepType::DestroyTargetUnitByCardEffect:
+	case ETCGEffectStepType::DestroyUnit:
 	{
 		bStepSucceeded = DestroyTargetUnitByCardEffect(this, ChainEntry, Step);
 		if (bLogEffectResolution)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DestroyTargetUnitByCardEffect Player=%d Success=%s"),
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Step DestroyUnit Player=%d TargetMode=%s Success=%s"),
+				ChainEntry.ControllerPlayerIndex,
+				GetTCGEffectTargetModeDebugName(Step.TargetMode),
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
+		break;
+	}
+	case ETCGEffectStepType::DestroyTargetUnitByCardEffect:
+	{
+		// Legacy alias. Keep old data assets working, but prefer generic DestroyUnit.
+		bStepSucceeded = DestroyTargetUnitByCardEffect(this, ChainEntry, Step);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DestroyTargetUnitByCardEffect LegacyAlias Player=%d Success=%s"),
 				ChainEntry.ControllerPlayerIndex,
 				bStepSucceeded ? TEXT("true") : TEXT("false"));
 		}

@@ -438,7 +438,7 @@ namespace
 		DestroyEffect.Trigger = ETCGEffectTrigger::OnPlay;
 
 		FTCGEffectStep DestroyStep;
-		DestroyStep.StepType = ETCGEffectStepType::DestroyTargetUnitByCardEffect;
+		DestroyStep.StepType = ETCGEffectStepType::DestroyUnit;
 		DestroyStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
 		DestroyEffect.Steps.Add(DestroyStep);
 
