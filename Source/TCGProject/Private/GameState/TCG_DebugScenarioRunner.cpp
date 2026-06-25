@@ -115,6 +115,10 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		return ETCGMatchResult::Draw;
 	};
 
+
+
+
+
 	if (DebugRunnerScenario == ETCGDebugRunnerScenario::HandDetachResponse)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Hand detach response scenario start"));

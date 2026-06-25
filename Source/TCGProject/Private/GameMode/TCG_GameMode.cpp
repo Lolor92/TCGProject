@@ -3,7 +3,7 @@
 #include "GameState/TCG_GameState.h"
 #include "PlayerState/TCG_PlayerState.h"
 
-void RunDebugBattleDestroyRevealScenario(ATCG_GameState* GameState);
+void RunDebugOpponentEffectDestructionGraveyardResponseScenario(ATCG_GameState* GameState);
 
 ATCG_GameMode::ATCG_GameMode()
 {
@@ -32,8 +32,8 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		ATCG_GameState* TCGGameState = GetGameState<ATCG_GameState>();
 		if (TCGGameState)
 		{
-			// Dedicated battle-destroy reveal debug scenario.
-			RunDebugBattleDestroyRevealScenario(TCGGameState);
+			// Dedicated opponent-effect destruction graveyard response debug scenario.
+			RunDebugOpponentEffectDestructionGraveyardResponseScenario(TCGGameState);
 		}
 	}
 }
