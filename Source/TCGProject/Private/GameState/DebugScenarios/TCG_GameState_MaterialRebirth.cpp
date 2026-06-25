@@ -568,5 +568,9 @@ void ATCG_GameState::RunDebugMaterialRebirthScenario()
 
 	EndMatch(ETCGMatchResult::Draw);
 
+	RunDebugAttackMillBounceScenario(this);
+
+	RunDebugGraveyardRecycleBothDrawScenario();
+
 	RunDebugAttackDetachStealMaterialScenario();
 }

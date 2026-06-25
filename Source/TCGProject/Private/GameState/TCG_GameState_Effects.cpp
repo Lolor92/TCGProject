@@ -66,6 +66,9 @@ constexpr bool bLogEffectResolution = false;
 		case ETCGEffectStepType::DiscardSource: return TEXT("DiscardSource");
 		case ETCGEffectStepType::DestroyUnit: return TEXT("DestroyUnit");
 		case ETCGEffectStepType::ReturnUnitToHand: return TEXT("ReturnUnitToHand");
+		case ETCGEffectStepType::BanishSource: return TEXT("BanishSource");
+		case ETCGEffectStepType::DrawCardsForBothPlayers: return TEXT("DrawCardsForBothPlayers");
+		case ETCGEffectStepType::ReturnUnitToBottomDeck: return TEXT("ReturnUnitToBottomDeck");
 case ETCGEffectStepType::AttackDetachTwoStealOneMaterial: return TEXT("AttackDetachTwoStealOneMaterial");
 default: return TEXT("None");
 		}
@@ -301,6 +304,41 @@ const bool bDiscardedSource = GameState->MoveCardToLocation(ChainEntry.SourceCar
 		return bReturnedUnit;
 	}
 
+static bool ReturnUnitToBottomDeckGeneric(
+	ATCG_GameState* GameState,
+	const FTCGEffectChainEntry& ChainEntry,
+	const FTCGEffectStep& Step)
+{
+	if (!GameState)
+	{
+		return false;
+	}
+
+	const FGuid TargetCardInstanceId =
+		Step.TargetMode == ETCGEffectTargetMode::SourceCard
+			? ChainEntry.SourceCardInstanceId
+			: ChainEntry.TargetCardInstanceId;
+
+	const FTCGCardInstance* TargetCard = GameState->FindCardInstance(TargetCardInstanceId);
+	if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: ReturnUnitToBottomDeck failed Target=%s Reason=TargetInvalid"),
+			TargetCard ? *TargetCard->CardDefinitionId.ToString() : TEXT("None"));
+		return false;
+	}
+
+	const FName TargetDefinitionId = TargetCard->CardDefinitionId;
+	const bool bReturned = GameState->ReturnUnitStackToBottomDeckMaterialsToGraveyard(TargetCardInstanceId);
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("TCG Effect: ReturnUnitToBottomDeck Target=%s Returned=%s"),
+		*TargetDefinitionId.ToString(),
+		bReturned ? TEXT("true") : TEXT("false"));
+
+	return bReturned;
+}
+
 static bool DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials(ATCG_GameState* GameState, const FTCGEffectChainEntry& ChainEntry)
 	{
 		if (!GameState) return false;
@@ -340,6 +378,79 @@ static bool DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials(ATCG_GameState
 			DrawnCount);
 
 		return bReturnedUnit;
+	}
+
+	static bool BanishSourceGeneric(
+		ATCG_GameState* GameState,
+		const FTCGEffectChainEntry& ChainEntry)
+	{
+		if (!GameState)
+		{
+			return false;
+		}
+
+		const FTCGCardInstance* SourceCard = GameState->FindCardInstance(ChainEntry.SourceCardInstanceId);
+		if (!SourceCard)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: BanishSource failed Source=%s Reason=SourceMissing"),
+				ChainEntry.SourceCardDefinitionId.IsNone() ? TEXT("None") : *ChainEntry.SourceCardDefinitionId.ToString());
+			return false;
+		}
+
+		const FName SourceDefinitionId = SourceCard->CardDefinitionId;
+
+		if (SourceCard->OwnerPlayerIndex != ChainEntry.ControllerPlayerIndex)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: BanishSource failed Source=%s Reason=WrongController"),
+				*SourceDefinitionId.ToString());
+			return false;
+		}
+
+		const bool bSourceInValidLocation =
+			SourceCard->Location == ETCGCardLocation::Hand
+			|| SourceCard->Location == ETCGCardLocation::Graveyard
+			|| SourceCard->Location == ETCGCardLocation::Board;
+
+		if (!bSourceInValidLocation)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: BanishSource failed Source=%s Reason=InvalidLocation"),
+				*SourceDefinitionId.ToString());
+			return false;
+		}
+
+		const bool bBanished = GameState->MoveCardToLocation(ChainEntry.SourceCardInstanceId, ETCGCardLocation::Banish);
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: BanishSource Source=%s Banished=%s"),
+			*SourceDefinitionId.ToString(),
+			bBanished ? TEXT("true") : TEXT("false"));
+
+		return bBanished;
+	}
+
+	static bool DrawCardsForBothPlayersGeneric(
+		ATCG_GameState* GameState,
+		const FTCGEffectStep& Step)
+	{
+		if (!GameState)
+		{
+			return false;
+		}
+
+		const int32 DrawCount = FMath::Max(1, Step.Value <= 0 ? 1 : Step.Value);
+		const int32 Player0Drawn = GameState->DrawCards(0, DrawCount);
+		const int32 Player1Drawn = GameState->DrawCards(1, DrawCount);
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: DrawCardsForBothPlayers Requested=%d Drawn=%d/%d"),
+			DrawCount,
+			Player0Drawn,
+			Player1Drawn);
+
+		return Player0Drawn == DrawCount && Player1Drawn == DrawCount;
 	}
 
 	static bool BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw(
@@ -1141,6 +1252,18 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DrawCards Player=%d Requested=%d Drawn=%d Success=%s"), ChainEntry.ControllerPlayerIndex, DrawCount, DrawnCount, bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
+case ETCGEffectStepType::DrawCardsForBothPlayers:
+{
+bStepSucceeded = DrawCardsForBothPlayersGeneric(this, Step);
+if (bLogEffectResolution)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Step DrawCardsForBothPlayers Requested=%d Success=%s"),
+FMath::Max(1, Step.Value <= 0 ? 1 : Step.Value),
+bStepSucceeded ? TEXT("true") : TEXT("false"));
+}
+break;
+}
 	case ETCGEffectStepType::DiscardCards:
 	{
 		const int32 DiscardCount = FMath::Max(0, Step.Value);
@@ -1328,6 +1451,18 @@ break;
 		bStepSucceeded = bAutoSubmittedChoice;
 		break;
 	}
+case ETCGEffectStepType::BanishSource:
+{
+bStepSucceeded = BanishSourceGeneric(this, ChainEntry);
+if (bLogEffectResolution)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Step BanishSource Player=%d Success=%s"),
+ChainEntry.ControllerPlayerIndex,
+bStepSucceeded ? TEXT("true") : TEXT("false"));
+}
+break;
+}
 	case ETCGEffectStepType::DiscardSource:
 	{
 		bStepSucceeded = DiscardSourceGeneric(this, ChainEntry);
@@ -1380,10 +1515,82 @@ break;
 		}
 		break;
 	}
+	case ETCGEffectStepType::ReturnUnitToBottomDeck:
+	{
+		bStepSucceeded = ReturnUnitToBottomDeckGeneric(this, ChainEntry, Step);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Step ReturnUnitToBottomDeck Player=%d TargetMode=%s Success=%s"),
+				ChainEntry.ControllerPlayerIndex,
+				GetTCGEffectTargetModeDebugName(Step.TargetMode),
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
+		break;
+	}
 	case ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit:
 	{
-		bStepSucceeded = ResolveAttackMillTwoWaterBounceBattlingUnit(ChainEntry.SourceCardInstanceId, ChainEntry.TargetCardInstanceId);
-		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step AttackMillTwoWaterBounceBattlingUnit Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
+		// Legacy alias. Keep old data assets working, but route the pieces through generic bricks.
+		FTCGEffectStep LegacyDetachStep;
+		LegacyDetachStep.StepType = ETCGEffectStepType::DetachMaterials;
+		LegacyDetachStep.TargetMode = ETCGEffectTargetMode::SourceCard;
+		LegacyDetachStep.Value = 1;
+
+		const bool bDetachedMaterial = DetachMaterialsGeneric(this, ChainEntry, LegacyDetachStep);
+		bool bMilledTwo = false;
+		bool bBothWater = false;
+		bool bReturnedBattleTarget = false;
+
+		if (bDetachedMaterial)
+		{
+			const FTCGCardInstance* SourceCard = FindCardInstance(ChainEntry.SourceCardInstanceId);
+			const FTCGCardInstance* BattleTarget = FindCardInstance(ChainEntry.TargetCardInstanceId);
+
+			if (SourceCard
+				&& SourceCard->Location == ETCGCardLocation::Board
+				&& BattleTarget
+				&& BattleTarget->Location == ETCGCardLocation::Board)
+			{
+				TArray<FTCGCardInstance> DeckCards;
+				GetCardsInDeck(SourceCard->OwnerPlayerIndex, DeckCards);
+
+				if (DeckCards.Num() >= 2)
+				{
+					bBothWater =
+						DeckCards[0].Element == ETCGCardElement::Water
+						&& DeckCards[1].Element == ETCGCardElement::Water;
+
+					bMilledTwo = SendTopDeckCardsToGraveyard(SourceCard->OwnerPlayerIndex, 2) == 2;
+
+					if (bMilledTwo && bBothWater)
+					{
+						FTCGEffectStep LegacyReturnStep;
+						LegacyReturnStep.StepType = ETCGEffectStepType::ReturnUnitToBottomDeck;
+						LegacyReturnStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+
+						bReturnedBattleTarget = ReturnUnitToBottomDeckGeneric(this, ChainEntry, LegacyReturnStep);
+					}
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("TCG Effect: Attack mill bounce failed Player=%d Reason=DeckTooSmall Cards=%d"),
+						SourceCard->OwnerPlayerIndex,
+						DeckCards.Num());
+				}
+			}
+		}
+
+		bStepSucceeded = bMilledTwo;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: Attack mill bounce legacy alias Detached=%s MilledTwo=%s BothWater=%s ReturnedTarget=%s"),
+			bDetachedMaterial ? TEXT("true") : TEXT("false"),
+			bMilledTwo ? TEXT("true") : TEXT("false"),
+			bBothWater ? TEXT("true") : TEXT("false"),
+			bReturnedBattleTarget ? TEXT("true") : TEXT("false"));
+
+		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step AttackMillTwoWaterBounceBattlingUnit LegacyAlias Player=%d Success=%s"), ChainEntry.ControllerPlayerIndex, bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
 	case ETCGEffectStepType::DiscardSourceDetachUpToTwoMaterialsFromTarget:
@@ -1461,11 +1668,56 @@ break;
 }
 case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw:
 	{
-		bStepSucceeded = BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw(this, ChainEntry);
+		// Legacy alias. Keep old data assets working, but resolve through generic steps.
+		const bool bBanishedSource = BanishSourceGeneric(this, ChainEntry);
+		bool bReturnedCards = false;
+		bool bBothDrew = false;
+
+		if (bBanishedSource)
+		{
+			const int32 MoveCount = 2;
+			const bool bChoiceStarted = BeginPendingGraveyardToDeckChoice(ChainEntry.ControllerPlayerIndex, MoveCount, ChainEntry);
+			bool bAutoSubmittedChoice = false;
+
+			if (bChoiceStarted && bAutoSubmitDebugGraveyardToDeckChoice)
+			{
+				TArray<FGuid> ChoiceOptions;
+				GetPendingGraveyardToDeckChoiceOptions(ChoiceOptions);
+
+				TArray<FGuid> DebugChosenCards;
+				for (int32 Index = 0; Index < ChoiceOptions.Num() && DebugChosenCards.Num() < MoveCount; ++Index)
+				{
+					DebugChosenCards.Add(ChoiceOptions[Index]);
+				}
+
+				bAutoSubmittedChoice = SubmitPendingGraveyardToDeckChoice(ChainEntry.ControllerPlayerIndex, DebugChosenCards);
+			}
+
+			bReturnedCards = bAutoSubmittedChoice;
+
+			if (bReturnedCards)
+			{
+				FTCGEffectStep DrawBothStep;
+				DrawBothStep.StepType = ETCGEffectStepType::DrawCardsForBothPlayers;
+				DrawBothStep.Value = 1;
+
+				bBothDrew = DrawCardsForBothPlayersGeneric(this, DrawBothStep);
+			}
+		}
+
+		bStepSucceeded = bBanishedSource && bReturnedCards && bBothDrew;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: Graveyard recycle both draw legacy alias Banished=%s Returned=%s BothDrew=%s Success=%s"),
+			bBanishedSource ? TEXT("true") : TEXT("false"),
+			bReturnedCards ? TEXT("true") : TEXT("false"),
+			bBothDrew ? TEXT("true") : TEXT("false"),
+			bStepSucceeded ? TEXT("true") : TEXT("false"));
+
 		if (bLogEffectResolution)
 		{
 			UE_LOG(LogTemp, Warning,
-				TEXT("TCG Effect: Step BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw Player=%d Success=%s"),
+				TEXT("TCG Effect: Step BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw LegacyAlias Player=%d Success=%s"),
 				ChainEntry.ControllerPlayerIndex,
 				bStepSucceeded ? TEXT("true") : TEXT("false"));
 		}

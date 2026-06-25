@@ -93,6 +93,9 @@ enum class ETCGEffectStepType : uint8
 	DiscardSource UMETA(DisplayName = "56 - Generic: Discard Source"),
 	DestroyUnit UMETA(DisplayName = "57 - Generic: Destroy Unit"),
 	ReturnUnitToHand UMETA(DisplayName = "58 - Generic: Return Unit To Hand"),
+	ReturnUnitToBottomDeck UMETA(DisplayName = "59 - Generic: Return Unit To Bottom Deck"),
+	BanishSource UMETA(DisplayName = "60 - Generic: Banish Source"),
+	DrawCardsForBothPlayers UMETA(DisplayName = "61 - Generic: Draw Cards For Both Players"),
 
 	// Legacy/debug-only rigid step. Keep temporarily while migrating old effects.
 	AttackDetachTwoStealOneMaterial UMETA(DisplayName = "53 - Legacy Attack: Detach 2, Steal 1 Material")
@@ -172,14 +175,14 @@ public:
 		EditDefaultsOnly,
 		BlueprintReadOnly,
 		Category = "2. Target",
-		meta = (EditCondition = "StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::MoveBottomOverlayToGraveyard || StepType == ETCGEffectStepType::RemoveMaterialFromTargetUnit || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial || StepType == ETCGEffectStepType::DestroyTargetUnitByCardEffect || StepType == ETCGEffectStepType::DetachMaterials || StepType == ETCGEffectStepType::StealMaterials || StepType == ETCGEffectStepType::DestroyUnit || StepType == ETCGEffectStepType::ReturnUnitToHand", EditConditionHides))
+		meta = (EditCondition = "StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::MoveBottomOverlayToGraveyard || StepType == ETCGEffectStepType::RemoveMaterialFromTargetUnit || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial || StepType == ETCGEffectStepType::DestroyTargetUnitByCardEffect || StepType == ETCGEffectStepType::DetachMaterials || StepType == ETCGEffectStepType::StealMaterials || StepType == ETCGEffectStepType::DestroyUnit || StepType == ETCGEffectStepType::ReturnUnitToHand || StepType == ETCGEffectStepType::ReturnUnitToBottomDeck", EditConditionHides))
 	ETCGEffectTargetMode TargetMode = ETCGEffectTargetMode::None;
 
 	UPROPERTY(
 		EditDefaultsOnly,
 		BlueprintReadOnly,
 		Category = "3. Value",
-		meta = (EditCondition = "StepType == ETCGEffectStepType::DrawCards || StepType == ETCGEffectStepType::DiscardCards || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::SendTopDeckCardsToGraveyard || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToBottomDeck || StepType == ETCGEffectStepType::MoveHandCardToTopDeck || StepType == ETCGEffectStepType::BoostAllOwnUnitsThisRound || StepType == ETCGEffectStepType::DetachMaterials || StepType == ETCGEffectStepType::StealMaterials || StepType == ETCGEffectStepType::ReturnUnitToHand", EditConditionHides))
+		meta = (EditCondition = "StepType == ETCGEffectStepType::DrawCards || StepType == ETCGEffectStepType::DiscardCards || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::SendTopDeckCardsToGraveyard || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToBottomDeck || StepType == ETCGEffectStepType::MoveHandCardToTopDeck || StepType == ETCGEffectStepType::BoostAllOwnUnitsThisRound || StepType == ETCGEffectStepType::DetachMaterials || StepType == ETCGEffectStepType::StealMaterials || StepType == ETCGEffectStepType::ReturnUnitToHand || StepType == ETCGEffectStepType::DrawCardsForBothPlayers", EditConditionHides))
 	int32 Value = 0;
 
 	UPROPERTY(
