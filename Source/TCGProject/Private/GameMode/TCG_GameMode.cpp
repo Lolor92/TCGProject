@@ -1,9 +1,8 @@
 #include "GameMode/TCG_GameMode.h"
 #include "GameFramework/PlayerController.h"
+#include "GameState/TCG_DebugScenarioRunner.h"
 #include "GameState/TCG_GameState.h"
 #include "PlayerState/TCG_PlayerState.h"
-
-void RunDebugOverdrivePilotKaiaScenario(ATCG_GameState* GameState);
 
 ATCG_GameMode::ATCG_GameMode()
 {
@@ -32,8 +31,8 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		ATCG_GameState* TCGGameState = GetGameState<ATCG_GameState>();
 		if (TCGGameState)
 		{
-			// Dedicated Overdrive Pilot Kaia debug scenario.
-			RunDebugOverdrivePilotKaiaScenario(TCGGameState);
+			// Run the selected debug scenario from TCG_DebugScenarioRunner.cpp.
+			UTCG_DebugScenarioRunner::RunDebugTurnFlow(TCGGameState);
 		}
 	}
 }
