@@ -137,7 +137,8 @@ void UTCG_EffectResolver::ApplyDebugEffectChainEntryRequirements(ATCG_GameState*
 		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromDeckToGraveyard
 		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromHandToGraveyard
 		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromBoardToGraveyard
-		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromMaterialToGraveyard)
+		|| ChainEntry.Trigger == ETCGEffectTrigger::OnSentFromMaterialToGraveyard
+		|| ChainEntry.Trigger == ETCGEffectTrigger::OnMaterialOfDestroyedUnit)
 	{
 		ChainEntry.bRequiresSourceOnBoard = false;
 		ChainEntry.bRequiresTargetOnBoard = false;
@@ -207,6 +208,24 @@ bool UTCG_EffectResolver::AddCardEffectRefToChain(ATCG_GameState* GameState, TAr
 	const bool bConvertedLegacyEffect = ConvertEffectResolverLegacyDebugEffectToSteps(ResolvedEffectRef);
 	if (ResolvedEffectRef.Steps.Num() <= 0) return false;
 	if (!DoesSourceCardMatchSourceFilterForEffect(GameState, *SourceCard, ResolvedEffectRef)) return false;
+
+	if (ResolvedEffectRef.Trigger == ETCGEffectTrigger::OnPlay
+		&& ResolvedEffectRef.TriggerFilter.bRequireTopCard
+		&& SourceCard->Location == ETCGCardLocation::Board)
+	{
+		const FTCGCardInstance* CurrentTopCard = GameState->FindTopCardInStack(SourceCard->StackId);
+		if (!CurrentTopCard || CurrentTopCard->CardInstanceId != SourceCard->CardInstanceId)
+		{
+			if (bLogEffectResolverChainHelpers)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("TCG Effect: Chain skip Source=%s Trigger=OnPlay Reason=OnPlaySourceNotTopCard"),
+					*SourceCard->CardDefinitionId.ToString());
+			}
+
+			return false;
+		}
+	}
 
 	FTCGEffectChainEntry NewEntry;
 	NewEntry.ChainIndex = Chain.Num() + 1;
