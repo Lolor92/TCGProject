@@ -25,7 +25,7 @@ Card.StackIndex = 0;
 return Card.CardInstanceId;
 }
 
-static int32 CountMaterialsUnderUnit(ATCG_GameState* GameState, const FGuid& TopCardId)
+static int32 CountOpponentEffectResponseMaterialsUnderUnit(ATCG_GameState* GameState, const FGuid& TopCardId)
 {
 const FTCGCardInstance* TopCard = GameState->FindCardInstance(TopCardId);
 if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid())
@@ -149,12 +149,12 @@ DestroyChainEntry.bRequiresTargetOnBoard = true;
 TArray<FTCGEffectChainEntry> DestroyChain;
 DestroyChain.Add(DestroyChainEntry);
 
-const int32 MaterialsBefore = CountMaterialsUnderUnit(GameState, DestroyerId);
+const int32 MaterialsBefore = CountOpponentEffectResponseMaterialsUnderUnit(GameState, DestroyerId);
 const bool bResolved = GameState->ResolveEffectChain(DestroyChain);
 
 const FTCGCardInstance* VictimAfter = GameState->FindCardInstance(VictimId);
 const FTCGCardInstance* ResponseAfter = ResponseCard ? GameState->FindCardInstance(ResponseCard->CardInstanceId) : nullptr;
-const int32 MaterialsAfter = CountMaterialsUnderUnit(GameState, DestroyerId);
+const int32 MaterialsAfter = CountOpponentEffectResponseMaterialsUnderUnit(GameState, DestroyerId);
 
 UE_LOG(LogTemp, Warning,
 TEXT("TCG Debug: OpponentEffectDestructionGraveyardResponse summary Resolved=%s VictimGraveyard=%s ResponseBanished=%s MaterialsBefore=%d MaterialsAfter=%d Detached=%d ExpectedDetached=1"),
