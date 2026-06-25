@@ -57,8 +57,8 @@ case ETCGEffectStepType::PlaySourceToEmptyZone: return TEXT("PlaySourceToEmptyZo
 		case ETCGEffectStepType::BoostAllOwnUnitsThisRound: return TEXT("BoostAllOwnUnitsThisRound");
 		case ETCGEffectStepType::RevealTopDeckCardsAddElementToHand: return TEXT("RevealTopDeckCardsAddElementToHand");
 		case ETCGEffectStepType::PlayGraveyardCardToEmptyZone: return TEXT("PlayGraveyardCardToEmptyZone");
-case ETCGEffectStepType::PlayGraveyardCardOnUnit: return TEXT("PlayGraveyardCardOnUnit");
-case ETCGEffectStepType::CannotBeDestroyedByCardEffects: return TEXT("CannotBeDestroyedByCardEffects");
+            case ETCGEffectStepType::PlayGraveyardCardOnUnit: return TEXT("PlayGraveyardCardOnUnit");
+            case ETCGEffectStepType::CannotBeDestroyedByCardEffects: return TEXT("CannotBeDestroyedByCardEffects");
 		case ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck: return TEXT("MoveGraveyardCardsToHandAndTopDeck");
 		case ETCGEffectStepType::RemoveMaterialFromTargetUnit: return TEXT("RemoveMaterialFromTargetUnit");
 		case ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit: return TEXT("AttackMillTwoWaterBounceBattlingUnit");
@@ -1859,15 +1859,6 @@ FName CardToPlayDefinitionId = NAME_None;
 
 for (const FTCGCardInstance& Card : GameState->MatchCards)
 {
-
-UE_LOG(LogTemp, Warning,
-TEXT("TCG Debug: PlayGraveyardCardOnUnit scan Card=%s Owner=%d Location=%d RequiredLocation=%d NameContains=%s"),
-*Card.CardDefinitionId.ToString(),
-Card.OwnerPlayerIndex,
-static_cast<int32>(Card.Location),
-static_cast<int32>(Step.TargetFilter.RequiredLocation),
-*Step.TargetFilter.NameContains);
-
 if (!DoesCardMatchGenericEffectFilter(
 GameState,
 Card,
@@ -2041,11 +2032,6 @@ static bool MoveFirstFilteredDeckCardToHandForEffect(
 
 bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step, bool bPreviousStepSucceeded)
 {
-	UE_LOG(LogTemp, Warning,
-		TEXT("TCG Debug: ResolveEffectStep Type=%s Source=%s"),
-		GetTCGEffectStepDebugName(Step.StepType),
-		*ChainEntry.SourceCardDefinitionId.ToString());
-
 	bool bStepSucceeded = false;
 	switch (Step.StepType)
 	{
