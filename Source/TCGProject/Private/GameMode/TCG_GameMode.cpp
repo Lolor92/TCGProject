@@ -3,7 +3,7 @@
 #include "GameState/TCG_GameState.h"
 #include "PlayerState/TCG_PlayerState.h"
 
-void RunDebugAttackDestroyNoMaterialUnitScenario(ATCG_GameState* GameState);
+void RunDebugOpponentDrawByEffectDiscardRandomScenario(ATCG_GameState* GameState);
 
 ATCG_GameMode::ATCG_GameMode()
 {
@@ -32,8 +32,8 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 		ATCG_GameState* TCGGameState = GetGameState<ATCG_GameState>();
 		if (TCGGameState)
 		{
-			// Dedicated attack no-material destruction debug scenario.
-			RunDebugAttackDestroyNoMaterialUnitScenario(TCGGameState);
+			// Dedicated opponent draw-by-effect random discard debug scenario.
+			RunDebugOpponentDrawByEffectDiscardRandomScenario(TCGGameState);
 		}
 	}
 }

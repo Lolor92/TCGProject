@@ -15,6 +15,11 @@ static bool AttackDetachTwoStealOneMaterial(
 ATCG_GameState* GameState,
 const FTCGEffectChainEntry& ChainEntry);
 
+static int32 ResolveOpponentDrawsByCardEffectResponses(
+ATCG_GameState* GameState,
+int32 DrawingPlayerIndex,
+const FGuid& DrawEffectSourceCardId);
+
 constexpr bool bLogEffectResolution = false;
 	constexpr bool bAutoSubmitDebugDiscardChoice = true;
 	constexpr bool bAutoSubmitDebugGraveyardToDeckChoice = true;
@@ -62,6 +67,7 @@ constexpr bool bLogEffectResolution = false;
 		case ETCGEffectStepType::SwapTwoOpponentUnitsZones: return TEXT("SwapTwoOpponentUnitsZones");
 		case ETCGEffectStepType::SwapUnitZones: return TEXT("SwapUnitZones");
 		case ETCGEffectStepType::CheckMaterialCount: return TEXT("CheckMaterialCount");
+		case ETCGEffectStepType::DiscardRandomCards: return TEXT("DiscardRandomCards");
 		case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect: return TEXT("DiscardSourcePreventMaterialLossByCardEffect");
 		case ETCGEffectStepType::DetachMaterials: return TEXT("DetachMaterials");
 		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
@@ -435,7 +441,8 @@ static bool DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials(ATCG_GameState
 
 	static bool DrawCardsForBothPlayersGeneric(
 		ATCG_GameState* GameState,
-		const FTCGEffectStep& Step)
+		const FTCGEffectStep& Step,
+		const FTCGEffectChainEntry* ChainEntry = nullptr)
 	{
 		if (!GameState)
 		{
@@ -445,6 +452,19 @@ static bool DiscardSourceReturnTargetUnitToHandDrawIfTwoMaterials(ATCG_GameState
 		const int32 DrawCount = FMath::Max(1, Step.Value <= 0 ? 1 : Step.Value);
 		const int32 Player0Drawn = GameState->DrawCards(0, DrawCount);
 		const int32 Player1Drawn = GameState->DrawCards(1, DrawCount);
+
+		if (ChainEntry)
+		{
+			if (Player0Drawn > 0)
+			{
+				ResolveOpponentDrawsByCardEffectResponses(GameState, 0, ChainEntry->SourceCardInstanceId);
+			}
+
+			if (Player1Drawn > 0)
+			{
+				ResolveOpponentDrawsByCardEffectResponses(GameState, 1, ChainEntry->SourceCardInstanceId);
+			}
+		}
 
 		UE_LOG(LogTemp, Warning,
 			TEXT("TCG Effect: DrawCardsForBothPlayers Requested=%d Drawn=%d/%d"),
@@ -1287,6 +1307,96 @@ ChoiceOptions[1]);
 return bAutoSubmittedChoice;
 }
 
+static int32 DiscardRandomCardsFromPlayerHandByEffect(
+ATCG_GameState* GameState,
+int32 PlayerIndex,
+int32 DiscardCount)
+{
+if (!GameState || !GameState->IsValidPlayerIndex(PlayerIndex) || DiscardCount <= 0)
+{
+return 0;
+}
+
+TArray<FTCGCardInstance> HandCards;
+GameState->GetCardsInHand(PlayerIndex, HandCards);
+
+int32 DiscardedCount = 0;
+while (HandCards.Num() > 0 && DiscardedCount < DiscardCount)
+{
+const int32 RandomIndex = FMath::RandRange(0, HandCards.Num() - 1);
+const FGuid CardId = HandCards[RandomIndex].CardInstanceId;
+const FName CardDefinitionId = HandCards[RandomIndex].CardDefinitionId;
+
+if (GameState->MoveCardToLocation(CardId, ETCGCardLocation::Graveyard))
+{
+DiscardedCount++;
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DiscardRandomCards Player=%d Card=%s"),
+PlayerIndex,
+*CardDefinitionId.ToString());
+}
+
+HandCards.RemoveAtSwap(RandomIndex);
+}
+
+return DiscardedCount;
+}
+
+namespace
+{
+static int32 ResolveOpponentDrawsByCardEffectResponses(
+ATCG_GameState* GameState,
+int32 DrawingPlayerIndex,
+const FGuid& DrawEffectSourceCardId)
+{
+if (!GameState || !GameState->IsValidPlayerIndex(DrawingPlayerIndex))
+{
+return 0;
+}
+
+const int32 RespondingPlayerIndex = 1 - DrawingPlayerIndex;
+
+TArray<FTCGCardInstance> HandCards;
+GameState->GetCardsInHand(RespondingPlayerIndex, HandCards);
+
+TArray<FTCGEffectChainEntry> ResponseChain;
+for (const FTCGCardInstance& HandCard : HandCards)
+{
+TArray<FTCGCardEffectRef> EffectRefs;
+GameState->GetPrintedEffectRefsForCard(HandCard, EffectRefs);
+
+for (const FTCGCardEffectRef& EffectRef : EffectRefs)
+{
+if (GameState->DoesCardEffectMatchTrigger(
+EffectRef,
+ETCGEffectTrigger::OnOpponentDrawsByCardEffect))
+{
+GameState->AddCardEffectRefToChain(
+ResponseChain,
+HandCard.CardInstanceId,
+DrawEffectSourceCardId.IsValid() ? DrawEffectSourceCardId : HandCard.CardInstanceId,
+EffectRef);
+}
+}
+}
+
+if (ResponseChain.Num() <= 0)
+{
+return 0;
+}
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Opponent draw by card effect responses DrawingPlayer=%d RespondingPlayer=%d Count=%d"),
+DrawingPlayerIndex,
+RespondingPlayerIndex,
+ResponseChain.Num());
+
+GameState->ResolveEffectChain(ResponseChain);
+return ResponseChain.Num();
+}
+}
+
 bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step, bool bPreviousStepSucceeded)
 {
 	bool bStepSucceeded = false;
@@ -1297,12 +1407,21 @@ bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, c
 		const int32 DrawCount = FMath::Max(0, Step.Value);
 		const int32 DrawnCount = DrawCards(ChainEntry.ControllerPlayerIndex, DrawCount);
 		bStepSucceeded = DrawnCount == DrawCount && DrawCount > 0;
+
+		if (DrawnCount > 0)
+		{
+			ResolveOpponentDrawsByCardEffectResponses(
+				this,
+				ChainEntry.ControllerPlayerIndex,
+				ChainEntry.SourceCardInstanceId);
+		}
+
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DrawCards Player=%d Requested=%d Drawn=%d Success=%s"), ChainEntry.ControllerPlayerIndex, DrawCount, DrawnCount, bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
 case ETCGEffectStepType::DrawCardsForBothPlayers:
 {
-bStepSucceeded = DrawCardsForBothPlayersGeneric(this, Step);
+bStepSucceeded = DrawCardsForBothPlayersGeneric(this, Step, &ChainEntry);
 if (bLogEffectResolution)
 {
 UE_LOG(LogTemp, Warning,
@@ -1334,6 +1453,30 @@ break;
 		const int32 DiscardedCount = DiscardCardsFromHand(ChainEntry.ControllerPlayerIndex, DiscardCount);
 		bStepSucceeded = DiscardedCount == DiscardCount && DiscardCount > 0;
 		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step DiscardCards Player=%d Requested=%d Discarded=%d Mode=%s Success=%s"), ChainEntry.ControllerPlayerIndex, DiscardCount, DiscardedCount, GetTCGEffectSelectionModeDebugName(Step.SelectionMode), bStepSucceeded ? TEXT("true") : TEXT("false"));
+		break;
+	}
+	case ETCGEffectStepType::DiscardRandomCards:
+	{
+		const int32 DiscardCount = FMath::Max(0, Step.Value);
+		const int32 TargetPlayerIndex =
+			Step.TargetMode == ETCGEffectTargetMode::Opponent
+			? 1 - ChainEntry.ControllerPlayerIndex
+			: ChainEntry.ControllerPlayerIndex;
+
+		const int32 DiscardedCount = DiscardRandomCardsFromPlayerHandByEffect(
+			this,
+			TargetPlayerIndex,
+			DiscardCount);
+
+		bStepSucceeded = DiscardedCount == DiscardCount && DiscardCount > 0;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Effect: Step DiscardRandomCards Controller=%d TargetPlayer=%d Requested=%d Discarded=%d Success=%s"),
+			ChainEntry.ControllerPlayerIndex,
+			TargetPlayerIndex,
+			DiscardCount,
+			DiscardedCount,
+			bStepSucceeded ? TEXT("true") : TEXT("false"));
 		break;
 	}
 	case ETCGEffectStepType::ModifyAttack:
@@ -1773,7 +1916,7 @@ case ETCGEffectStepType::BanishSourceReturnTwoGraveyardCardsToBottomDeckBothDraw
 				DrawBothStep.StepType = ETCGEffectStepType::DrawCardsForBothPlayers;
 				DrawBothStep.Value = 1;
 
-				bBothDrew = DrawCardsForBothPlayersGeneric(this, DrawBothStep);
+				bBothDrew = DrawCardsForBothPlayersGeneric(this, DrawBothStep, &ChainEntry);
 			}
 		}
 
