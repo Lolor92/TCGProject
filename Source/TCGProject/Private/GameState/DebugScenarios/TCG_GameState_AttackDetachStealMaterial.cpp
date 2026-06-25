@@ -45,7 +45,7 @@ MaterialCard.StackIndex = MaterialIndex;
 return TopCard.CardInstanceId;
 }
 
-static int32 CountMaterialsUnderUnit(ATCG_GameState* GameState, const FGuid& TopCardInstanceId)
+static int32 CountMaterialsUnderUnit_AttackDetachSteal(ATCG_GameState* GameState, const FGuid& TopCardInstanceId)
 {
 if (!GameState)
 {
@@ -153,8 +153,8 @@ SaveDefinition,
 1,
 ETCGCardLocation::Hand);
 
-const int32 AttackerMaterialsBefore = CountMaterialsUnderUnit(this, AttackerId);
-const int32 DefenderMaterialsBefore = CountMaterialsUnderUnit(this, DefenderId);
+const int32 AttackerMaterialsBefore = CountMaterialsUnderUnit_AttackDetachSteal(this, AttackerId);
+const int32 DefenderMaterialsBefore = CountMaterialsUnderUnit_AttackDetachSteal(this, DefenderId);
 
 TArray<FTCGEffectChainEntry> Chain;
 bool bChainAdded = false;
@@ -176,8 +176,8 @@ break;
 const bool bChainResolved = ResolveEffectChain(Chain);
 
 const FTCGCardInstance* SaveCardAfter = SaveCard ? FindCardInstance(SaveCard->CardInstanceId) : nullptr;
-const int32 AttackerMaterialsAfter = CountMaterialsUnderUnit(this, AttackerId);
-const int32 DefenderMaterialsAfter = CountMaterialsUnderUnit(this, DefenderId);
+const int32 AttackerMaterialsAfter = CountMaterialsUnderUnit_AttackDetachSteal(this, AttackerId);
+const int32 DefenderMaterialsAfter = CountMaterialsUnderUnit_AttackDetachSteal(this, DefenderId);
 
 const bool bSaveDiscarded =
 SaveCardAfter

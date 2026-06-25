@@ -994,6 +994,18 @@ break;
 		bStepSucceeded = bAutoSubmittedChoice;
 		break;
 	}
+	case ETCGEffectStepType::AttackDetachTwoStealOneMaterial:
+	{
+		bStepSucceeded = AttackDetachTwoStealOneMaterial(this, ChainEntry);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Step AttackDetachTwoStealOneMaterial Player=%d Success=%s"),
+				ChainEntry.ControllerPlayerIndex,
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
+		break;
+	}
 	case ETCGEffectStepType::AttackMillTwoWaterBounceBattlingUnit:
 	{
 		bStepSucceeded = ResolveAttackMillTwoWaterBounceBattlingUnit(ChainEntry.SourceCardInstanceId, ChainEntry.TargetCardInstanceId);
