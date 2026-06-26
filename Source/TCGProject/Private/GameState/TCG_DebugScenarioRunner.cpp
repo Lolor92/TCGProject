@@ -16,10 +16,11 @@ namespace
 		SelectedGraveyardPlay,
 		FilteredMaterialDefense,
 		GraveyardPilotMachineAttach,
+		MatchingMaterialDestroy,
 		OverdrivePilotKaia
 	};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::GraveyardMachineProtection;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::MatchingMaterialDestroy;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
@@ -124,6 +125,219 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 
 
 
+
+	if (DebugRunnerScenario == ETCGDebugRunnerScenario::MatchingMaterialDestroy)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Matching material destroy scenario start"));
+
+		GameState->MatchCards.Empty();
+		GameState->SetMatchResult(ETCGMatchResult::None);
+		GameState->SetPhase(ETCGMatchPhase::Battle);
+		GameState->RoundNumber = 1;
+		GameState->TurnNumber = 1;
+		GameState->PlacementStepIndex = 0;
+		GameState->SetCurrentTurnPlayer(INDEX_NONE);
+		GameState->ClearPendingDiscardChoice();
+		GameState->ClearPendingGraveyardToDeckChoice();
+
+		GameState->DebugCardDefinitions.RemoveAll([](const TObjectPtr<UTCG_CardDefinition>& Definition)
+		{
+			return Definition
+				&& (Definition->CardDefinitionId == "Debug_MatchingMaterialDestroy_Attacker"
+					|| Definition->CardDefinitionId == "Debug_MatchingMaterialDestroy_ProtectedOwnUnit");
+		});
+
+		auto MakeDefinition = [GameState](
+			FName CardDefinitionId,
+			const TCHAR* DisplayName,
+			ETCGCardElement Element,
+			int32 BaseAttack)
+		{
+			UTCG_CardDefinition* Definition = NewObject<UTCG_CardDefinition>(GameState);
+			Definition->CardDefinitionId = CardDefinitionId;
+			Definition->DisplayName = FText::FromString(DisplayName);
+			Definition->Element = Element;
+			Definition->BaseAttack = BaseAttack;
+			return Definition;
+		};
+
+		UTCG_CardDefinition* AttackerDefinition = MakeDefinition(
+			"Debug_MatchingMaterialDestroy_Attacker",
+			TEXT("Debug Matching Material Destroy Attacker"),
+			ETCGCardElement::Dark,
+			10);
+
+		FTCGCardEffectRef AttackEffect;
+		AttackEffect.Trigger = ETCGEffectTrigger::OnAttack;
+		AttackEffect.bOptional = true;
+		AttackEffect.TriggerFilter.bRequireTopCard = true;
+
+		FTCGEffectStep DestroyMatchingStep;
+		DestroyMatchingStep.StepType = ETCGEffectStepType::DestroyUnitsWithMatchingMaterialCount;
+		DestroyMatchingStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		DestroyMatchingStep.TargetFilter.RequiredLocation = ETCGCardLocation::Board;
+		DestroyMatchingStep.TargetFilter.bRequireTopCard = true;
+		DestroyMatchingStep.TargetFilter.NameContains = "ProtectedOwnUnit";
+		DestroyMatchingStep.SecondaryTargetFilter.OwnerMode = ETCGEffectTargetMode::Opponent;
+		DestroyMatchingStep.SecondaryTargetFilter.RequiredLocation = ETCGCardLocation::Board;
+		DestroyMatchingStep.SecondaryTargetFilter.bRequireTopCard = true;
+		DestroyMatchingStep.SecondaryTargetFilter.NameContains = "TargetOpponentUnit";
+		AttackEffect.Steps.Add(DestroyMatchingStep);
+
+		AttackerDefinition->Effects.Add(AttackEffect);
+
+		UTCG_CardDefinition* ProtectedOwnDefinition = MakeDefinition(
+			"Debug_MatchingMaterialDestroy_ProtectedOwnUnit",
+			TEXT("Debug Protected Own Unit"),
+			ETCGCardElement::Light,
+			1);
+
+		FTCGCardEffectRef CannotDestroyEffect;
+		CannotDestroyEffect.Trigger = ETCGEffectTrigger::None;
+
+		FTCGEffectStep CannotDestroyStep;
+		CannotDestroyStep.StepType = ETCGEffectStepType::CannotBeDestroyedByCardEffects;
+		CannotDestroyEffect.Steps.Add(CannotDestroyStep);
+
+		ProtectedOwnDefinition->Effects.Add(CannotDestroyEffect);
+
+		GameState->DebugCardDefinitions.Add(AttackerDefinition);
+		GameState->DebugCardDefinitions.Add(ProtectedOwnDefinition);
+
+		FTCGCardInstance* AttackerCard = GameState->AddCardInstanceFromDefinition(
+			AttackerDefinition,
+			0,
+			ETCGCardLocation::Board);
+		const FGuid AttackerId = AttackerCard ? AttackerCard->CardInstanceId : FGuid();
+
+		FTCGCardInstance* ProtectedOwnUnit = GameState->AddCardInstanceFromDefinition(
+			ProtectedOwnDefinition,
+			0,
+			ETCGCardLocation::Board);
+		const FGuid ProtectedOwnUnitId = ProtectedOwnUnit ? ProtectedOwnUnit->CardInstanceId : FGuid();
+
+		if (!AttackerCard || !ProtectedOwnUnit || !AttackerId.IsValid() || !ProtectedOwnUnitId.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Matching material destroy setup failed"));
+			GameState->EndMatch(ETCGMatchResult::Draw);
+			return;
+		}
+
+		AttackerCard->ZoneId = ATCG_GameState::GetFieldZoneId(0, 0);
+		AttackerCard->StackId = FGuid::NewGuid();
+		AttackerCard->StackIndex = 0;
+
+		ProtectedOwnUnit->ZoneId = ATCG_GameState::GetFieldZoneId(0, 1);
+		ProtectedOwnUnit->StackId = FGuid::NewGuid();
+		ProtectedOwnUnit->StackIndex = 2;
+
+		auto AddMaterialUnderUnit = [GameState](const FGuid& TopUnitId, FName MaterialName, int32 OwnerPlayerIndex, int32 StackIndex)
+		{
+			FTCGCardInstance* TopUnit = GameState->FindCardInstance(TopUnitId);
+			if (!TopUnit)
+			{
+				return FGuid();
+			}
+
+			FTCGCardInstance& Material = GameState->AddCardInstance(
+				MaterialName,
+				ETCGCardElement::Earth,
+				1,
+				OwnerPlayerIndex,
+				ETCGCardLocation::Board);
+
+			Material.ZoneId = TopUnit->ZoneId;
+			Material.StackId = TopUnit->StackId;
+			Material.StackIndex = StackIndex;
+			return Material.CardInstanceId;
+		};
+
+		AddMaterialUnderUnit(ProtectedOwnUnitId, "Debug_MatchingMaterialDestroy_OwnMatA", 0, 0);
+		AddMaterialUnderUnit(ProtectedOwnUnitId, "Debug_MatchingMaterialDestroy_OwnMatB", 0, 1);
+
+		const FGuid TargetOpponentUnitId = AddDebugBoardUnit(
+			"Debug_MatchingMaterialDestroy_TargetOpponentUnit",
+			ETCGCardElement::Water,
+			1,
+			1,
+			0);
+
+		FTCGCardInstance* TargetOpponentUnit = GameState->FindCardInstance(TargetOpponentUnitId);
+		if (TargetOpponentUnit)
+		{
+			TargetOpponentUnit->StackIndex = 2;
+		}
+
+		AddMaterialUnderUnit(TargetOpponentUnitId, "Debug_MatchingMaterialDestroy_OppMatA", 1, 0);
+		AddMaterialUnderUnit(TargetOpponentUnitId, "Debug_MatchingMaterialDestroy_OppMatB", 1, 1);
+
+		const FGuid WrongOpponentUnitId = AddDebugBoardUnit(
+			"Debug_MatchingMaterialDestroy_WrongOpponentUnit",
+			ETCGCardElement::Water,
+			1,
+			1,
+			1);
+
+		FTCGCardInstance* WrongOpponentUnit = GameState->FindCardInstance(WrongOpponentUnitId);
+		if (WrongOpponentUnit)
+		{
+			WrongOpponentUnit->StackIndex = 1;
+		}
+
+		AddMaterialUnderUnit(WrongOpponentUnitId, "Debug_MatchingMaterialDestroy_WrongOppMatA", 1, 0);
+
+		const int32 OwnMaterialsBefore = CountMaterialsUnderUnit(ProtectedOwnUnitId);
+		const int32 TargetOpponentMaterialsBefore = CountMaterialsUnderUnit(TargetOpponentUnitId);
+		const int32 WrongOpponentMaterialsBefore = CountMaterialsUnderUnit(WrongOpponentUnitId);
+
+		const bool bResolvedBattle = GameState->ResolveBattlePhase();
+
+		const FTCGCardInstance* AttackerAfter = GameState->FindCardInstance(AttackerId);
+		const FTCGCardInstance* ProtectedOwnAfter = GameState->FindCardInstance(ProtectedOwnUnitId);
+		const FTCGCardInstance* TargetOpponentAfter = GameState->FindCardInstance(TargetOpponentUnitId);
+		const FTCGCardInstance* WrongOpponentAfter = GameState->FindCardInstance(WrongOpponentUnitId);
+
+		const bool bAttackerStayedBoard =
+			AttackerAfter
+			&& AttackerAfter->Location == ETCGCardLocation::Board;
+
+		const bool bProtectedOwnStayedBoard =
+			ProtectedOwnAfter
+			&& ProtectedOwnAfter->Location == ETCGCardLocation::Board;
+
+		const bool bTargetOpponentDestroyed =
+			TargetOpponentAfter
+			&& TargetOpponentAfter->Location == ETCGCardLocation::Graveyard;
+
+		const bool bWrongOpponentStayedBoard =
+			WrongOpponentAfter
+			&& WrongOpponentAfter->Location == ETCGCardLocation::Board;
+
+		const bool bExpectedAll =
+			bResolvedBattle
+			&& OwnMaterialsBefore == 2
+			&& TargetOpponentMaterialsBefore == 2
+			&& WrongOpponentMaterialsBefore == 1
+			&& bAttackerStayedBoard
+			&& bProtectedOwnStayedBoard
+			&& bTargetOpponentDestroyed
+			&& bWrongOpponentStayedBoard;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: MatchingMaterialDestroy summary BattleResolved=%s OwnMaterials=%d TargetOpponentMaterials=%d WrongOpponentMaterials=%d AttackerStayed=%s ProtectedOwnStayed=%s TargetOpponentDestroyed=%s WrongOpponentStayed=%s ExpectedAll=%s"),
+			bResolvedBattle ? TEXT("true") : TEXT("false"),
+			OwnMaterialsBefore,
+			TargetOpponentMaterialsBefore,
+			WrongOpponentMaterialsBefore,
+			bAttackerStayedBoard ? TEXT("true") : TEXT("false"),
+			bProtectedOwnStayedBoard ? TEXT("true") : TEXT("false"),
+			bTargetOpponentDestroyed ? TEXT("true") : TEXT("false"),
+			bWrongOpponentStayedBoard ? TEXT("true") : TEXT("false"),
+			bExpectedAll ? TEXT("true") : TEXT("false"));
+
+		GameState->EndMatch(ETCGMatchResult::Draw);
+		return;
+	}
 
 	if (DebugRunnerScenario == ETCGDebugRunnerScenario::GraveyardPilotMachineAttach)
 	{
