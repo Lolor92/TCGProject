@@ -3,11 +3,13 @@
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "PlayerController/TCG_PlayerController.h"
 #include "UObject/ConstructorHelpers.h"
 
 ATCG_BoardZoneActor::ATCG_BoardZoneActor()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = true;
 	bReplicates = false;
 
 	ClickBounds = CreateDefaultSubobject<UBoxComponent>(TEXT("ClickBounds"));
@@ -31,6 +33,28 @@ ATCG_BoardZoneActor::ATCG_BoardZoneActor()
 	{
 		HighlightMesh->SetStaticMesh(PlaneMeshFinder.Object);
 	}
+}
+
+void ATCG_BoardZoneActor::BeginPlay()
+{
+	Super::BeginPlay();
+
+	OnClicked.AddUniqueDynamic(this, &ATCG_BoardZoneActor::HandleClicked);
+	SetPlacementHighlightActive(false);
+}
+
+void ATCG_BoardZoneActor::Tick(const float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	HighlightRefreshAccumulator += DeltaSeconds;
+	if (HighlightRefreshAccumulator < HighlightRefreshInterval)
+	{
+		return;
+	}
+
+	HighlightRefreshAccumulator = 0.0f;
+	RefreshPlacementHighlight();
 }
 
 void ATCG_BoardZoneActor::OnConstruction(const FTransform& Transform)
@@ -57,10 +81,34 @@ void ATCG_BoardZoneActor::OnConstruction(const FTransform& Transform)
 void ATCG_BoardZoneActor::SetZoneId(const FName NewZoneId)
 {
 	ZoneId = NewZoneId;
+	RefreshPlacementHighlight();
+}
+
+void ATCG_BoardZoneActor::RefreshPlacementHighlight()
+{
+	if (ZoneId.IsNone() || !GetWorld())
+	{
+		SetPlacementHighlightActive(false);
+		return;
+	}
+
+	ATCG_PlayerController* TCGPlayerController = Cast<ATCG_PlayerController>(GetWorld()->GetFirstPlayerController());
+	if (!TCGPlayerController)
+	{
+		SetPlacementHighlightActive(false);
+		return;
+	}
+
+	SetPlacementHighlightActive(TCGPlayerController->CanSelectedHandCardPlayToZone(ZoneId));
 }
 
 void ATCG_BoardZoneActor::SetPlacementHighlightActive(const bool bActive)
 {
+	if (bPlacementHighlightActive == bActive)
+	{
+		return;
+	}
+
 	bPlacementHighlightActive = bActive;
 
 	if (HighlightMesh)
@@ -68,4 +116,20 @@ void ATCG_BoardZoneActor::SetPlacementHighlightActive(const bool bActive)
 		HighlightMesh->SetVisibility(bPlacementHighlightActive, true);
 		HighlightMesh->SetHiddenInGame(!bPlacementHighlightActive, true);
 	}
+}
+
+void ATCG_BoardZoneActor::HandleClicked(AActor* TouchedActor, FKey ButtonPressed)
+{
+	if (ZoneId.IsNone() || !GetWorld())
+	{
+		return;
+	}
+
+	ATCG_PlayerController* TCGPlayerController = Cast<ATCG_PlayerController>(GetWorld()->GetFirstPlayerController());
+	if (!TCGPlayerController)
+	{
+		return;
+	}
+
+	TCGPlayerController->TryPlaySelectedHandCardToZone(ZoneId);
 }
