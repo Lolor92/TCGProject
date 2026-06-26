@@ -157,6 +157,12 @@ void ATCG_PlayerController::SetupInputComponent()
 	}
 }
 
+void ATCG_PlayerController::PlayerTick(const float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+	DrawHandCardDragPreview();
+}
+
 void ATCG_PlayerController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
@@ -326,7 +332,8 @@ void ATCG_PlayerController::HandleHUDHandCardSelected(const int32 HandIndex, UOb
 
 void ATCG_PlayerController::HandleHUDHandCardPressed(const int32 HandIndex, UObject* SourceObject)
 {
-	HandleHUDHandCardSelected(HandIndex, SourceObject);
+	// The hand widget already selects on press before broadcasting this event.
+	// Do not select again here, or the log/detail/highlight path fires multiple times.
 	bIsDraggingHandCard = SelectedHandCardInstanceId.IsValid();
 
 	if (bIsDraggingHandCard)
@@ -420,6 +427,7 @@ void ATCG_PlayerController::EndHandCardDrag()
 	}
 
 	bIsDraggingHandCard = false;
+	FlushPersistentDebugLines(GetWorld());
 
 	if (!SelectedHandCardInstanceId.IsValid())
 	{
@@ -458,6 +466,84 @@ void ATCG_PlayerController::EndHandCardDrag()
 	TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag release play to %s"), *ZoneId.ToString()), FColor::Green);
 	TryPlaySelectedHandCardToZone(ZoneId);
 	bSuppressNextZoneActorClick = true;
+}
+
+bool ATCG_PlayerController::GetCursorBoardPreviewLocation(FVector& OutPreviewLocation, FName& OutHoveredZoneId) const
+{
+	OutPreviewLocation = FVector::ZeroVector;
+	OutHoveredZoneId = NAME_None;
+
+	if (!GetWorld())
+	{
+		return false;
+	}
+
+	FHitResult HitResult;
+	if (GetHitResultUnderCursor(ECC_Visibility, true, HitResult))
+	{
+		OutPreviewLocation = HitResult.ImpactPoint + FVector(0.0f, 0.0f, DragPreviewHeightOffset);
+
+		if (const ATCG_CardZoneActor* ZoneActor = Cast<ATCG_CardZoneActor>(HitResult.GetActor()))
+		{
+			OutHoveredZoneId = ZoneActor->GetGameplayZoneName();
+		}
+		else
+		{
+			TryResolveZoneIdFromActor(HitResult.GetActor(), OutHoveredZoneId);
+		}
+
+		return true;
+	}
+
+	FVector WorldOrigin = FVector::ZeroVector;
+	FVector WorldDirection = FVector::ForwardVector;
+	if (!DeprojectMousePositionToWorld(WorldOrigin, WorldDirection))
+	{
+		return false;
+	}
+
+	if (FMath::IsNearlyZero(WorldDirection.Z))
+	{
+		return false;
+	}
+
+	const float DistanceToBoardPlane = -WorldOrigin.Z / WorldDirection.Z;
+	if (DistanceToBoardPlane < 0.0f)
+	{
+		return false;
+	}
+
+	OutPreviewLocation = WorldOrigin + (WorldDirection * DistanceToBoardPlane) + FVector(0.0f, 0.0f, DragPreviewHeightOffset);
+	return true;
+}
+
+void ATCG_PlayerController::DrawHandCardDragPreview()
+{
+	if (!bDrawDragPreview || !bIsDraggingHandCard || !SelectedHandCardInstanceId.IsValid() || !GetWorld())
+	{
+		return;
+	}
+
+	FVector PreviewLocation = FVector::ZeroVector;
+	FName HoveredZoneId = NAME_None;
+	if (!GetCursorBoardPreviewLocation(PreviewLocation, HoveredZoneId))
+	{
+		return;
+	}
+
+	const bool bCanDropHere = !HoveredZoneId.IsNone() && CanSelectedHandCardPlayToZone(HoveredZoneId);
+	const FColor PreviewColor = bCanDropHere ? FColor::Green : FColor::Cyan;
+
+	DrawDebugBox(
+		GetWorld(),
+		PreviewLocation,
+		DragPreviewExtent,
+		FQuat::Identity,
+		PreviewColor,
+		false,
+		0.0f,
+		0,
+		DragPreviewLineThickness);
 }
 
 void ATCG_PlayerController::HandleBoardZoneClick()

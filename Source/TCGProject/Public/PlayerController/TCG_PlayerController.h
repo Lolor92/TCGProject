@@ -53,6 +53,7 @@ UFUNCTION(Client, Reliable)
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+	virtual void PlayerTick(float DeltaTime) override;
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnRep_PlayerState() override;
 
@@ -93,6 +94,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="1.0", UIMin="1.0"))
 	float PlacementHighlightLineThickness = 8.0f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
+	bool bDrawDragPreview = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
+	FVector DragPreviewExtent = FVector(70.0f, 100.0f, 4.0f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
+	float DragPreviewHeightOffset = 28.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
+	float DragPreviewLineThickness = 4.0f;
+
 	UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
 	FGuid SelectedHandCardInstanceId;
 
@@ -113,6 +126,8 @@ void PushDebugHUDData();
 	void HandleBoardZoneClick();
 	
 	void EndHandCardDrag();
+	void DrawHandCardDragPreview();
+	bool GetCursorBoardPreviewLocation(FVector& OutPreviewLocation, FName& OutHoveredZoneId) const;
 	FString BuildPlacementSummaryLog(const ATCG_GameState& TCGGameState) const;
 FTCGCardWidgetData FindLocalHandCardDataByHandIndex(int32 HandIndex) const;
 	FTCGMatchHUDWidgetData BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const;
