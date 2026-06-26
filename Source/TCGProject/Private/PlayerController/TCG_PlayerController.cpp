@@ -146,10 +146,9 @@ void ATCG_PlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
-	if (InputComponent)
-	{
-		InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ATCG_PlayerController::HandleBoardZoneClick);
-	}
+	// Board zones now handle their own clicks through ATCG_CardZoneActor.
+	// Do not also bind a controller-level cursor trace, or one click can submit twice
+	// and the legacy fuzzy zone resolver can hit the wrong player's matching field.
 }
 
 void ATCG_PlayerController::OnPossess(APawn* InPawn)
@@ -611,7 +610,16 @@ void ATCG_PlayerController::ServerTryPlaySelectedHandCardToZone_Implementation(c
 		return;
 	}
 
-	const int32 PlayerIndex = ResolveLocalPlayerIndex();
+	const FTCGCardInstance* Card = TCGGameState->FindCardInstance(CardInstanceId);
+	if (!Card)
+	{
+		ClientRefreshMatchHUD();
+		return;
+	}
+
+	// Trust the replicated card owner, not any local-player fallback on the server.
+	// This prevents listen-server / split-client context from resolving the wrong player.
+	const int32 PlayerIndex = Card->OwnerPlayerIndex;
 	if (!TCGGameState->PlayerPlayCardToZone(PlayerIndex, CardInstanceId, ZoneId))
 	{
 		ClientRefreshMatchHUD();
