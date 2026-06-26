@@ -259,5 +259,5 @@ void ATCG_CardZoneActor::HandleZoneClicked(AActor* TouchedActor, FKey ButtonPres
 		return;
 	}
 
-	TCGPlayerController->TryPlaySelectedHandCardToZone(GetGameplayZoneName());
+	TCGPlayerController->HandleCardZoneActorClicked(GetGameplayZoneName());
 }

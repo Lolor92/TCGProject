@@ -10,6 +10,7 @@ Super::NativeConstruct();
 if (Root_Button)
 {
 Root_Button->OnClicked.AddUniqueDynamic(this, &UTCGCardWidgetBase::HandleRootButtonClicked);
+Root_Button->OnPressed.AddUniqueDynamic(this, &UTCGCardWidgetBase::HandleRootButtonPressed);
 }
 
 RefreshCardText();
@@ -20,6 +21,7 @@ void UTCGCardWidgetBase::NativeDestruct()
 if (Root_Button)
 {
 Root_Button->OnClicked.RemoveDynamic(this, &UTCGCardWidgetBase::HandleRootButtonClicked);
+Root_Button->OnPressed.RemoveDynamic(this, &UTCGCardWidgetBase::HandleRootButtonPressed);
 }
 
 Super::NativeDestruct();
@@ -48,9 +50,19 @@ void UTCGCardWidgetBase::NotifyCardClicked()
 OnCardClicked.Broadcast(CardData.HandIndex, CardData.SourceObject);
 }
 
+void UTCGCardWidgetBase::NotifyCardPressed()
+{
+OnCardPressed.Broadcast(CardData.HandIndex, CardData.SourceObject);
+}
+
 void UTCGCardWidgetBase::HandleRootButtonClicked()
 {
 NotifyCardClicked();
+}
+
+void UTCGCardWidgetBase::HandleRootButtonPressed()
+{
+NotifyCardPressed();
 }
 
 void UTCGCardWidgetBase::RefreshCardText()

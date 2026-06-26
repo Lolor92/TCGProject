@@ -104,6 +104,7 @@ void UTCGHandWidgetBase::RebuildHandCards()
 		CardWidget->SetCardData(CardData);
 		CardWidget->SetSelected(CardData.HandIndex == HandData.SelectedHandIndex);
 		CardWidget->OnCardClicked.AddUniqueDynamic(this, &UTCGHandWidgetBase::HandleCardWidgetClicked);
+		CardWidget->OnCardPressed.AddUniqueDynamic(this, &UTCGHandWidgetBase::HandleCardWidgetPressed);
 
 		CardContainer->AddChild(CardWidget);
 		SpawnedCardWidgets.Add(CardWidget);
@@ -155,6 +156,12 @@ void UTCGHandWidgetBase::ClearHandSelection()
 void UTCGHandWidgetBase::HandleCardWidgetClicked(const int32 HandIndex, UObject* SourceObject)
 {
 	SelectHandCard(HandIndex);
+}
+
+void UTCGHandWidgetBase::HandleCardWidgetPressed(const int32 HandIndex, UObject* SourceObject)
+{
+	SelectHandCard(HandIndex);
+	OnHandCardPressed.Broadcast(HandIndex, SourceObject);
 }
 
 bool UTCGHandWidgetBase::GetCardDataByHandIndex(const int32 HandIndex, FTCGCardWidgetData& OutCardData) const

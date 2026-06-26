@@ -9,6 +9,7 @@ class UTCGCardDetailWidgetBase;
 class UTCGHandWidgetBase;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FTCGHUDHandCardSelectedSignature, int32, HandIndex, UObject*, SourceObject);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FTCGHUDHandCardPressedSignature, int32, HandIndex, UObject*, SourceObject);
 
 UCLASS(Abstract, Blueprintable)
 class TCGPROJECT_API UTCGMatchHUDWidgetBase : public UUserWidget
@@ -37,6 +38,9 @@ void BindCardDetailWidget(UTCGCardDetailWidgetBase* InCardDetailWidget);
 UPROPERTY(BlueprintAssignable, Category="TCG|UI|Match HUD")
 FTCGHUDHandCardSelectedSignature OnHUDHandCardSelected;
 
+UPROPERTY(BlueprintAssignable, Category="TCG|UI|Match HUD")
+FTCGHUDHandCardPressedSignature OnHUDHandCardPressed;
+
 protected:
 UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="TCG|UI|Match HUD")
 FTCGMatchHUDWidgetData HUDData;
@@ -49,6 +53,9 @@ TObjectPtr<UTCGCardDetailWidgetBase> CardDetailWidget = nullptr;
 
 UFUNCTION()
 void HandleHandCardSelected(int32 HandIndex, UObject* SourceObject);
+
+UFUNCTION()
+void HandleHandCardPressed(int32 HandIndex, UObject* SourceObject);
 
 UFUNCTION(BlueprintImplementableEvent, Category="TCG|UI|Match HUD")
 void BP_OnHUDDataChanged();

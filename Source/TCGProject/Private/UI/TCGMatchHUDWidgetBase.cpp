@@ -58,6 +58,12 @@ OnHUDHandCardSelected.Broadcast(SelectedCardData.HandIndex, SelectedCardData.Sou
 BP_OnSelectionChanged(SelectedCardData.HandIndex, SelectedCardData.SourceObject);
 }
 
+void UTCGMatchHUDWidgetBase::HandleHandCardPressed(const int32 HandIndex, UObject* SourceObject)
+{
+	HandleHandCardSelected(HandIndex, SourceObject);
+	OnHUDHandCardPressed.Broadcast(HandIndex, SourceObject);
+}
+
 void UTCGMatchHUDWidgetBase::ClearSelection()
 {
 HUDData.LocalHand.SelectedHandIndex = INDEX_NONE;
@@ -80,6 +86,7 @@ void UTCGMatchHUDWidgetBase::BindHandWidget(UTCGHandWidgetBase* InHandWidget)
 if (HandWidget)
 {
 HandWidget->OnHandCardSelected.RemoveDynamic(this, &UTCGMatchHUDWidgetBase::HandleHandCardSelected);
+HandWidget->OnHandCardPressed.RemoveDynamic(this, &UTCGMatchHUDWidgetBase::HandleHandCardPressed);
 }
 
 HandWidget = InHandWidget;
@@ -87,6 +94,7 @@ HandWidget = InHandWidget;
 if (HandWidget)
 {
 HandWidget->OnHandCardSelected.AddUniqueDynamic(this, &UTCGMatchHUDWidgetBase::HandleHandCardSelected);
+HandWidget->OnHandCardPressed.AddUniqueDynamic(this, &UTCGMatchHUDWidgetBase::HandleHandCardPressed);
 HandWidget->SetHandData(HUDData.LocalHand);
 }
 }

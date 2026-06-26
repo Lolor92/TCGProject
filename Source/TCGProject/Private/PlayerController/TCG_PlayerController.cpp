@@ -1,5 +1,7 @@
 #include "PlayerController/TCG_PlayerController.h"
 
+#include "Board/TCG_CardZoneActor.h"
+
 #include "Cards/TCG_CardDefinition.h"
 #include "Cards/TCG_CardTypes.h"
 #include "DrawDebugHelpers.h"
@@ -147,9 +149,12 @@ void ATCG_PlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
-	// Board zones now handle their own clicks through ATCG_CardZoneActor.
-	// Do not also bind a controller-level cursor trace, or one click can submit twice
-	// and the legacy fuzzy zone resolver can hit the wrong player's matching field.
+	// Board zones still handle normal clicks through ATCG_CardZoneActor.
+	// Drag placement is finalized here when the player releases the mouse over a zone.
+	if (InputComponent)
+	{
+		InputComponent->BindKey(EKeys::LeftMouseButton, IE_Released, this, &ATCG_PlayerController::EndHandCardDrag);
+	}
 }
 
 void ATCG_PlayerController::OnPossess(APawn* InPawn)
@@ -206,6 +211,7 @@ void ATCG_PlayerController::CreateMatchHUD()
 	if (MatchHUDWidget)
 	{
 		MatchHUDWidget->OnHUDHandCardSelected.AddUniqueDynamic(this, &ATCG_PlayerController::HandleHUDHandCardSelected);
+		MatchHUDWidget->OnHUDHandCardPressed.AddUniqueDynamic(this, &ATCG_PlayerController::HandleHUDHandCardPressed);
 		MatchHUDWidget->AddToViewport();
 	}
 }
@@ -318,6 +324,17 @@ void ATCG_PlayerController::HandleHUDHandCardSelected(const int32 HandIndex, UOb
 	RefreshPlacementHighlights();
 }
 
+void ATCG_PlayerController::HandleHUDHandCardPressed(const int32 HandIndex, UObject* SourceObject)
+{
+	HandleHUDHandCardSelected(HandIndex, SourceObject);
+	bIsDraggingHandCard = SelectedHandCardInstanceId.IsValid();
+
+	if (bIsDraggingHandCard)
+	{
+		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag started from hand index %d"), HandIndex), FColor::Cyan);
+	}
+}
+
 bool ATCG_PlayerController::CanSelectedHandCardPlayToZone(const FName ZoneId) const
 {
 	if (!SelectedHandCardInstanceId.IsValid() || !GetWorld())
@@ -377,6 +394,70 @@ void ATCG_PlayerController::TryPlaySelectedHandCardToZone(const FName ZoneId)
 
 	TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Request play to %s"), *ZoneId.ToString()), FColor::Green);
 	ServerTryPlaySelectedHandCardToZone(SelectedHandCardInstanceId, ZoneId);
+}
+
+void ATCG_PlayerController::HandleCardZoneActorClicked(const FName ZoneId)
+{
+	if (bIsDraggingHandCard)
+	{
+		return;
+	}
+
+	if (bSuppressNextZoneActorClick)
+	{
+		bSuppressNextZoneActorClick = false;
+		return;
+	}
+
+	TryPlaySelectedHandCardToZone(ZoneId);
+}
+
+void ATCG_PlayerController::EndHandCardDrag()
+{
+	if (!bIsDraggingHandCard)
+	{
+		return;
+	}
+
+	bIsDraggingHandCard = false;
+
+	if (!SelectedHandCardInstanceId.IsValid())
+	{
+		return;
+	}
+
+	FHitResult HitResult;
+	if (!GetHitResultUnderCursor(ECC_Visibility, true, HitResult))
+	{
+		TCGScreenDebug(this, TEXT("TCG UI: Drag cancelled, no zone under cursor"), FColor::Red);
+		return;
+	}
+
+	FName ZoneId = NAME_None;
+	if (const ATCG_CardZoneActor* ZoneActor = Cast<ATCG_CardZoneActor>(HitResult.GetActor()))
+	{
+		ZoneId = ZoneActor->GetGameplayZoneName();
+	}
+	else
+	{
+		TryResolveZoneIdFromActor(HitResult.GetActor(), ZoneId);
+	}
+
+	if (ZoneId.IsNone())
+	{
+		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag cancelled, hit %s but no zone matched"), *GetNameSafe(HitResult.GetActor())), FColor::Red);
+		return;
+	}
+
+	if (!CanSelectedHandCardPlayToZone(ZoneId))
+	{
+		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag release invalid zone %s"), *ZoneId.ToString()), FColor::Red);
+		return;
+	}
+
+	TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag release play to %s"), *ZoneId.ToString()), FColor::Green);
+	TryPlaySelectedHandCardToZone(ZoneId);
+	bSuppressNextZoneActorClick = true;
 }
 
 void ATCG_PlayerController::HandleBoardZoneClick()
@@ -627,9 +708,50 @@ void ATCG_PlayerController::ServerTryPlaySelectedHandCardToZone_Implementation(c
 		return;
 	}
 
+	UE_LOG(LogTemp, Warning, TEXT("TCG UI: Placement summary after play: %s"), *BuildPlacementSummaryLog(*TCGGameState));
+
 	SelectedHandCardInstanceId.Invalidate();
 	ClearPlacementHighlights();
 	RefreshAllLocalMatchHUDs();
+}
+
+FString ATCG_PlayerController::BuildPlacementSummaryLog(const ATCG_GameState& TCGGameState) const
+{
+	int32 HandCounts[2] = { 0, 0 };
+	int32 DeckCounts[2] = { 0, 0 };
+	int32 BoardCounts[2] = { 0, 0 };
+
+	for (const FTCGCardInstance& Card : TCGGameState.MatchCards)
+	{
+		if (!TCGGameState.IsValidPlayerIndex(Card.OwnerPlayerIndex))
+		{
+			continue;
+		}
+
+		switch (Card.Location)
+		{
+		case ETCGCardLocation::Hand:
+			HandCounts[Card.OwnerPlayerIndex]++;
+			break;
+		case ETCGCardLocation::Deck:
+			DeckCounts[Card.OwnerPlayerIndex]++;
+			break;
+		case ETCGCardLocation::Board:
+			BoardCounts[Card.OwnerPlayerIndex]++;
+			break;
+		default:
+			break;
+		}
+	}
+
+	return FString::Printf(
+		TEXT("P0 Hand=%d Deck=%d Board=%d | P1 Hand=%d Deck=%d Board=%d"),
+		HandCounts[0],
+		DeckCounts[0],
+		BoardCounts[0],
+		HandCounts[1],
+		DeckCounts[1],
+		BoardCounts[1]);
 }
 
 void ATCG_PlayerController::ClientRefreshMatchHUD_Implementation()

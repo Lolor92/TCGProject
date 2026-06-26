@@ -41,7 +41,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="TCG|UI|Placement")
 	void TryPlaySelectedHandCardToZone(FName ZoneId);
 
-	UFUNCTION(Client, Reliable)
+	
+	UFUNCTION(BlueprintCallable, Category="TCG|UI|Placement")
+	void HandleCardZoneActorClicked(FName ZoneId);
+UFUNCTION(Client, Reliable)
 	void ClientSetAssignedPlayerIndex(int32 NewPlayerIndex);
 
 	UFUNCTION(BlueprintPure, Category="TCG|UI")
@@ -93,7 +96,12 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
 	FGuid SelectedHandCardInstanceId;
 
-	void PushDebugHUDData();
+	
+	UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
+	bool bIsDraggingHandCard = false;
+
+	bool bSuppressNextZoneActorClick = false;
+void PushDebugHUDData();
 	void SeedDebugMatchForHUDIfNeeded();
 	int32 ResolveLocalPlayerIndex() const;
 	void ApplyFixedBoardCamera();
@@ -103,7 +111,10 @@ protected:
 	bool TryResolveZoneIdFromActor(const AActor* Actor, FName& OutZoneId) const;
 	bool DoesActorMatchZoneId(const AActor* Actor, FName ZoneId) const;
 	void HandleBoardZoneClick();
-	FTCGCardWidgetData FindLocalHandCardDataByHandIndex(int32 HandIndex) const;
+	
+	void EndHandCardDrag();
+	FString BuildPlacementSummaryLog(const ATCG_GameState& TCGGameState) const;
+FTCGCardWidgetData FindLocalHandCardDataByHandIndex(int32 HandIndex) const;
 	FTCGMatchHUDWidgetData BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const;
 	FTCGCardWidgetData BuildCardWidgetDataFromCard(const ATCG_GameState& TCGGameState, const FTCGCardInstance& Card, int32 HandIndex) const;
 	FName GetCardElementName(ETCGCardElement Element) const;
@@ -111,7 +122,11 @@ protected:
 	UFUNCTION()
 	void HandleHUDHandCardSelected(int32 HandIndex, UObject* SourceObject);
 
-	UFUNCTION(Server, Reliable)
+	
+
+	UFUNCTION()
+	void HandleHUDHandCardPressed(int32 HandIndex, UObject* SourceObject);
+UFUNCTION(Server, Reliable)
 	void ServerTryPlaySelectedHandCardToZone(FGuid CardInstanceId, FName ZoneId);
 
 	UFUNCTION(Client, Reliable)
