@@ -26,6 +26,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category="TCG|UI")
 	void RefreshMatchHUDFromGameState();
 
+	UFUNCTION(BlueprintPure, Category="TCG|UI|Placement")
+	bool HasSelectedHandCard() const { return SelectedHandCardInstanceId.IsValid(); }
+
+	UFUNCTION(BlueprintPure, Category="TCG|UI|Placement")
+	FGuid GetSelectedHandCardInstanceId() const { return SelectedHandCardInstanceId; }
+
+	UFUNCTION(BlueprintPure, Category="TCG|UI|Placement")
+	bool CanSelectedHandCardPlayToZone(FName ZoneId) const;
+
+	UFUNCTION(BlueprintCallable, Category="TCG|UI|Placement")
+	void TryPlaySelectedHandCardToZone(FName ZoneId);
+
 	UFUNCTION(BlueprintPure, Category="TCG|UI")
 	UTCGMatchHUDWidgetBase* GetMatchHUDWidget() const { return MatchHUDWidget; }
 
@@ -49,10 +61,24 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Debug")
 	bool bSeedDebugMatchWhenEmpty = true;
 
+	UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
+	FGuid SelectedHandCardInstanceId;
+
 	void PushDebugHUDData();
 	void SeedDebugMatchForHUDIfNeeded();
 	int32 ResolveLocalPlayerIndex() const;
+	void RefreshAllLocalMatchHUDs();
+	FTCGCardWidgetData FindLocalHandCardDataByHandIndex(int32 HandIndex) const;
 	FTCGMatchHUDWidgetData BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const;
 	FTCGCardWidgetData BuildCardWidgetDataFromCard(const ATCG_GameState& TCGGameState, const FTCGCardInstance& Card, int32 HandIndex) const;
 	FName GetCardElementName(ETCGCardElement Element) const;
+
+	UFUNCTION()
+	void HandleHUDHandCardSelected(int32 HandIndex, UObject* SourceObject);
+
+	UFUNCTION(Server, Reliable)
+	void ServerTryPlaySelectedHandCardToZone(FGuid CardInstanceId, FName ZoneId);
+
+	UFUNCTION(Client, Reliable)
+	void ClientRefreshMatchHUD();
 };
