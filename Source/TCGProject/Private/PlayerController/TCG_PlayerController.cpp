@@ -3,6 +3,7 @@
 #include "Cards/TCG_CardDefinition.h"
 #include "Cards/TCG_CardTypes.h"
 #include "GameState/TCG_GameState.h"
+#include "GameState/TCG_DebugScenarioRunner.h"
 #include "TimerManager.h"
 #include "UI/TCGMatchHUDWidgetBase.h"
 
@@ -18,6 +19,7 @@ void ATCG_PlayerController::BeginPlay()
 	}
 	else
 	{
+		SeedDebugMatchForHUDIfNeeded();
 		RefreshMatchHUDFromGameState();
 		StartMatchHUDRefreshTimer();
 	}
@@ -54,6 +56,29 @@ void ATCG_PlayerController::SetMatchHUDData(const FTCGMatchHUDWidgetData& InHUDD
 	{
 		MatchHUDWidget->SetHUDData(InHUDData);
 	}
+}
+
+void ATCG_PlayerController::SeedDebugMatchForHUDIfNeeded()
+{
+	if (!bSeedDebugMatchWhenEmpty || !HasAuthority() || !GetWorld())
+	{
+		return;
+	}
+
+	ATCG_GameState* TCGGameState = GetWorld()->GetGameState<ATCG_GameState>();
+	if (!TCGGameState || TCGGameState->MatchCards.Num() > 0)
+	{
+		return;
+	}
+
+	UTCG_DebugScenarioRunner::SetupDebugMatch(TCGGameState);
+	TCGGameState->StartMatch();
+	TCGGameState->DrawCards(0, TCGGameState->InitialHandSize);
+	TCGGameState->DrawCards(1, TCGGameState->InitialHandSize);
+	TCGGameState->SetPhase(ETCGMatchPhase::Placement);
+	TCGGameState->SetCurrentTurnPlayer(0);
+
+	UE_LOG(LogTemp, Warning, TEXT("TCG UI: Seeded real debug match data for HUD preview"));
 }
 
 void ATCG_PlayerController::RefreshMatchHUDFromGameState()
