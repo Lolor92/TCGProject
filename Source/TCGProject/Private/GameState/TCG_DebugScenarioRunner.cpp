@@ -19,10 +19,12 @@ namespace
 		MatchingMaterialDestroy,
 		MatchingMaterialDestroyNoTargets,
 		CardEffectMaterialGraveyardPlay,
+		CardEffectMaterialGraveyardPlayBattleNoTrigger,
+
 		OverdrivePilotKaia
 	};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlay;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlayBattleNoTrigger;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
@@ -128,7 +130,248 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 
 
 
-	if (DebugRunnerScenario == ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlay)
+	
+    if (DebugRunnerScenario == ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlayBattleNoTrigger)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Card effect material graveyard play battle no trigger scenario start"));
+
+        GameState->MatchCards.Empty();
+        GameState->SetMatchResult(ETCGMatchResult::None);
+        GameState->SetPhase(ETCGMatchPhase::Battle);
+        GameState->RoundNumber = 1;
+        GameState->TurnNumber = 1;
+        GameState->PlacementStepIndex = 0;
+        GameState->SetCurrentTurnPlayer(INDEX_NONE);
+        GameState->ClearPendingDiscardChoice();
+        GameState->ClearPendingGraveyardToDeckChoice();
+
+        GameState->DebugCardDefinitions.RemoveAll([](const TObjectPtr<UTCG_CardDefinition>& Definition)
+        {
+            return Definition
+                && (Definition->CardDefinitionId == "Debug_BattleNoTrigger_Attacker"
+                    || Definition->CardDefinitionId == "Debug_BattleNoTrigger_TargetTop"
+                    || Definition->CardDefinitionId == "Debug_BattleNoTrigger_SourceMachine"
+                    || Definition->CardDefinitionId == "Debug_BattleNoTrigger_Machine"
+                    || Definition->CardDefinitionId == "Debug_BattleNoTrigger_Pilot");
+        });
+
+        auto MakeDefinition = [GameState](
+            FName CardDefinitionId,
+            const TCHAR* DisplayName,
+            ETCGCardElement Element,
+            int32 BaseAttack)
+        {
+            UTCG_CardDefinition* Definition = NewObject<UTCG_CardDefinition>(GameState);
+            Definition->CardDefinitionId = CardDefinitionId;
+            Definition->DisplayName = FText::FromString(DisplayName);
+            Definition->Element = Element;
+            Definition->BaseAttack = BaseAttack;
+            return Definition;
+        };
+
+        UTCG_CardDefinition* AttackerDefinition = MakeDefinition(
+            "Debug_BattleNoTrigger_Attacker",
+            TEXT("Debug Battle No Trigger Attacker"),
+            ETCGCardElement::Dark,
+            10);
+
+        UTCG_CardDefinition* TargetTopDefinition = MakeDefinition(
+            "Debug_BattleNoTrigger_TargetTop",
+            TEXT("Debug Battle No Trigger Target Top"),
+            ETCGCardElement::Light,
+            1);
+
+        UTCG_CardDefinition* SourceMaterialDefinition = MakeDefinition(
+            "Debug_BattleNoTrigger_SourceMachine",
+            TEXT("Debug Battle No Trigger Source Machine"),
+            ETCGCardElement::Light,
+            1);
+
+        FTCGCardEffectRef RecoveryEffect;
+        RecoveryEffect.Trigger = ETCGEffectTrigger::OnMaterialOfUnitDestroyedByCardEffect;
+        RecoveryEffect.bOptional = true;
+        RecoveryEffect.TriggerFilter.bRequireMaterialCount = true;
+        RecoveryEffect.TriggerFilter.RequiredMaterialCount = 2;
+
+        FTCGEffectStep PlayPairStep;
+        PlayPairStep.StepType = ETCGEffectStepType::PlayTwoGraveyardCardsToEmptyZones;
+        PlayPairStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+        PlayPairStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+        PlayPairStep.TargetFilter.bRequireTopCard = false;
+        PlayPairStep.TargetFilter.NameContains = "Machine";
+        PlayPairStep.SecondaryTargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+        PlayPairStep.SecondaryTargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+        PlayPairStep.SecondaryTargetFilter.bRequireTopCard = false;
+        PlayPairStep.SecondaryTargetFilter.NameContains = "Pilot";
+        RecoveryEffect.Steps.Add(PlayPairStep);
+
+        SourceMaterialDefinition->Effects.Add(RecoveryEffect);
+
+        UTCG_CardDefinition* MachineDefinition = MakeDefinition(
+            "Debug_BattleNoTrigger_Machine",
+            TEXT("Debug Battle No Trigger Graveyard Machine"),
+            ETCGCardElement::Earth,
+            3);
+
+        UTCG_CardDefinition* PilotDefinition = MakeDefinition(
+            "Debug_BattleNoTrigger_Pilot",
+            TEXT("Debug Battle No Trigger Graveyard Pilot"),
+            ETCGCardElement::Wind,
+            2);
+
+        GameState->DebugCardDefinitions.Add(AttackerDefinition);
+        GameState->DebugCardDefinitions.Add(TargetTopDefinition);
+        GameState->DebugCardDefinitions.Add(SourceMaterialDefinition);
+        GameState->DebugCardDefinitions.Add(MachineDefinition);
+        GameState->DebugCardDefinitions.Add(PilotDefinition);
+
+        auto AddCardFromDefinitionAndReturnId = [GameState](
+            const UTCG_CardDefinition* Definition,
+            int32 OwnerPlayerIndex,
+            ETCGCardLocation StartingLocation)
+        {
+            FTCGCardInstance* Card = GameState->AddCardInstanceFromDefinition(
+                Definition,
+                OwnerPlayerIndex,
+                StartingLocation);
+
+            return Card ? Card->CardInstanceId : FGuid();
+        };
+
+        const FGuid AttackerId = AddCardFromDefinitionAndReturnId(
+            AttackerDefinition,
+            0,
+            ETCGCardLocation::Board);
+
+        const FGuid TargetTopId = AddCardFromDefinitionAndReturnId(
+            TargetTopDefinition,
+            1,
+            ETCGCardLocation::Board);
+
+        const FGuid SourceMaterialId = AddCardFromDefinitionAndReturnId(
+            SourceMaterialDefinition,
+            1,
+            ETCGCardLocation::Board);
+
+        const FGuid MachineId = AddCardFromDefinitionAndReturnId(
+            MachineDefinition,
+            1,
+            ETCGCardLocation::Graveyard);
+
+        const FGuid PilotId = AddCardFromDefinitionAndReturnId(
+            PilotDefinition,
+            1,
+            ETCGCardLocation::Graveyard);
+
+        FTCGCardInstance* Attacker = GameState->FindCardInstance(AttackerId);
+        FTCGCardInstance* TargetTop = GameState->FindCardInstance(TargetTopId);
+        FTCGCardInstance* SourceMaterial = GameState->FindCardInstance(SourceMaterialId);
+
+        if (!Attacker || !TargetTop || !SourceMaterial || !MachineId.IsValid() || !PilotId.IsValid())
+        {
+            UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Card effect material graveyard play battle no trigger setup failed"));
+            GameState->EndMatch(ETCGMatchResult::Draw);
+            return;
+        }
+
+        const FName AttackerZoneId = ATCG_GameState::GetFieldZoneId(0, 0);
+        const FName TargetZoneId = ATCG_GameState::GetFieldZoneId(1, 0);
+        const FGuid TargetStackId = FGuid::NewGuid();
+
+        Attacker->ZoneId = AttackerZoneId;
+        Attacker->StackId = FGuid::NewGuid();
+        Attacker->StackIndex = 0;
+
+        TargetTop->ZoneId = TargetZoneId;
+        TargetTop->StackId = TargetStackId;
+        TargetTop->StackIndex = 3;
+
+        auto AddMaterialUnderTarget = [GameState, TargetStackId, TargetZoneId](FName CardDefinitionId, int32 StackIndex)
+        {
+            FTCGCardInstance& Material = GameState->AddCardInstance(
+                CardDefinitionId,
+                ETCGCardElement::Earth,
+                1,
+                1,
+                ETCGCardLocation::Board);
+
+            Material.ZoneId = TargetZoneId;
+            Material.StackId = TargetStackId;
+            Material.StackIndex = StackIndex;
+            return Material.CardInstanceId;
+        };
+
+        const FGuid UnderMatAId = AddMaterialUnderTarget("Debug_BattleNoTrigger_UnderA", 0);
+        const FGuid UnderMatBId = AddMaterialUnderTarget("Debug_BattleNoTrigger_UnderB", 1);
+
+        SourceMaterial = GameState->FindCardInstance(SourceMaterialId);
+        if (!SourceMaterial)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Card effect material graveyard play battle no trigger setup failed SourceMissingAfterMaterials"));
+            GameState->EndMatch(ETCGMatchResult::Draw);
+            return;
+        }
+
+        SourceMaterial->ZoneId = TargetZoneId;
+        SourceMaterial->StackId = TargetStackId;
+        SourceMaterial->StackIndex = 2;
+
+        const bool bBattleResolved = GameState->ResolveBattleBetweenZones(
+            AttackerZoneId,
+            TargetZoneId);
+
+        const FTCGCardInstance* TargetTopAfter = GameState->FindCardInstance(TargetTopId);
+        const FTCGCardInstance* SourceMaterialAfter = GameState->FindCardInstance(SourceMaterialId);
+        const FTCGCardInstance* MachineAfter = GameState->FindCardInstance(MachineId);
+        const FTCGCardInstance* PilotAfter = GameState->FindCardInstance(PilotId);
+        const FTCGCardInstance* UnderMatAAfter = GameState->FindCardInstance(UnderMatAId);
+        const FTCGCardInstance* UnderMatBAfter = GameState->FindCardInstance(UnderMatBId);
+
+        const bool bTargetDestroyed =
+            TargetTopAfter
+            && TargetTopAfter->Location == ETCGCardLocation::Graveyard;
+
+        const bool bSourceMaterialInGraveyard =
+            SourceMaterialAfter
+            && SourceMaterialAfter->Location == ETCGCardLocation::Graveyard;
+
+        const bool bUnderMaterialsInGraveyard =
+            UnderMatAAfter
+            && UnderMatBAfter
+            && UnderMatAAfter->Location == ETCGCardLocation::Graveyard
+            && UnderMatBAfter->Location == ETCGCardLocation::Graveyard;
+
+        const bool bMachineStayedGraveyard =
+            MachineAfter
+            && MachineAfter->Location == ETCGCardLocation::Graveyard;
+
+        const bool bPilotStayedGraveyard =
+            PilotAfter
+            && PilotAfter->Location == ETCGCardLocation::Graveyard;
+
+        const bool bExpectedAll =
+            bBattleResolved
+            && bTargetDestroyed
+            && bSourceMaterialInGraveyard
+            && bUnderMaterialsInGraveyard
+            && bMachineStayedGraveyard
+            && bPilotStayedGraveyard;
+
+        UE_LOG(LogTemp, Warning,
+            TEXT("TCG Debug: CardEffectMaterialGraveyardPlayBattleNoTrigger summary BattleResolved=%s TargetDestroyed=%s SourceMaterialInGraveyard=%s UnderMaterialsInGraveyard=%s MachineStayedGraveyard=%s PilotStayedGraveyard=%s ExpectedAll=%s"),
+            bBattleResolved ? TEXT("true") : TEXT("false"),
+            bTargetDestroyed ? TEXT("true") : TEXT("false"),
+            bSourceMaterialInGraveyard ? TEXT("true") : TEXT("false"),
+            bUnderMaterialsInGraveyard ? TEXT("true") : TEXT("false"),
+            bMachineStayedGraveyard ? TEXT("true") : TEXT("false"),
+            bPilotStayedGraveyard ? TEXT("true") : TEXT("false"),
+            bExpectedAll ? TEXT("true") : TEXT("false"));
+
+        GameState->EndMatch(ETCGMatchResult::Draw);
+        return;
+    }
+
+    if (DebugRunnerScenario == ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlay)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Card effect material graveyard play scenario start"));
 
