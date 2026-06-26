@@ -33,12 +33,33 @@ void ATCG_PlayerController::BeginPlay()
 void ATCG_PlayerController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
+	CreateMatchHUD();
 	ApplyFixedBoardCamera();
+
+	if (!bUseDebugHUDData)
+	{
+		RefreshMatchHUDFromGameState();
+	}
 }
 
 void ATCG_PlayerController::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
+	CreateMatchHUD();
+	ApplyFixedBoardCamera();
+
+	if (!bUseDebugHUDData)
+	{
+		RefreshMatchHUDFromGameState();
+	}
+}
+
+void ATCG_PlayerController::ClientSetAssignedPlayerIndex_Implementation(const int32 NewPlayerIndex)
+{
+	AssignedLocalPlayerIndex = NewPlayerIndex;
+	LocalPlayerIndex = NewPlayerIndex;
+
+	CreateMatchHUD();
 	ApplyFixedBoardCamera();
 
 	if (!bUseDebugHUDData)
@@ -49,7 +70,7 @@ void ATCG_PlayerController::OnRep_PlayerState()
 
 void ATCG_PlayerController::CreateMatchHUD()
 {
-	if (!IsLocalController())
+	if (!IsLocalPlayerController())
 	{
 		return;
 	}
@@ -100,6 +121,11 @@ void ATCG_PlayerController::SeedDebugMatchForHUDIfNeeded()
 
 int32 ATCG_PlayerController::ResolveLocalPlayerIndex() const
 {
+	if (AssignedLocalPlayerIndex != INDEX_NONE)
+	{
+		return AssignedLocalPlayerIndex;
+	}
+
 	const ATCG_PlayerState* TCGPlayerState = GetPlayerState<ATCG_PlayerState>();
 	if (TCGPlayerState && TCGPlayerState->PlayerIndex != INDEX_NONE)
 	{
@@ -111,7 +137,7 @@ int32 ATCG_PlayerController::ResolveLocalPlayerIndex() const
 
 void ATCG_PlayerController::ApplyFixedBoardCamera()
 {
-	if (!IsLocalController())
+	if (!IsLocalPlayerController())
 	{
 		return;
 	}
@@ -258,7 +284,7 @@ void ATCG_PlayerController::RefreshAllLocalMatchHUDs()
 
 void ATCG_PlayerController::RefreshMatchHUDFromGameState()
 {
-	if (!IsLocalController() || !MatchHUDWidget)
+	if (!IsLocalPlayerController() || !MatchHUDWidget)
 	{
 		return;
 	}
@@ -388,7 +414,7 @@ FName ATCG_PlayerController::GetCardElementName(ETCGCardElement Element) const
 
 void ATCG_PlayerController::PushDebugHUDData()
 {
-	if (!IsLocalController() || !MatchHUDWidget)
+	if (!IsLocalPlayerController() || !MatchHUDWidget)
 	{
 		return;
 	}
