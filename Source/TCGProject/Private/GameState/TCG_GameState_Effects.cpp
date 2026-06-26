@@ -1,6 +1,10 @@
 #include "GameState/TCG_GameState.h"
 #include "GameState/TCG_EffectResolver.h"
 
+static bool DoesCardNameMatchFilterForEffect(
+const FTCGCardInstance& Card,
+const FTCGEffectTargetFilter& Filter);
+
 namespace
 {
 	static bool DiscardSourcePreventMaterialLossByCardEffect(
@@ -19,6 +23,7 @@ static int32 ResolveOpponentDrawsByCardEffectResponses(
 ATCG_GameState* GameState,
 int32 DrawingPlayerIndex,
 const FGuid& DrawEffectSourceCardId);
+
 
 constexpr bool bLogEffectResolution = false;
 	constexpr bool bAutoSubmitDebugDiscardChoice = true;
@@ -76,6 +81,7 @@ case ETCGEffectStepType::MoveDeckCardToHand: return TEXT("MoveDeckCardToHand");
 		case ETCGEffectStepType::PlayHandCardOnUnit: return TEXT("PlayHandCardOnUnit");
 		case ETCGEffectStepType::DiscardSourcePreventMaterialLossByCardEffect: return TEXT("DiscardSourcePreventMaterialLossByCardEffect");
 		case ETCGEffectStepType::DetachMaterials: return TEXT("DetachMaterials");
+		case ETCGEffectStepType::DetachFilteredMaterials: return TEXT("DetachFilteredMaterials");
 		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
 		case ETCGEffectStepType::DiscardSource: return TEXT("DiscardSource");
 		case ETCGEffectStepType::DestroyUnit: return TEXT("DestroyUnit");
@@ -982,6 +988,152 @@ bStepSuccess ? TEXT("true") : TEXT("false"));
 return bStepSuccess;
 }
 
+static FTCGCardInstance* FindFirstFilteredMaterialUnderUnitForEffect(
+ATCG_GameState* GameState,
+const FGuid& TopCardInstanceId,
+const FTCGEffectTargetFilter& MaterialFilter,
+int32 ControllerPlayerIndex,
+const FGuid& SourceCardInstanceId,
+const TSet<FGuid>& ExcludedCardIds)
+{
+if (!GameState)
+{
+return nullptr;
+}
+
+const FTCGCardInstance* TopCard = GameState->FindCardInstance(TopCardInstanceId);
+if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid())
+{
+return nullptr;
+}
+
+FTCGCardInstance* BestMaterial = nullptr;
+for (FTCGCardInstance& Card : GameState->MatchCards)
+{
+if (ExcludedCardIds.Contains(Card.CardInstanceId)) continue;
+if (Card.Location != ETCGCardLocation::Board) continue;
+if (Card.StackId != TopCard->StackId) continue;
+if (Card.CardInstanceId == TopCard->CardInstanceId) continue;
+if (Card.StackIndex >= TopCard->StackIndex) continue;
+
+if (MaterialFilter.bRequireElement && Card.Element != MaterialFilter.RequiredElement) continue;
+if (MaterialFilter.bExcludeSourceCard && Card.CardInstanceId == SourceCardInstanceId) continue;
+if (!DoesCardNameMatchFilterForEffect(Card, MaterialFilter)) continue;
+
+if (!BestMaterial || Card.StackIndex < BestMaterial->StackIndex)
+{
+BestMaterial = &Card;
+}
+}
+
+return BestMaterial;
+}
+
+static bool DetachFilteredMaterialsGeneric(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry,
+const FTCGEffectStep& Step)
+{
+if (!GameState)
+{
+return false;
+}
+
+const FGuid TargetCardInstanceId = ResolveUnitTargetForMaterialStep(ChainEntry, Step);
+const FTCGCardInstance* TargetCard = GameState->FindCardInstance(TargetCardInstanceId);
+if (!TargetCard || TargetCard->Location != ETCGCardLocation::Board || !TargetCard->StackId.IsValid())
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DetachFilteredMaterials failed TargetMode=%s Reason=TargetInvalid"),
+GetTCGEffectTargetModeDebugName(Step.TargetMode));
+
+return false;
+}
+
+const FName TargetDefinitionId = TargetCard->CardDefinitionId;
+
+TSet<FGuid> ChosenMaterialIds;
+
+FTCGCardInstance* FirstMaterial = FindFirstFilteredMaterialUnderUnitForEffect(
+GameState,
+TargetCardInstanceId,
+Step.TargetFilter,
+ChainEntry.ControllerPlayerIndex,
+ChainEntry.SourceCardInstanceId,
+ChosenMaterialIds);
+
+if (!FirstMaterial)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DetachFilteredMaterials failed Target=%s Reason=FirstMaterialMissing Name=%s"),
+*TargetDefinitionId.ToString(),
+*Step.TargetFilter.NameContains);
+
+return false;
+}
+
+ChosenMaterialIds.Add(FirstMaterial->CardInstanceId);
+
+const bool bNeedsSecondMaterial =
+Step.Value >= 2
+|| !Step.SecondaryTargetFilter.NameContains.IsEmpty()
+|| Step.SecondaryTargetFilter.NameContainsAny.Num() > 0
+|| Step.SecondaryTargetFilter.bRequireElement;
+
+FTCGCardInstance* SecondMaterial = nullptr;
+if (bNeedsSecondMaterial)
+{
+SecondMaterial = FindFirstFilteredMaterialUnderUnitForEffect(
+GameState,
+TargetCardInstanceId,
+Step.SecondaryTargetFilter,
+ChainEntry.ControllerPlayerIndex,
+ChainEntry.SourceCardInstanceId,
+ChosenMaterialIds);
+
+if (!SecondMaterial)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DetachFilteredMaterials failed Target=%s Reason=SecondMaterialMissing Name=%s"),
+*TargetDefinitionId.ToString(),
+*Step.SecondaryTargetFilter.NameContains);
+
+return false;
+}
+
+ChosenMaterialIds.Add(SecondMaterial->CardInstanceId);
+}
+
+if (TryHandMaterialLossReplacementForCardEffect(GameState, TargetCardInstanceId))
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DetachFilteredMaterials prevented Target=%s"),
+*TargetDefinitionId.ToString());
+
+return false;
+}
+
+int32 DetachedCount = 0;
+for (const FGuid& MaterialId : ChosenMaterialIds)
+{
+if (GameState->MoveCardToLocation(MaterialId, ETCGCardLocation::Graveyard))
+{
+DetachedCount++;
+}
+}
+
+const bool bSuccess = DetachedCount == ChosenMaterialIds.Num();
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DetachFilteredMaterials Target=%s Requested=%d Detached=%d Success=%s"),
+*TargetDefinitionId.ToString(),
+ChosenMaterialIds.Num(),
+DetachedCount,
+bSuccess ? TEXT("true") : TEXT("false"));
+
+return bSuccess;
+}
+
 static bool StealMaterialsGeneric(
 ATCG_GameState* GameState,
 const FTCGEffectChainEntry& ChainEntry,
@@ -1552,12 +1704,29 @@ static bool DoesCardNameMatchFilterForEffect(
 const FTCGCardInstance& Card,
 const FTCGEffectTargetFilter& Filter)
 {
-if (Filter.NameContains.IsEmpty())
+const FString CardDefinitionIdString = Card.CardDefinitionId.ToString();
+
+if (!Filter.NameContains.IsEmpty()
+&& !CardDefinitionIdString.Contains(Filter.NameContains, ESearchCase::IgnoreCase))
+{
+return false;
+}
+
+if (Filter.NameContainsAny.Num() <= 0)
 {
 return true;
 }
 
-return Card.CardDefinitionId.ToString().Contains(Filter.NameContains, ESearchCase::IgnoreCase);
+for (const FString& NameOption : Filter.NameContainsAny)
+{
+if (!NameOption.IsEmpty()
+&& CardDefinitionIdString.Contains(NameOption, ESearchCase::IgnoreCase))
+{
+return true;
+}
+}
+
+return false;
 }
 
 static bool DoesCardMatchGenericEffectFilter(
@@ -2344,6 +2513,20 @@ break;
 		{
 			UE_LOG(LogTemp, Warning,
 				TEXT("TCG Effect: Step DetachMaterials Player=%d TargetMode=%s Value=%d Success=%s"),
+				ChainEntry.ControllerPlayerIndex,
+				GetTCGEffectTargetModeDebugName(Step.TargetMode),
+				Step.Value,
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
+		break;
+	}
+	case ETCGEffectStepType::DetachFilteredMaterials:
+	{
+		bStepSucceeded = DetachFilteredMaterialsGeneric(this, ChainEntry, Step);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Step DetachFilteredMaterials Player=%d TargetMode=%s Value=%d Success=%s"),
 				ChainEntry.ControllerPlayerIndex,
 				GetTCGEffectTargetModeDebugName(Step.TargetMode),
 				Step.Value,

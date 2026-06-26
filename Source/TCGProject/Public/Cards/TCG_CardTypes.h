@@ -93,6 +93,7 @@ enum class ETCGEffectStepType : uint8
 
 	// Generic material steps. Prefer these over rigid one-card effect steps.
 	DetachMaterials UMETA(DisplayName = "54 - Generic: Detach Materials"),
+	DetachFilteredMaterials UMETA(DisplayName = "54B - Generic: Detach Filtered Materials"),
 	StealMaterials UMETA(DisplayName = "55 - Generic: Steal Materials"),
 	DiscardSource UMETA(DisplayName = "56 - Generic: Discard Source"),
 	DestroyUnit UMETA(DisplayName = "57 - Generic: Destroy Unit"),
@@ -177,6 +178,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
 	FString NameContains;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
+	TArray<FString> NameContainsAny;
 };
 
 USTRUCT(BlueprintType)
@@ -188,18 +192,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "1. Step")
 	ETCGEffectStepType StepType = ETCGEffectStepType::None;
 
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "2. Target",
-		meta = (EditCondition = "StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::MoveBottomOverlayToGraveyard || StepType == ETCGEffectStepType::RemoveMaterialFromTargetUnit || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial || StepType == ETCGEffectStepType::AttachSourceToUnitMaterial || StepType == ETCGEffectStepType::DestroyTargetUnitByCardEffect || StepType == ETCGEffectStepType::DetachMaterials || StepType == ETCGEffectStepType::StealMaterials || StepType == ETCGEffectStepType::DestroyUnit || StepType == ETCGEffectStepType::ReturnUnitToHand || StepType == ETCGEffectStepType::ReturnUnitToBottomDeck || StepType == ETCGEffectStepType::CheckMaterialCount || StepType == ETCGEffectStepType::DiscardRandomCards || StepType == ETCGEffectStepType::PlayCardToEmptyZone || StepType == ETCGEffectStepType::PlayHandCardOnUnit", EditConditionHides))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "2. Target")
 	ETCGEffectTargetMode TargetMode = ETCGEffectTargetMode::None;
 
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "3. Value",
-		meta = (EditCondition = "StepType == ETCGEffectStepType::DrawCards || StepType == ETCGEffectStepType::DiscardCards || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::SendTopDeckCardsToGraveyard || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToBottomDeck || StepType == ETCGEffectStepType::MoveHandCardToTopDeck || StepType == ETCGEffectStepType::BoostAllOwnUnitsThisRound || StepType == ETCGEffectStepType::DetachMaterials || StepType == ETCGEffectStepType::StealMaterials || StepType == ETCGEffectStepType::ReturnUnitToHand || StepType == ETCGEffectStepType::DrawCardsForBothPlayers || StepType == ETCGEffectStepType::CheckMaterialCount || StepType == ETCGEffectStepType::DiscardRandomCards", EditConditionHides))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "3. Value")
 	int32 Value = 0;
 
 	UPROPERTY(
@@ -226,18 +222,10 @@ public:
 		meta = (EditCondition = "StepType == ETCGEffectStepType::DetachMaterials", EditConditionHides))
 	bool bAllowPartialSuccess = false;
 
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "6. Filter",
-		meta = (EditCondition = "StepType == ETCGEffectStepType::SelectTarget || StepType == ETCGEffectStepType::ModifyAttack || StepType == ETCGEffectStepType::RevealTopDeckCardsAddElementToHand || StepType == ETCGEffectStepType::MoveDeckCardToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToHand || StepType == ETCGEffectStepType::MoveGraveyardCardToTopDeck || StepType == ETCGEffectStepType::MoveGraveyardCardsToHandAndTopDeck || StepType == ETCGEffectStepType::PlayGraveyardCardToEmptyZone || StepType == ETCGEffectStepType::AttachGraveyardCardToSourceMaterial || StepType == ETCGEffectStepType::AttachSourceToUnitMaterial || StepType == ETCGEffectStepType::PlayCardToEmptyZone || StepType == ETCGEffectStepType::PlayHandCardToEmptyZone || StepType == ETCGEffectStepType::PlayHandCardOnUnit", EditConditionHides))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "6. Filter")
 	FTCGEffectTargetFilter TargetFilter;
 
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "7. Secondary Filter",
-		meta = (EditCondition = "StepType == ETCGEffectStepType::PlayHandCardOnUnit", EditConditionHides))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "7. Secondary Filter")
 	FTCGEffectTargetFilter SecondaryTargetFilter;
 };
 
