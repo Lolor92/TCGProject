@@ -234,32 +234,49 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		GameState->DebugCardDefinitions.Add(MachineDefinition);
 		GameState->DebugCardDefinitions.Add(PilotDefinition);
 
-		FTCGCardInstance* Destroyer = GameState->AddCardInstanceFromDefinition(
+		auto AddCardFromDefinitionAndReturnId = [GameState](
+			const UTCG_CardDefinition* Definition,
+			int32 OwnerPlayerIndex,
+			ETCGCardLocation StartingLocation)
+		{
+			FTCGCardInstance* Card = GameState->AddCardInstanceFromDefinition(
+				Definition,
+				OwnerPlayerIndex,
+				StartingLocation);
+
+			return Card ? Card->CardInstanceId : FGuid();
+		};
+
+		const FGuid DestroyerId = AddCardFromDefinitionAndReturnId(
 			DestroyerDefinition,
 			0,
 			ETCGCardLocation::Board);
 
-		FTCGCardInstance* TargetTop = GameState->AddCardInstanceFromDefinition(
+		const FGuid TargetTopId = AddCardFromDefinitionAndReturnId(
 			TargetTopDefinition,
 			0,
 			ETCGCardLocation::Board);
 
-		FTCGCardInstance* RecoveryMaterial = GameState->AddCardInstanceFromDefinition(
+		const FGuid RecoveryMaterialId = AddCardFromDefinitionAndReturnId(
 			RecoveryMaterialDefinition,
 			0,
 			ETCGCardLocation::Board);
 
-		FTCGCardInstance* MachineCard = GameState->AddCardInstanceFromDefinition(
+		const FGuid MachineId = AddCardFromDefinitionAndReturnId(
 			MachineDefinition,
 			0,
 			ETCGCardLocation::Graveyard);
 
-		FTCGCardInstance* PilotCard = GameState->AddCardInstanceFromDefinition(
+		const FGuid PilotId = AddCardFromDefinitionAndReturnId(
 			PilotDefinition,
 			0,
 			ETCGCardLocation::Graveyard);
 
-		if (!Destroyer || !TargetTop || !RecoveryMaterial || !MachineCard || !PilotCard)
+		FTCGCardInstance* Destroyer = GameState->FindCardInstance(DestroyerId);
+		FTCGCardInstance* TargetTop = GameState->FindCardInstance(TargetTopId);
+		FTCGCardInstance* RecoveryMaterial = GameState->FindCardInstance(RecoveryMaterialId);
+
+		if (!Destroyer || !TargetTop || !RecoveryMaterial || !MachineId.IsValid() || !PilotId.IsValid())
 		{
 			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Card effect material graveyard play setup failed"));
 			GameState->EndMatch(ETCGMatchResult::Draw);
@@ -271,11 +288,13 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		Destroyer->StackIndex = 0;
 
 		const FGuid DestroyedStackId = FGuid::NewGuid();
-		TargetTop->ZoneId = ATCG_GameState::GetFieldZoneId(0, 1);
+		const FName DestroyedZoneId = ATCG_GameState::GetFieldZoneId(0, 1);
+
+		TargetTop->ZoneId = DestroyedZoneId;
 		TargetTop->StackId = DestroyedStackId;
 		TargetTop->StackIndex = 3;
 
-		auto AddMaterialUnderTarget = [GameState, DestroyedStackId, TargetTop](FName CardDefinitionId, int32 StackIndex)
+		auto AddMaterialUnderTarget = [GameState, DestroyedStackId, DestroyedZoneId](FName CardDefinitionId, int32 StackIndex)
 		{
 			FTCGCardInstance& Material = GameState->AddCardInstance(
 				CardDefinitionId,
@@ -284,7 +303,7 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 				0,
 				ETCGCardLocation::Board);
 
-			Material.ZoneId = TargetTop->ZoneId;
+			Material.ZoneId = DestroyedZoneId;
 			Material.StackId = DestroyedStackId;
 			Material.StackIndex = StackIndex;
 			return Material.CardInstanceId;
@@ -293,19 +312,26 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		const FGuid UnderMatAId = AddMaterialUnderTarget("Debug_CardEffectMaterial_UnderA", 0);
 		const FGuid UnderMatBId = AddMaterialUnderTarget("Debug_CardEffectMaterial_UnderB", 1);
 
-		RecoveryMaterial->ZoneId = TargetTop->ZoneId;
+		RecoveryMaterial = GameState->FindCardInstance(RecoveryMaterialId);
+		if (!RecoveryMaterial)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Card effect material graveyard play setup failed RecoveryMissingAfterMaterials"));
+			GameState->EndMatch(ETCGMatchResult::Draw);
+			return;
+		}
+
+		RecoveryMaterial->ZoneId = DestroyedZoneId;
 		RecoveryMaterial->StackId = DestroyedStackId;
 		RecoveryMaterial->StackIndex = 2;
 
-		const FGuid DestroyerId = Destroyer->CardInstanceId;
-		const FGuid TargetTopId = TargetTop->CardInstanceId;
-		const FGuid RecoveryMaterialId = RecoveryMaterial->CardInstanceId;
-		const FGuid MachineId = MachineCard->CardInstanceId;
-		const FGuid PilotId = PilotCard->CardInstanceId;
+		Destroyer = GameState->FindCardInstance(DestroyerId);
 
 		TArray<FTCGEffectChainEntry> DestroyChain;
 		TArray<FTCGCardEffectRef> DestroyEffectRefs;
-		GameState->GetPrintedEffectRefsForCard(*Destroyer, DestroyEffectRefs);
+		if (Destroyer)
+		{
+			GameState->GetPrintedEffectRefsForCard(*Destroyer, DestroyEffectRefs);
+		}
 
 		for (const FTCGCardEffectRef& EffectRef : DestroyEffectRefs)
 		{
