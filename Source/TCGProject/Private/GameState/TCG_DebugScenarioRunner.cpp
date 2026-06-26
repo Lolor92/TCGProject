@@ -21,10 +21,12 @@ namespace
 		CardEffectMaterialGraveyardPlay,
 		CardEffectMaterialGraveyardPlayBattleNoTrigger,
 
+		CardEffectMaterialGraveyardPlayWrongMaterialCount,
+
 		OverdrivePilotKaia
 	};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlayBattleNoTrigger;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlayWrongMaterialCount;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
@@ -131,6 +133,274 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 
 
 	
+    
+    if (DebugRunnerScenario == ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlayWrongMaterialCount)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Card effect material graveyard play wrong material count scenario start"));
+
+        GameState->MatchCards.Empty();
+        GameState->SetMatchResult(ETCGMatchResult::None);
+        GameState->SetPhase(ETCGMatchPhase::Battle);
+        GameState->RoundNumber = 1;
+        GameState->TurnNumber = 1;
+        GameState->PlacementStepIndex = 0;
+        GameState->SetCurrentTurnPlayer(INDEX_NONE);
+        GameState->ClearPendingDiscardChoice();
+        GameState->ClearPendingGraveyardToDeckChoice();
+
+        GameState->DebugCardDefinitions.RemoveAll([](const TObjectPtr<UTCG_CardDefinition>& Definition)
+        {
+            return Definition
+                && (Definition->CardDefinitionId == "Debug_WrongMaterialCount_Destroyer"
+                    || Definition->CardDefinitionId == "Debug_WrongMaterialCount_TargetTop"
+                    || Definition->CardDefinitionId == "Debug_WrongMaterialCount_SourceMachine"
+                    || Definition->CardDefinitionId == "Debug_WrongMaterialCount_Machine"
+                    || Definition->CardDefinitionId == "Debug_WrongMaterialCount_Pilot");
+        });
+
+        auto MakeDefinition = [GameState](
+            FName CardDefinitionId,
+            const TCHAR* DisplayName,
+            ETCGCardElement Element,
+            int32 BaseAttack)
+        {
+            UTCG_CardDefinition* Definition = NewObject<UTCG_CardDefinition>(GameState);
+            Definition->CardDefinitionId = CardDefinitionId;
+            Definition->DisplayName = FText::FromString(DisplayName);
+            Definition->Element = Element;
+            Definition->BaseAttack = BaseAttack;
+            return Definition;
+        };
+
+        UTCG_CardDefinition* DestroyerDefinition = MakeDefinition(
+            "Debug_WrongMaterialCount_Destroyer",
+            TEXT("Debug Wrong Material Count Destroyer"),
+            ETCGCardElement::Dark,
+            9);
+
+        FTCGCardEffectRef DestroyEffect;
+        DestroyEffect.Trigger = ETCGEffectTrigger::OnAttack;
+        DestroyEffect.bOptional = false;
+
+        FTCGEffectStep DestroyStep;
+        DestroyStep.StepType = ETCGEffectStepType::DestroyUnit;
+        DestroyStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+        DestroyEffect.Steps.Add(DestroyStep);
+
+        DestroyerDefinition->Effects.Add(DestroyEffect);
+
+        UTCG_CardDefinition* SourceMaterialDefinition = MakeDefinition(
+            "Debug_WrongMaterialCount_SourceMachine",
+            TEXT("Debug Wrong Count Source Machine"),
+            ETCGCardElement::Light,
+            1);
+
+        FTCGCardEffectRef RecoveryEffect;
+        RecoveryEffect.Trigger = ETCGEffectTrigger::OnMaterialOfUnitDestroyedByCardEffect;
+        RecoveryEffect.bOptional = true;
+        RecoveryEffect.TriggerFilter.bRequireMaterialCount = true;
+        RecoveryEffect.TriggerFilter.RequiredMaterialCount = 2;
+
+        FTCGEffectStep PlayPairStep;
+        PlayPairStep.StepType = ETCGEffectStepType::PlayTwoGraveyardCardsToEmptyZones;
+        PlayPairStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+        PlayPairStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+        PlayPairStep.TargetFilter.bRequireTopCard = false;
+        PlayPairStep.TargetFilter.NameContains = "Machine";
+        PlayPairStep.SecondaryTargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+        PlayPairStep.SecondaryTargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+        PlayPairStep.SecondaryTargetFilter.bRequireTopCard = false;
+        PlayPairStep.SecondaryTargetFilter.NameContains = "Pilot";
+        RecoveryEffect.Steps.Add(PlayPairStep);
+
+        SourceMaterialDefinition->Effects.Add(RecoveryEffect);
+
+        UTCG_CardDefinition* TargetTopDefinition = MakeDefinition(
+            "Debug_WrongMaterialCount_TargetTop",
+            TEXT("Debug Wrong Material Count Target Top"),
+            ETCGCardElement::Light,
+            1);
+
+        UTCG_CardDefinition* MachineDefinition = MakeDefinition(
+            "Debug_WrongMaterialCount_Machine",
+            TEXT("Debug Wrong Count Graveyard Machine"),
+            ETCGCardElement::Earth,
+            3);
+
+        UTCG_CardDefinition* PilotDefinition = MakeDefinition(
+            "Debug_WrongMaterialCount_Pilot",
+            TEXT("Debug Wrong Count Graveyard Pilot"),
+            ETCGCardElement::Wind,
+            2);
+
+        GameState->DebugCardDefinitions.Add(DestroyerDefinition);
+        GameState->DebugCardDefinitions.Add(SourceMaterialDefinition);
+        GameState->DebugCardDefinitions.Add(TargetTopDefinition);
+        GameState->DebugCardDefinitions.Add(MachineDefinition);
+        GameState->DebugCardDefinitions.Add(PilotDefinition);
+
+        auto AddCardFromDefinitionAndReturnId = [GameState](
+            const UTCG_CardDefinition* Definition,
+            int32 OwnerPlayerIndex,
+            ETCGCardLocation StartingLocation)
+        {
+            FTCGCardInstance* Card = GameState->AddCardInstanceFromDefinition(
+                Definition,
+                OwnerPlayerIndex,
+                StartingLocation);
+
+            return Card ? Card->CardInstanceId : FGuid();
+        };
+
+        const FGuid DestroyerId = AddCardFromDefinitionAndReturnId(
+            DestroyerDefinition,
+            0,
+            ETCGCardLocation::Board);
+
+        const FGuid TargetTopId = AddCardFromDefinitionAndReturnId(
+            TargetTopDefinition,
+            0,
+            ETCGCardLocation::Board);
+
+        const FGuid SourceMaterialId = AddCardFromDefinitionAndReturnId(
+            SourceMaterialDefinition,
+            0,
+            ETCGCardLocation::Board);
+
+        const FGuid MachineId = AddCardFromDefinitionAndReturnId(
+            MachineDefinition,
+            0,
+            ETCGCardLocation::Graveyard);
+
+        const FGuid PilotId = AddCardFromDefinitionAndReturnId(
+            PilotDefinition,
+            0,
+            ETCGCardLocation::Graveyard);
+
+        FTCGCardInstance* Destroyer = GameState->FindCardInstance(DestroyerId);
+        FTCGCardInstance* TargetTop = GameState->FindCardInstance(TargetTopId);
+        FTCGCardInstance* SourceMaterial = GameState->FindCardInstance(SourceMaterialId);
+
+        if (!Destroyer || !TargetTop || !SourceMaterial || !MachineId.IsValid() || !PilotId.IsValid())
+        {
+            UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Card effect material graveyard play wrong material count setup failed"));
+            GameState->EndMatch(ETCGMatchResult::Draw);
+            return;
+        }
+
+        Destroyer->ZoneId = ATCG_GameState::GetFieldZoneId(0, 0);
+        Destroyer->StackId = FGuid::NewGuid();
+        Destroyer->StackIndex = 0;
+
+        const FGuid DestroyedStackId = FGuid::NewGuid();
+        const FName DestroyedZoneId = ATCG_GameState::GetFieldZoneId(0, 1);
+
+        TargetTop->ZoneId = DestroyedZoneId;
+        TargetTop->StackId = DestroyedStackId;
+        TargetTop->StackIndex = 3;
+
+        auto AddMaterialUnderTarget = [GameState, DestroyedStackId, DestroyedZoneId](FName CardDefinitionId, int32 StackIndex)
+        {
+            FTCGCardInstance& Material = GameState->AddCardInstance(
+                CardDefinitionId,
+                ETCGCardElement::Earth,
+                1,
+                0,
+                ETCGCardLocation::Board);
+
+            Material.ZoneId = DestroyedZoneId;
+            Material.StackId = DestroyedStackId;
+            Material.StackIndex = StackIndex;
+            return Material.CardInstanceId;
+        };
+
+        const FGuid UnderMatAId = AddMaterialUnderTarget("Debug_WrongMaterialCount_UnderA", 0);
+        const FGuid OverMatBId = AddMaterialUnderTarget("Debug_WrongMaterialCount_OverB", 2);
+
+        SourceMaterial = GameState->FindCardInstance(SourceMaterialId);
+        if (!SourceMaterial)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Card effect material graveyard play wrong material count setup failed SourceMissingAfterMaterials"));
+            GameState->EndMatch(ETCGMatchResult::Draw);
+            return;
+        }
+
+        SourceMaterial->ZoneId = DestroyedZoneId;
+        SourceMaterial->StackId = DestroyedStackId;
+        SourceMaterial->StackIndex = 1;
+
+        Destroyer = GameState->FindCardInstance(DestroyerId);
+
+        TArray<FTCGEffectChainEntry> DestroyChain;
+        TArray<FTCGCardEffectRef> DestroyEffectRefs;
+        if (Destroyer)
+        {
+            GameState->GetPrintedEffectRefsForCard(*Destroyer, DestroyEffectRefs);
+        }
+
+        for (const FTCGCardEffectRef& EffectRef : DestroyEffectRefs)
+        {
+            if (GameState->DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnAttack))
+            {
+                GameState->AddCardEffectRefToChain(DestroyChain, DestroyerId, TargetTopId, EffectRef);
+            }
+        }
+
+        const bool bResolvedDestroyChain = GameState->ResolveEffectChain(DestroyChain);
+
+        const FTCGCardInstance* TargetTopAfter = GameState->FindCardInstance(TargetTopId);
+        const FTCGCardInstance* SourceMaterialAfter = GameState->FindCardInstance(SourceMaterialId);
+        const FTCGCardInstance* MachineAfter = GameState->FindCardInstance(MachineId);
+        const FTCGCardInstance* PilotAfter = GameState->FindCardInstance(PilotId);
+        const FTCGCardInstance* UnderMatAAfter = GameState->FindCardInstance(UnderMatAId);
+        const FTCGCardInstance* OverMatBAfter = GameState->FindCardInstance(OverMatBId);
+
+        const bool bTargetDestroyed =
+            TargetTopAfter
+            && TargetTopAfter->Location == ETCGCardLocation::Graveyard;
+
+        const bool bSourceMaterialInGraveyard =
+            SourceMaterialAfter
+            && SourceMaterialAfter->Location == ETCGCardLocation::Graveyard;
+
+        const bool bOtherMaterialsInGraveyard =
+            UnderMatAAfter
+            && OverMatBAfter
+            && UnderMatAAfter->Location == ETCGCardLocation::Graveyard
+            && OverMatBAfter->Location == ETCGCardLocation::Graveyard;
+
+        const bool bMachineStayedGraveyard =
+            MachineAfter
+            && MachineAfter->Location == ETCGCardLocation::Graveyard;
+
+        const bool bPilotStayedGraveyard =
+            PilotAfter
+            && PilotAfter->Location == ETCGCardLocation::Graveyard;
+
+        const bool bExpectedAll =
+            DestroyChain.Num() == 1
+            && bResolvedDestroyChain
+            && bTargetDestroyed
+            && bSourceMaterialInGraveyard
+            && bOtherMaterialsInGraveyard
+            && bMachineStayedGraveyard
+            && bPilotStayedGraveyard;
+
+        UE_LOG(LogTemp, Warning,
+            TEXT("TCG Debug: CardEffectMaterialGraveyardPlayWrongMaterialCount summary ChainCount=%d DestroyResolved=%s TargetDestroyed=%s SourceMaterialInGraveyard=%s OtherMaterialsInGraveyard=%s MachineStayedGraveyard=%s PilotStayedGraveyard=%s ExpectedAll=%s"),
+            DestroyChain.Num(),
+            bResolvedDestroyChain ? TEXT("true") : TEXT("false"),
+            bTargetDestroyed ? TEXT("true") : TEXT("false"),
+            bSourceMaterialInGraveyard ? TEXT("true") : TEXT("false"),
+            bOtherMaterialsInGraveyard ? TEXT("true") : TEXT("false"),
+            bMachineStayedGraveyard ? TEXT("true") : TEXT("false"),
+            bPilotStayedGraveyard ? TEXT("true") : TEXT("false"),
+            bExpectedAll ? TEXT("true") : TEXT("false"));
+
+        GameState->EndMatch(ETCGMatchResult::Draw);
+        return;
+    }
+
     if (DebugRunnerScenario == ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlayBattleNoTrigger)
     {
         UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Card effect material graveyard play battle no trigger scenario start"));
