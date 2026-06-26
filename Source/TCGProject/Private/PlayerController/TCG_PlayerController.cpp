@@ -4,6 +4,7 @@
 #include "Cards/TCG_CardTypes.h"
 #include "GameState/TCG_DebugScenarioRunner.h"
 #include "GameState/TCG_GameState.h"
+#include "Pawn/TCG_BoardCameraPawn.h"
 #include "PlayerState/TCG_PlayerState.h"
 #include "UI/TCGMatchHUDWidgetBase.h"
 
@@ -11,7 +12,12 @@ void ATCG_PlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
+	bShowMouseCursor = true;
+	bEnableClickEvents = true;
+	bEnableMouseOverEvents = true;
+
 	CreateMatchHUD();
+	ApplyFixedBoardCamera();
 
 	if (bUseDebugHUDData)
 	{
@@ -24,9 +30,16 @@ void ATCG_PlayerController::BeginPlay()
 	}
 }
 
+void ATCG_PlayerController::OnPossess(APawn* InPawn)
+{
+	Super::OnPossess(InPawn);
+	ApplyFixedBoardCamera();
+}
+
 void ATCG_PlayerController::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
+	ApplyFixedBoardCamera();
 
 	if (!bUseDebugHUDData)
 	{
@@ -96,6 +109,26 @@ int32 ATCG_PlayerController::ResolveLocalPlayerIndex() const
 	return LocalPlayerIndex;
 }
 
+void ATCG_PlayerController::ApplyFixedBoardCamera()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	ATCG_BoardCameraPawn* BoardCameraPawn = Cast<ATCG_BoardCameraPawn>(GetPawn());
+	if (!BoardCameraPawn)
+	{
+		return;
+	}
+
+	const bool bIsPlayerOne = ResolveLocalPlayerIndex() == 1;
+	BoardCameraPawn->SetBoardCameraTransform(
+		bIsPlayerOne ? Player1CameraLocation : Player0CameraLocation,
+		bIsPlayerOne ? Player1CameraRotation : Player0CameraRotation);
+	SetViewTarget(BoardCameraPawn);
+}
+
 FTCGCardWidgetData ATCG_PlayerController::FindLocalHandCardDataByHandIndex(const int32 HandIndex) const
 {
 	if (!MatchHUDWidget)
@@ -135,6 +168,33 @@ bool ATCG_PlayerController::CanSelectedHandCardPlayToZone(const FName ZoneId) co
 	}
 
 	return TCGGameState->CanPlayerPlayCardToZone(ResolveLocalPlayerIndex(), SelectedHandCardInstanceId, ZoneId);
+}
+
+TArray<FName> ATCG_PlayerController::GetValidPlacementZoneIdsForSelectedHandCard() const
+{
+	TArray<FName> ValidZoneIds;
+	if (!SelectedHandCardInstanceId.IsValid() || !GetWorld())
+	{
+		return ValidZoneIds;
+	}
+
+	const ATCG_GameState* TCGGameState = GetWorld()->GetGameState<ATCG_GameState>();
+	if (!TCGGameState)
+	{
+		return ValidZoneIds;
+	}
+
+	const int32 PlayerIndex = ResolveLocalPlayerIndex();
+	for (int32 FieldIndex = 0; FieldIndex < ATCG_GameState::FieldZoneCount; ++FieldIndex)
+	{
+		const FName ZoneId = ATCG_GameState::GetFieldZoneId(PlayerIndex, FieldIndex);
+		if (TCGGameState->CanPlayerPlayCardToZone(PlayerIndex, SelectedHandCardInstanceId, ZoneId))
+		{
+			ValidZoneIds.Add(ZoneId);
+		}
+	}
+
+	return ValidZoneIds;
 }
 
 void ATCG_PlayerController::TryPlaySelectedHandCardToZone(const FName ZoneId)
