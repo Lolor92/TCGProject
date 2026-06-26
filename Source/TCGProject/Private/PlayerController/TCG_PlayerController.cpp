@@ -2,8 +2,13 @@
 
 #include "Cards/TCG_CardDefinition.h"
 #include "Cards/TCG_CardTypes.h"
+#include "DrawDebugHelpers.h"
+#include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "GameState/TCG_DebugScenarioRunner.h"
 #include "GameState/TCG_GameState.h"
+#include "InputCoreTypes.h"
+#include "Kismet/GameplayStatics.h"
 #include "Pawn/TCG_BoardCameraPawn.h"
 #include "PlayerState/TCG_PlayerState.h"
 #include "UI/TCGMatchHUDWidgetBase.h"
@@ -27,6 +32,16 @@ void ATCG_PlayerController::BeginPlay()
 	{
 		SeedDebugMatchForHUDIfNeeded();
 		RefreshMatchHUDFromGameState();
+	}
+}
+
+void ATCG_PlayerController::SetupInputComponent()
+{
+	Super::SetupInputComponent();
+
+	if (InputComponent)
+	{
+		InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ATCG_PlayerController::HandleBoardZoneClick);
 	}
 }
 
@@ -178,6 +193,7 @@ void ATCG_PlayerController::HandleHUDHandCardSelected(const int32 HandIndex, UOb
 {
 	const FTCGCardWidgetData SelectedCardData = FindLocalHandCardDataByHandIndex(HandIndex);
 	SelectedHandCardInstanceId = SelectedCardData.CardInstanceId;
+	RefreshPlacementHighlights();
 }
 
 bool ATCG_PlayerController::CanSelectedHandCardPlayToZone(const FName ZoneId) const
@@ -238,6 +254,143 @@ void ATCG_PlayerController::TryPlaySelectedHandCardToZone(const FName ZoneId)
 	ServerTryPlaySelectedHandCardToZone(SelectedHandCardInstanceId, ZoneId);
 }
 
+void ATCG_PlayerController::HandleBoardZoneClick()
+{
+	if (!SelectedHandCardInstanceId.IsValid() || !IsLocalPlayerController())
+	{
+		return;
+	}
+
+	FHitResult HitResult;
+	if (!GetHitResultUnderCursor(ECC_Visibility, true, HitResult))
+	{
+		return;
+	}
+
+	AActor* HitActor = HitResult.GetActor();
+	FName ZoneId = NAME_None;
+	if (!TryResolveZoneIdFromActor(HitActor, ZoneId))
+	{
+		return;
+	}
+
+	TryPlaySelectedHandCardToZone(ZoneId);
+}
+
+bool ATCG_PlayerController::TryResolveZoneIdFromActor(const AActor* Actor, FName& OutZoneId) const
+{
+	if (!Actor)
+	{
+		return false;
+	}
+
+	for (int32 PlayerIndex = 0; PlayerIndex < 2; ++PlayerIndex)
+	{
+		for (int32 FieldIndex = 0; FieldIndex < ATCG_GameState::FieldZoneCount; ++FieldIndex)
+		{
+			const FName ZoneId = ATCG_GameState::GetFieldZoneId(PlayerIndex, FieldIndex);
+			if (DoesActorMatchZoneId(Actor, ZoneId))
+			{
+				OutZoneId = ZoneId;
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+bool ATCG_PlayerController::DoesActorMatchZoneId(const AActor* Actor, const FName ZoneId) const
+{
+	if (!Actor || ZoneId.IsNone())
+	{
+		return false;
+	}
+
+	if (Actor->ActorHasTag(ZoneId))
+	{
+		return true;
+	}
+
+	const FString ZoneIdString = ZoneId.ToString();
+	if (Actor->GetName().Contains(ZoneIdString))
+	{
+		return true;
+	}
+
+	TArray<UActorComponent*> Components;
+	Actor->GetComponents(Components);
+	for (const UActorComponent* Component : Components)
+	{
+		if (!Component)
+		{
+			continue;
+		}
+
+		if (Component->ComponentHasTag(ZoneId) || Component->GetName().Contains(ZoneIdString))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void ATCG_PlayerController::RefreshPlacementHighlights()
+{
+	ClearPlacementHighlights();
+
+	if (!bDrawPlacementDebugHighlights || !GetWorld() || !SelectedHandCardInstanceId.IsValid())
+	{
+		return;
+	}
+
+	const TArray<FName> ValidZoneIds = GetValidPlacementZoneIdsForSelectedHandCard();
+	if (ValidZoneIds.Num() == 0)
+	{
+		return;
+	}
+
+	TArray<AActor*> AllActors;
+	UGameplayStatics::GetAllActorsOfClass(this, AActor::StaticClass(), AllActors);
+
+	for (const FName ZoneId : ValidZoneIds)
+	{
+		for (AActor* Actor : AllActors)
+		{
+			if (!DoesActorMatchZoneId(Actor, ZoneId))
+			{
+				continue;
+			}
+
+			FVector Origin = Actor->GetActorLocation();
+			FVector Extent(80.0f, 80.0f, 10.0f);
+			Actor->GetActorBounds(true, Origin, Extent);
+			Extent.X = FMath::Max(Extent.X, 60.0f);
+			Extent.Y = FMath::Max(Extent.Y, 60.0f);
+			Extent.Z = FMath::Max(Extent.Z, 8.0f);
+
+			DrawDebugBox(
+				GetWorld(),
+				Origin,
+				Extent,
+				FColor::Yellow,
+				true,
+				-1.0f,
+				0,
+				PlacementHighlightLineThickness);
+		}
+	}
+}
+
+void ATCG_PlayerController::ClearPlacementHighlights()
+{
+	if (GetWorld())
+	{
+		FlushPersistentDebugLines(GetWorld());
+	}
+}
+
 void ATCG_PlayerController::ServerTryPlaySelectedHandCardToZone_Implementation(const FGuid CardInstanceId, const FName ZoneId)
 {
 	ATCG_GameState* TCGGameState = GetWorld() ? GetWorld()->GetGameState<ATCG_GameState>() : nullptr;
@@ -254,12 +407,14 @@ void ATCG_PlayerController::ServerTryPlaySelectedHandCardToZone_Implementation(c
 	}
 
 	SelectedHandCardInstanceId.Invalidate();
+	ClearPlacementHighlights();
 	RefreshAllLocalMatchHUDs();
 }
 
 void ATCG_PlayerController::ClientRefreshMatchHUD_Implementation()
 {
 	SelectedHandCardInstanceId.Invalidate();
+	ClearPlacementHighlights();
 	RefreshMatchHUDFromGameState();
 }
 
