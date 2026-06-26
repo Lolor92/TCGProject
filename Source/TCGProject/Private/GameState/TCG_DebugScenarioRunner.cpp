@@ -13,10 +13,11 @@ namespace
 		HandDetachResponse,
 		MachineMaterialRecovery,
 		GraveyardMachineProtection,
+		SelectedGraveyardPlay,
 		OverdrivePilotKaia
 	};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::GraveyardMachineProtection;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::SelectedGraveyardPlay;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
@@ -121,6 +122,163 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 
 
 
+
+	if (DebugRunnerScenario == ETCGDebugRunnerScenario::SelectedGraveyardPlay)
+{
+UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Selected graveyard play scenario start"));
+
+GameState->MatchCards.Empty();
+GameState->SetMatchResult(ETCGMatchResult::None);
+GameState->SetPhase(ETCGMatchPhase::Placement);
+GameState->RoundNumber = 1;
+GameState->TurnNumber = 1;
+GameState->PlacementStepIndex = 0;
+GameState->Player0PlacementFieldZonesUsedThisRound.Reset();
+GameState->Player1PlacementFieldZonesUsedThisRound.Reset();
+GameState->SetCurrentTurnPlayer(0);
+GameState->ClearPendingDiscardChoice();
+GameState->ClearPendingGraveyardToDeckChoice();
+
+GameState->DebugCardDefinitions.RemoveAll([](const TObjectPtr<UTCG_CardDefinition>& Definition)
+{
+return Definition
+&& (Definition->CardDefinitionId == "Debug_SelectedGraveyardPlay_Source"
+|| Definition->CardDefinitionId == "Debug_SelectedGraveyardPlay_Cargo");
+});
+
+auto MakeDefinition = [GameState](
+FName CardDefinitionId,
+const TCHAR* DisplayName,
+ETCGCardElement Element,
+int32 BaseAttack)
+{
+UTCG_CardDefinition* Definition = NewObject<UTCG_CardDefinition>(GameState);
+Definition->CardDefinitionId = CardDefinitionId;
+Definition->DisplayName = FText::FromString(DisplayName);
+Definition->Element = Element;
+Definition->BaseAttack = BaseAttack;
+return Definition;
+};
+
+UTCG_CardDefinition* SourceDefinition = MakeDefinition(
+"Debug_SelectedGraveyardPlay_Source",
+TEXT("Debug Selected Graveyard Play Source"),
+ETCGCardElement::Light,
+1);
+
+FTCGCardEffectRef SelectAndPlayEffect;
+SelectAndPlayEffect.Trigger = ETCGEffectTrigger::OnPlay;
+SelectAndPlayEffect.bOptional = true;
+SelectAndPlayEffect.TriggerFilter.bRequireTopCard = true;
+
+FTCGEffectStep SelectChosenHostStep;
+SelectChosenHostStep.StepType = ETCGEffectStepType::SelectTarget;
+SelectChosenHostStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+SelectChosenHostStep.TargetFilter.RequiredLocation = ETCGCardLocation::Board;
+SelectChosenHostStep.TargetFilter.bRequireTopCard = true;
+SelectChosenHostStep.TargetFilter.NameContains = "ChosenHost";
+SelectAndPlayEffect.Steps.Add(SelectChosenHostStep);
+
+FTCGEffectStep PlayCargoOnSelectedStep;
+PlayCargoOnSelectedStep.StepType = ETCGEffectStepType::PlayGraveyardCardOnUnit;
+PlayCargoOnSelectedStep.TargetMode = ETCGEffectTargetMode::SelectedTarget;
+PlayCargoOnSelectedStep.bRequiresPreviousStepSuccess = true;
+PlayCargoOnSelectedStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+PlayCargoOnSelectedStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+PlayCargoOnSelectedStep.TargetFilter.bRequireTopCard = false;
+PlayCargoOnSelectedStep.TargetFilter.NameContains = "Cargo";
+SelectAndPlayEffect.Steps.Add(PlayCargoOnSelectedStep);
+
+SourceDefinition->Effects.Add(SelectAndPlayEffect);
+
+UTCG_CardDefinition* CargoDefinition = MakeDefinition(
+"Debug_SelectedGraveyardPlay_Cargo",
+TEXT("Debug Selected Graveyard Cargo"),
+ETCGCardElement::Earth,
+2);
+
+GameState->DebugCardDefinitions.Add(SourceDefinition);
+GameState->DebugCardDefinitions.Add(CargoDefinition);
+
+const FGuid WrongHostId = AddDebugBoardUnit(
+"Debug_SelectedGraveyardPlay_WrongHost",
+ETCGCardElement::Water,
+1,
+0,
+0);
+
+const FGuid ChosenHostId = AddDebugBoardUnit(
+"Debug_SelectedGraveyardPlay_ChosenHost",
+ETCGCardElement::Water,
+1,
+0,
+1);
+
+FTCGCardInstance* SourceCard = GameState->AddCardInstanceFromDefinition(
+SourceDefinition,
+0,
+ETCGCardLocation::Hand);
+const FGuid SourceId = SourceCard ? SourceCard->CardInstanceId : FGuid();
+
+FTCGCardInstance* CargoCard = GameState->AddCardInstanceFromDefinition(
+CargoDefinition,
+0,
+ETCGCardLocation::Graveyard);
+const FGuid CargoId = CargoCard ? CargoCard->CardInstanceId : FGuid();
+
+if (!WrongHostId.IsValid() || !ChosenHostId.IsValid() || !SourceId.IsValid() || !CargoId.IsValid())
+{
+UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Selected graveyard play setup failed"));
+GameState->EndMatch(ETCGMatchResult::Draw);
+return;
+}
+
+const bool bPlayedSource = GameState->PlayCardToZone(
+SourceId,
+ATCG_GameState::GetFieldZoneId(0, 2));
+
+const FTCGCardInstance* WrongHostAfter = GameState->FindCardInstance(WrongHostId);
+const FTCGCardInstance* ChosenHostAfter = GameState->FindCardInstance(ChosenHostId);
+const FTCGCardInstance* SourceAfter = GameState->FindCardInstance(SourceId);
+const FTCGCardInstance* CargoAfter = GameState->FindCardInstance(CargoId);
+
+const bool bCargoPlayedOnChosenHost =
+CargoAfter
+&& ChosenHostAfter
+&& CargoAfter->Location == ETCGCardLocation::Board
+&& ChosenHostAfter->Location == ETCGCardLocation::Board
+&& CargoAfter->StackId.IsValid()
+&& CargoAfter->StackId == ChosenHostAfter->StackId
+&& ChosenHostAfter->StackIndex < CargoAfter->StackIndex;
+
+const bool bCargoNotPlayedOnWrongHost =
+!CargoAfter
+|| !WrongHostAfter
+|| CargoAfter->StackId != WrongHostAfter->StackId;
+
+const bool bSourceStillOwnUnit =
+SourceAfter
+&& SourceAfter->Location == ETCGCardLocation::Board
+&& SourceAfter->ZoneId == ATCG_GameState::GetFieldZoneId(0, 2)
+&& SourceAfter->StackId.IsValid();
+
+const bool bExpectedAll =
+bPlayedSource
+&& bCargoPlayedOnChosenHost
+&& bCargoNotPlayedOnWrongHost
+&& bSourceStillOwnUnit;
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Debug: SelectedGraveyardPlay summary PlayedSource=%s CargoOnChosen=%s CargoNotOnWrong=%s SourceStillOwnUnit=%s ExpectedAll=%s"),
+bPlayedSource ? TEXT("true") : TEXT("false"),
+bCargoPlayedOnChosenHost ? TEXT("true") : TEXT("false"),
+bCargoNotPlayedOnWrongHost ? TEXT("true") : TEXT("false"),
+bSourceStillOwnUnit ? TEXT("true") : TEXT("false"),
+bExpectedAll ? TEXT("true") : TEXT("false"));
+
+GameState->EndMatch(ETCGMatchResult::Draw);
+return;
+}
 
 	if (DebugRunnerScenario == ETCGDebugRunnerScenario::GraveyardMachineProtection)
 	{
