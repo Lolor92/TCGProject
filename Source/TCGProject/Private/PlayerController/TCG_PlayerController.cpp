@@ -496,8 +496,15 @@ void ATCG_PlayerController::RefreshPlacementHighlights()
 	UGameplayStatics::GetAllActorsOfClass(this, AActor::StaticClass(), AllActors);
 
 	int32 MatchedActorCount = 0;
+	int32 HighlightedZoneCount = 0;
 	for (const FName ZoneId : ValidZoneIds)
 	{
+		AActor* BestActor = nullptr;
+		FVector BestOrigin = FVector::ZeroVector;
+		FVector BestExtent = FVector::ZeroVector;
+		float BestScore = -1.0f;
+		int32 ZoneMatchCount = 0;
+
 		for (AActor* Actor : AllActors)
 		{
 			if (!DoesActorMatchZoneId(Actor, ZoneId))
@@ -506,30 +513,62 @@ void ATCG_PlayerController::RefreshPlacementHighlights()
 			}
 
 			MatchedActorCount++;
+			ZoneMatchCount++;
+
 			FVector Origin = Actor->GetActorLocation();
 			FVector Extent(80.0f, 80.0f, 10.0f);
 			Actor->GetActorBounds(true, Origin, Extent);
-			Extent.X = FMath::Max(Extent.X, 60.0f);
-			Extent.Y = FMath::Max(Extent.Y, 60.0f);
-			Extent.Z = FMath::Max(Extent.Z, 8.0f);
+
+			const float Score = Extent.X * Extent.Y;
+			TCGScreenDebug(this, FString::Printf(
+				TEXT("TCG UI: Match %s actor %s extent %.1f %.1f %.1f score %.1f"),
+				*ZoneId.ToString(),
+				*GetNameSafe(Actor),
+				Extent.X,
+				Extent.Y,
+				Extent.Z,
+				Score), FColor::Cyan);
+
+			if (Score > BestScore)
+			{
+				BestActor = Actor;
+				BestOrigin = Origin;
+				BestExtent = Extent;
+				BestScore = Score;
+			}
+		}
+
+		if (BestActor)
+		{
+			HighlightedZoneCount++;
+			BestExtent.X = FMath::Max(BestExtent.X, 60.0f);
+			BestExtent.Y = FMath::Max(BestExtent.Y, 60.0f);
+			BestExtent.Z = FMath::Max(BestExtent.Z, 8.0f);
 
 			DrawDebugBox(
 				GetWorld(),
-				Origin,
-				Extent,
+				BestOrigin,
+				BestExtent,
 				FColor::Yellow,
 				true,
 				-1.0f,
 				0,
 				PlacementHighlightLineThickness);
+
+			TCGScreenDebug(this, FString::Printf(
+				TEXT("TCG UI: Highlight %s using %s matches %d"),
+				*ZoneId.ToString(),
+				*GetNameSafe(BestActor),
+				ZoneMatchCount), FColor::Green);
 		}
 	}
 
 	TCGScreenDebug(this, FString::Printf(
-		TEXT("TCG UI: Highlight valid zones %d matched actors %d"),
+		TEXT("TCG UI: Highlight valid zones %d matched actors %d highlighted zones %d"),
 		ValidZoneIds.Num(),
-		MatchedActorCount),
-		MatchedActorCount > 0 ? FColor::Green : FColor::Red);
+		MatchedActorCount,
+		HighlightedZoneCount),
+		HighlightedZoneCount > 0 ? FColor::Green : FColor::Red);
 
 	if (MatchedActorCount == 0)
 	{
