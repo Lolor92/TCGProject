@@ -114,6 +114,8 @@ protected:
 	bool bIsDraggingHandCard = false;
 
 	bool bSuppressNextZoneActorClick = false;
+
+	bool bWasLeftMouseDownDuringHandDrag = false;
 void PushDebugHUDData();
 	void SeedDebugMatchForHUDIfNeeded();
 	int32 ResolveLocalPlayerIndex() const;

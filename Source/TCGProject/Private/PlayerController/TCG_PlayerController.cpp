@@ -160,6 +160,19 @@ void ATCG_PlayerController::SetupInputComponent()
 void ATCG_PlayerController::PlayerTick(const float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
+
+	if (bIsDraggingHandCard)
+	{
+		const bool bLeftMouseDown = IsInputKeyDown(EKeys::LeftMouseButton);
+		if (bWasLeftMouseDownDuringHandDrag && !bLeftMouseDown)
+		{
+			EndHandCardDrag();
+			return;
+		}
+
+		bWasLeftMouseDownDuringHandDrag = bLeftMouseDown;
+	}
+
 	DrawHandCardDragPreview();
 }
 
@@ -335,6 +348,7 @@ void ATCG_PlayerController::HandleHUDHandCardPressed(const int32 HandIndex, UObj
 	// The hand widget already selects on press before broadcasting this event.
 	// Do not select again here, or the log/detail/highlight path fires multiple times.
 	bIsDraggingHandCard = SelectedHandCardInstanceId.IsValid();
+	bWasLeftMouseDownDuringHandDrag = bIsDraggingHandCard && IsInputKeyDown(EKeys::LeftMouseButton);
 
 	if (bIsDraggingHandCard)
 	{
@@ -405,18 +419,12 @@ void ATCG_PlayerController::TryPlaySelectedHandCardToZone(const FName ZoneId)
 
 void ATCG_PlayerController::HandleCardZoneActorClicked(const FName ZoneId)
 {
-	if (bIsDraggingHandCard)
-	{
-		return;
-	}
-
+	// Placement is now drag-release only. Do not allow the old
+	// click-hand-card, click-zone flow to submit a play request.
 	if (bSuppressNextZoneActorClick)
 	{
 		bSuppressNextZoneActorClick = false;
-		return;
 	}
-
-	TryPlaySelectedHandCardToZone(ZoneId);
 }
 
 void ATCG_PlayerController::EndHandCardDrag()
@@ -427,17 +435,19 @@ void ATCG_PlayerController::EndHandCardDrag()
 	}
 
 	bIsDraggingHandCard = false;
+	bWasLeftMouseDownDuringHandDrag = false;
 	FlushPersistentDebugLines(GetWorld());
 
 	if (!SelectedHandCardInstanceId.IsValid())
 	{
+		TCGScreenDebug(this, TEXT("TCG UI: Drag cancelled, card returned to hand"), FColor::Yellow);
 		return;
 	}
 
 	FHitResult HitResult;
 	if (!GetHitResultUnderCursor(ECC_Visibility, true, HitResult))
 	{
-		TCGScreenDebug(this, TEXT("TCG UI: Drag cancelled, no zone under cursor"), FColor::Red);
+		TCGScreenDebug(this, TEXT("TCG UI: Drag cancelled, card returned to hand"), FColor::Yellow);
 		return;
 	}
 
@@ -453,13 +463,13 @@ void ATCG_PlayerController::EndHandCardDrag()
 
 	if (ZoneId.IsNone())
 	{
-		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag cancelled, hit %s but no zone matched"), *GetNameSafe(HitResult.GetActor())), FColor::Red);
+		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag cancelled over %s, card returned to hand"), *GetNameSafe(HitResult.GetActor())), FColor::Yellow);
 		return;
 	}
 
 	if (!CanSelectedHandCardPlayToZone(ZoneId))
 	{
-		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag release invalid zone %s"), *ZoneId.ToString()), FColor::Red);
+		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag cancelled over invalid zone %s, card returned to hand"), *ZoneId.ToString()), FColor::Yellow);
 		return;
 	}
 
