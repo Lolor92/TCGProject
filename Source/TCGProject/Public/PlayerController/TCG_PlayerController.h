@@ -85,7 +85,7 @@ protected:
 	bool bSeedDebugMatchWhenEmpty = true;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
-	bool bDrawPlacementDebugHighlights = true;
+	bool bDrawPlacementDebugHighlights = false;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="1.0", UIMin="1.0"))
 	float PlacementHighlightLineThickness = 8.0f;
