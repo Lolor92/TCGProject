@@ -204,7 +204,7 @@ public:
 	bool ResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);
 	bool ResolveModularEffectChainEntry(const FTCGEffectChainEntry& ChainEntry);
 	bool ResolveEffectStep(
-		const FTCGEffectChainEntry& ChainEntry,
+		FTCGEffectChainEntry& ChainEntry,
 		const FTCGEffectStep& Step,
 		bool bPreviousStepSucceeded);
 

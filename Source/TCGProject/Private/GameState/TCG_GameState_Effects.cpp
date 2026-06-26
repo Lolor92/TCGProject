@@ -1308,10 +1308,13 @@ bool ATCG_GameState::ResolveEffectChainEntry(const FTCGEffectChainEntry& ChainEn
 bool ATCG_GameState::ResolveModularEffectChainEntry(const FTCGEffectChainEntry& ChainEntry)
 {
 	if (ChainEntry.EffectRef.Steps.Num() <= 0) return false;
+
+	FTCGEffectChainEntry WorkingChainEntry = ChainEntry;
+
 	bool bResolvedAnyStep = false;
 	bool bPreviousMeaningfulStepSucceeded = true;
-	if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Resolve modular chain %d Source=%s Steps=%d"), ChainEntry.ChainIndex, *ChainEntry.SourceCardDefinitionId.ToString(), ChainEntry.EffectRef.Steps.Num());
-	for (const FTCGEffectStep& Step : ChainEntry.EffectRef.Steps)
+	if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Resolve modular chain %d Source=%s Steps=%d"), WorkingChainEntry.ChainIndex, *WorkingChainEntry.SourceCardDefinitionId.ToString(), WorkingChainEntry.EffectRef.Steps.Num());
+	for (const FTCGEffectStep& Step : WorkingChainEntry.EffectRef.Steps)
 	{
 		if (Step.StepType == ETCGEffectStepType::None) continue;
 		if (Step.StepType == ETCGEffectStepType::Then)
@@ -1325,7 +1328,7 @@ bool ATCG_GameState::ResolveModularEffectChainEntry(const FTCGEffectChainEntry& 
 			bPreviousMeaningfulStepSucceeded = false;
 			continue;
 		}
-		const bool bStepSucceeded = ResolveEffectStep(ChainEntry, Step, bPreviousMeaningfulStepSucceeded);
+		const bool bStepSucceeded = ResolveEffectStep(WorkingChainEntry, Step, bPreviousMeaningfulStepSucceeded);
 		bPreviousMeaningfulStepSucceeded = bStepSucceeded;
 		bResolvedAnyStep |= bStepSucceeded;
 	}
@@ -2034,7 +2037,7 @@ static bool MoveFirstFilteredDeckCardToHandForEffect(
     return true;
 }
 
-bool ATCG_GameState::ResolveEffectStep(const FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step, bool bPreviousStepSucceeded)
+bool ATCG_GameState::ResolveEffectStep(FTCGEffectChainEntry& ChainEntry, const FTCGEffectStep& Step, bool bPreviousStepSucceeded)
 {
 	bool bStepSucceeded = false;
 	switch (Step.StepType)
@@ -2148,6 +2151,8 @@ break;
 	}
 	case ETCGEffectStepType::SelectTarget:
 	{
+		ChainEntry.SecondaryTargetCardInstanceId.Invalidate();
+
 		const int32 OwnerPlayerIndex = Step.TargetFilter.OwnerMode == ETCGEffectTargetMode::Opponent ? 1 - ChainEntry.ControllerPlayerIndex : ChainEntry.ControllerPlayerIndex;
 		for (const FTCGCardInstance& Card : MatchCards)
 		{
@@ -2161,6 +2166,7 @@ break;
 				const FTCGCardInstance* TopCard = FindTopCardInStack(Card.StackId);
 				if (!TopCard || TopCard->CardInstanceId != Card.CardInstanceId) continue;
 			}
+			ChainEntry.SecondaryTargetCardInstanceId = Card.CardInstanceId;
 			bStepSucceeded = true;
 			break;
 		}
