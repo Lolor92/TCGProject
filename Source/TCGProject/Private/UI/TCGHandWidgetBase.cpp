@@ -26,7 +26,7 @@ namespace
 			const FTCGCardWidgetData& NewCardData = NewHandData.Cards[CardIndex];
 
 			if (ExistingCardData.HandIndex != NewCardData.HandIndex
-				|| ExistingCardData.SourceObject != NewCardData.SourceObject)
+				|| ExistingCardData.CardInstanceId != NewCardData.CardInstanceId)
 			{
 				return false;
 			}
