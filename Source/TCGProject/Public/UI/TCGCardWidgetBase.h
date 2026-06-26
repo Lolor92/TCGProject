@@ -5,6 +5,9 @@
 #include "UI/TCGUIDataTypes.h"
 #include "TCGCardWidgetBase.generated.h"
 
+class UButton;
+class UTextBlock;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FTCGCardWidgetClickedSignature, int32, HandIndex, UObject*, SourceObject);
 
 UCLASS(Abstract, Blueprintable)
@@ -32,11 +35,31 @@ UPROPERTY(BlueprintAssignable, Category="TCG|UI|Card")
 FTCGCardWidgetClickedSignature OnCardClicked;
 
 protected:
+virtual void NativeConstruct() override;
+virtual void NativeDestruct() override;
+
 UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="TCG|UI|Card")
 FTCGCardWidgetData CardData;
 
 UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="TCG|UI|Card")
 bool bSelected = false;
+
+UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional), Category="TCG|UI|Card")
+TObjectPtr<UButton> Root_Button = nullptr;
+
+UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional), Category="TCG|UI|Card")
+TObjectPtr<UTextBlock> CardName_Text = nullptr;
+
+UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional), Category="TCG|UI|Card")
+TObjectPtr<UTextBlock> Attack_Text = nullptr;
+
+UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional), Category="TCG|UI|Card")
+TObjectPtr<UTextBlock> Element_Text = nullptr;
+
+UFUNCTION()
+void HandleRootButtonClicked();
+
+void RefreshCardText();
 
 UFUNCTION(BlueprintImplementableEvent, Category="TCG|UI|Card")
 void BP_OnCardDataChanged();
