@@ -31,6 +31,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void OnRep_PlayerState() override;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI")
 	TSubclassOf<UTCGMatchHUDWidgetBase> MatchHUDWidgetClass;
@@ -38,6 +39,7 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="TCG|UI")
 	TObjectPtr<UTCGMatchHUDWidgetBase> MatchHUDWidget = nullptr;
 
+	// Fallback used only before the replicated player index is available.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI")
 	int32 LocalPlayerIndex = 0;
 
@@ -49,6 +51,7 @@ protected:
 
 	void PushDebugHUDData();
 	void SeedDebugMatchForHUDIfNeeded();
+	int32 ResolveLocalPlayerIndex() const;
 	FTCGMatchHUDWidgetData BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const;
 	FTCGCardWidgetData BuildCardWidgetDataFromCard(const ATCG_GameState& TCGGameState, const FTCGCardInstance& Card, int32 HandIndex) const;
 	FName GetCardElementName(ETCGCardElement Element) const;
