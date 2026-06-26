@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Cards/TCG_CardTypes.h"
@@ -21,6 +21,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
 	FGuid SecondaryTargetCardInstanceId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
+	TArray<FGuid> SelectedTargetCardInstanceIds;
 
 	UPROPERTY(BlueprintReadOnly, Category = "TCG|Effects")
 	FName SourceCardDefinitionId = NAME_None;

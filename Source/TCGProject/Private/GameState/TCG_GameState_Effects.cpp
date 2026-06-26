@@ -1522,8 +1522,64 @@ if (!GameState)
 return false;
 }
 
-FTCGCardInstance* OwnUnit = nullptr;
+auto IsValidTopUnitForOwner = [GameState](const FTCGCardInstance* Unit, int32 OwnerPlayerIndex)
+{
+if (!Unit
+|| Unit->OwnerPlayerIndex != OwnerPlayerIndex
+|| Unit->Location != ETCGCardLocation::Board
+|| !Unit->StackId.IsValid())
+{
+return false;
+}
 
+const FTCGCardInstance* TopCard = GameState->FindTopCardInStack(Unit->StackId);
+return TopCard && TopCard->CardInstanceId == Unit->CardInstanceId;
+};
+
+FTCGCardInstance* OwnUnit = nullptr;
+FTCGCardInstance* OpponentUnit = nullptr;
+
+if (ChainEntry.SelectedTargetCardInstanceIds.Num() >= 2)
+{
+OwnUnit = GameState->FindCardInstance(ChainEntry.SelectedTargetCardInstanceIds[0]);
+OpponentUnit = GameState->FindCardInstance(ChainEntry.SelectedTargetCardInstanceIds[1]);
+
+const int32 OpponentPlayerIndex = 1 - ChainEntry.ControllerPlayerIndex;
+
+if (!IsValidTopUnitForOwner(OwnUnit, ChainEntry.ControllerPlayerIndex))
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DestroyMatchingMaterialCount failed Reason=InvalidSelectedOwnUnit"));
+
+return false;
+}
+
+if (!IsValidTopUnitForOwner(OpponentUnit, OpponentPlayerIndex))
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DestroyMatchingMaterialCount failed Own=%s Reason=InvalidSelectedOpponentUnit"),
+OwnUnit ? *OwnUnit->CardDefinitionId.ToString() : TEXT("None"));
+
+return false;
+}
+
+const int32 OwnSelectedMaterialCount = CountMaterialsUnderUnitForEffect(GameState, OwnUnit->CardInstanceId);
+const int32 OpponentSelectedMaterialCount = CountMaterialsUnderUnitForEffect(GameState, OpponentUnit->CardInstanceId);
+
+if (OwnSelectedMaterialCount != OpponentSelectedMaterialCount)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DestroyMatchingMaterialCount failed Own=%s Opponent=%s OwnMaterials=%d OpponentMaterials=%d Reason=SelectedMaterialCountMismatch"),
+*OwnUnit->CardDefinitionId.ToString(),
+*OpponentUnit->CardDefinitionId.ToString(),
+OwnSelectedMaterialCount,
+OpponentSelectedMaterialCount);
+
+return false;
+}
+}
+else
+{
 if (ChainEntry.SecondaryTargetCardInstanceId.IsValid())
 {
 FTCGCardInstance* SelectedUnit = GameState->FindCardInstance(ChainEntry.SecondaryTargetCardInstanceId);
@@ -1560,35 +1616,37 @@ TEXT("TCG Effect: DestroyMatchingMaterialCount failed Reason=NoOwnUnit"));
 return false;
 }
 
-const FGuid OwnUnitId = OwnUnit->CardInstanceId;
-const FName OwnDefinitionId = OwnUnit->CardDefinitionId;
-const int32 MatchingMaterialCount = CountMaterialsUnderUnitForEffect(GameState, OwnUnitId);
+const int32 MatchingMaterialCountForAutoTarget = CountMaterialsUnderUnitForEffect(GameState, OwnUnit->CardInstanceId);
 
 FTCGEffectTargetFilter OpponentFilter = Step.SecondaryTargetFilter;
 OpponentFilter.OwnerMode = ETCGEffectTargetMode::Opponent;
 OpponentFilter.RequiredLocation = ETCGCardLocation::Board;
 OpponentFilter.bRequireTopCard = true;
 
-FTCGCardInstance* OpponentUnit = FindFirstFilteredTopUnitForMatchingMaterialEffect(
+OpponentUnit = FindFirstFilteredTopUnitForMatchingMaterialEffect(
 GameState,
 OpponentFilter,
 ChainEntry.ControllerPlayerIndex,
 ChainEntry.SourceCardInstanceId,
-MatchingMaterialCount,
+MatchingMaterialCountForAutoTarget,
 true);
 
 if (!OpponentUnit)
 {
 UE_LOG(LogTemp, Warning,
 TEXT("TCG Effect: DestroyMatchingMaterialCount failed Own=%s Materials=%d Reason=NoOpponentUnitWithSameMaterials"),
-*OwnDefinitionId.ToString(),
-MatchingMaterialCount);
+*OwnUnit->CardDefinitionId.ToString(),
+MatchingMaterialCountForAutoTarget);
 
 return false;
 }
+}
 
+const FGuid OwnUnitId = OwnUnit->CardInstanceId;
 const FGuid OpponentUnitId = OpponentUnit->CardInstanceId;
+const FName OwnDefinitionId = OwnUnit->CardDefinitionId;
 const FName OpponentDefinitionId = OpponentUnit->CardDefinitionId;
+const int32 MatchingMaterialCount = CountMaterialsUnderUnitForEffect(GameState, OwnUnitId);
 
 const bool bOwnDestroyResolved = TryDestroySpecificUnitByCardEffect(
 GameState,
@@ -2491,26 +2549,73 @@ break;
 	}
 	case ETCGEffectStepType::SelectTarget:
 	{
-		ChainEntry.SecondaryTargetCardInstanceId.Invalidate();
+		const bool bNeedsSameMaterialCount =
+			Step.TargetFilter.bRequireSameMaterialCountAsFirstSelectedTarget;
 
-		const int32 OwnerPlayerIndex = Step.TargetFilter.OwnerMode == ETCGEffectTargetMode::Opponent ? 1 - ChainEntry.ControllerPlayerIndex : ChainEntry.ControllerPlayerIndex;
+		const FTCGCardInstance* FirstSelectedTarget = nullptr;
+		int32 FirstSelectedMaterialCount = INDEX_NONE;
+
+		if (bNeedsSameMaterialCount)
+		{
+			if (ChainEntry.SelectedTargetCardInstanceIds.Num() <= 0)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("TCG Effect: Step SelectTarget failed Reason=SameMaterialCountNeedsFirstSelectedTarget"));
+				bStepSucceeded = false;
+				break;
+			}
+
+			FirstSelectedTarget = FindCardInstance(ChainEntry.SelectedTargetCardInstanceIds[0]);
+			if (!FirstSelectedTarget
+				|| FirstSelectedTarget->Location != ETCGCardLocation::Board
+				|| !FirstSelectedTarget->StackId.IsValid())
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("TCG Effect: Step SelectTarget failed Reason=InvalidFirstSelectedTarget"));
+				bStepSucceeded = false;
+				break;
+			}
+
+			FirstSelectedMaterialCount = CountMaterialsUnderUnitForEffect(this, FirstSelectedTarget->CardInstanceId);
+		}
+
 		for (const FTCGCardInstance& Card : MatchCards)
 		{
-			if (Card.OwnerPlayerIndex != OwnerPlayerIndex) continue;
-			if (Card.Location != Step.TargetFilter.RequiredLocation) continue;
-			if (Step.TargetFilter.bRequireElement && Card.Element != Step.TargetFilter.RequiredElement) continue;
-			if (Step.TargetFilter.bExcludeSourceCard && Card.CardInstanceId == ChainEntry.SourceCardInstanceId) continue;
-			if (!DoesCardNameMatchFilterForEffect(Card, Step.TargetFilter)) continue;
-			if (Step.TargetFilter.bRequireTopCard && Card.Location == ETCGCardLocation::Board)
+			if (ChainEntry.SelectedTargetCardInstanceIds.Contains(Card.CardInstanceId)) continue;
+
+			if (!DoesCardMatchGenericEffectFilter(
+				this,
+				Card,
+				Step.TargetFilter,
+				ChainEntry.ControllerPlayerIndex,
+				ChainEntry.SourceCardInstanceId))
 			{
-				const FTCGCardInstance* TopCard = FindTopCardInStack(Card.StackId);
-				if (!TopCard || TopCard->CardInstanceId != Card.CardInstanceId) continue;
+				continue;
 			}
+
+			if (bNeedsSameMaterialCount
+				&& CountMaterialsUnderUnitForEffect(this, Card.CardInstanceId) != FirstSelectedMaterialCount)
+			{
+				continue;
+			}
+
 			ChainEntry.SecondaryTargetCardInstanceId = Card.CardInstanceId;
+			ChainEntry.SelectedTargetCardInstanceIds.Add(Card.CardInstanceId);
 			bStepSucceeded = true;
 			break;
 		}
-		if (bLogEffectResolution) UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Step SelectTarget OwnerMode=%s Location=%d Success=%s"), GetTCGEffectTargetModeDebugName(Step.TargetFilter.OwnerMode), static_cast<int32>(Step.TargetFilter.RequiredLocation), bStepSucceeded ? TEXT("true") : TEXT("false"));
+
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Step SelectTarget OwnerMode=%s Location=%d SameMaterialsAsFirst=%s SelectedCount=%d Success=%s"),
+				GetTCGEffectTargetModeDebugName(Step.TargetFilter.OwnerMode),
+				static_cast<int32>(Step.TargetFilter.RequiredLocation),
+				bNeedsSameMaterialCount ? TEXT("true") : TEXT("false"),
+				ChainEntry.SelectedTargetCardInstanceIds.Num(),
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
+
 		break;
 	}
 	case ETCGEffectStepType::MoveBottomOverlayToGraveyard:

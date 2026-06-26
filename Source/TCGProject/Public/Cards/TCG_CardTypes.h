@@ -178,6 +178,9 @@ public:
 	bool bExcludeSourceCard = false;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
+	bool bRequireSameMaterialCountAsFirstSelectedTarget = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
 	FString NameContains;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
