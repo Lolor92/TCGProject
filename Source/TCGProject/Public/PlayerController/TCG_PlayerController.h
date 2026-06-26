@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "TimerManager.h"
 #include "UI/TCGUIDataTypes.h"
 #include "TCG_PlayerController.generated.h"
 
