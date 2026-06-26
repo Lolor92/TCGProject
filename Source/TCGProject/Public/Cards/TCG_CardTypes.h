@@ -54,7 +54,8 @@ enum class ETCGEffectTrigger : uint8
 	OnYourUnitDestroyedByOpponentCardEffect UMETA(DisplayName = "23 - On Your Unit Destroyed By Opponent Card Effect"),
 	OnOpponentDrawsByCardEffect UMETA(DisplayName = "24 - On Opponent Draws By Card Effect"),
 	OnYourUnitPlayed UMETA(DisplayName = "25 - On Your Unit Played"),
-	OnMaterialOfDestroyedUnit UMETA(DisplayName = "26 - On Material Of Destroyed Unit")
+	OnMaterialOfDestroyedUnit UMETA(DisplayName = "26 - On Material Of Destroyed Unit"),
+	OnMaterialOfUnitDestroyedByCardEffect UMETA(DisplayName = "27 - On Material Of Unit Destroyed By Card Effect")
 };
 
 UENUM(BlueprintType)
@@ -179,6 +180,16 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
 	bool bRequireSameMaterialCountAsFirstSelectedTarget = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
+	bool bRequireMaterialCount = false;
+
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Target Filter",
+		meta = (EditCondition = "bRequireMaterialCount", EditConditionHides, ClampMin = "0", UIMin = "0"))
+	int32 RequiredMaterialCount = 0;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Target Filter")
 	FString NameContains;

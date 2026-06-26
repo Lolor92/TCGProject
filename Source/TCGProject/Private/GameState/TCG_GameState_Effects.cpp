@@ -2432,110 +2432,6 @@ bPlayed ? TEXT("true") : TEXT("false"));
 return bPlayed;
 }
 
-static bool PlayTwoFilteredGraveyardCardsToEmptyZonesForEffect(
-ATCG_GameState* GameState,
-const FTCGEffectChainEntry& ChainEntry,
-const FTCGEffectStep& Step)
-{
-if (!GameState || !GameState->IsValidPlayerIndex(ChainEntry.ControllerPlayerIndex))
-{
-return false;
-}
-
-TArray<FName> EmptyZoneIds;
-for (int32 FieldIndex = 0; FieldIndex < ATCG_GameState::FieldZoneCount; ++FieldIndex)
-{
-const FName ZoneId = ATCG_GameState::GetFieldZoneId(ChainEntry.ControllerPlayerIndex, FieldIndex);
-
-FGuid ExistingStackId;
-if (!GameState->FindStackIdInZone(ZoneId, ExistingStackId))
-{
-EmptyZoneIds.Add(ZoneId);
-}
-}
-
-if (EmptyZoneIds.Num() < 2)
-{
-UE_LOG(LogTemp, Warning,
-TEXT("TCG Effect: PlayTwoGraveyardCardsToEmptyZones failed Player=%d Reason=NotEnoughEmptyZones EmptyZones=%d"),
-ChainEntry.ControllerPlayerIndex,
-EmptyZoneIds.Num());
-
-return false;
-}
-
-auto FindFirstMatchingGraveyardCard = [GameState, &ChainEntry](const FTCGEffectTargetFilter& Filter, const FGuid& ExcludedCardId)
-{
-for (const FTCGCardInstance& Card : GameState->MatchCards)
-{
-if (Card.CardInstanceId == ChainEntry.SourceCardInstanceId) continue;
-if (Card.CardInstanceId == ExcludedCardId) continue;
-if (Card.OwnerPlayerIndex != ChainEntry.ControllerPlayerIndex) continue;
-if (Card.Location != ETCGCardLocation::Graveyard) continue;
-
-if (!DoesCardMatchGenericEffectFilter(
-GameState,
-Card,
-Filter,
-ChainEntry.ControllerPlayerIndex,
-ChainEntry.SourceCardInstanceId))
-{
-continue;
-}
-
-return Card.CardInstanceId;
-}
-
-return FGuid();
-};
-
-FTCGEffectTargetFilter FirstFilter = Step.TargetFilter;
-FirstFilter.OwnerMode = ETCGEffectTargetMode::Controller;
-FirstFilter.RequiredLocation = ETCGCardLocation::Graveyard;
-FirstFilter.bRequireTopCard = false;
-
-FTCGEffectTargetFilter SecondFilter = Step.SecondaryTargetFilter;
-SecondFilter.OwnerMode = ETCGEffectTargetMode::Controller;
-SecondFilter.RequiredLocation = ETCGCardLocation::Graveyard;
-SecondFilter.bRequireTopCard = false;
-
-const FGuid FirstCardId = FindFirstMatchingGraveyardCard(FirstFilter, FGuid());
-const FGuid SecondCardId = FirstCardId.IsValid()
-? FindFirstMatchingGraveyardCard(SecondFilter, FirstCardId)
-: FGuid();
-
-if (!FirstCardId.IsValid() || !SecondCardId.IsValid())
-{
-UE_LOG(LogTemp, Warning,
-TEXT("TCG Effect: PlayTwoGraveyardCardsToEmptyZones failed Player=%d FirstFound=%s SecondFound=%s"),
-ChainEntry.ControllerPlayerIndex,
-FirstCardId.IsValid() ? TEXT("true") : TEXT("false"),
-SecondCardId.IsValid() ? TEXT("true") : TEXT("false"));
-
-return false;
-}
-
-const FTCGCardInstance* FirstCard = GameState->FindCardInstance(FirstCardId);
-const FTCGCardInstance* SecondCard = GameState->FindCardInstance(SecondCardId);
-
-const FName FirstDefinitionId = FirstCard ? FirstCard->CardDefinitionId : NAME_None;
-const FName SecondDefinitionId = SecondCard ? SecondCard->CardDefinitionId : NAME_None;
-
-const bool bPlayedFirst = GameState->PlayGraveyardCardToEmptyZone(FirstCardId, EmptyZoneIds[0]);
-const bool bPlayedSecond = bPlayedFirst
-&& GameState->PlayGraveyardCardToEmptyZone(SecondCardId, EmptyZoneIds[1]);
-
-UE_LOG(LogTemp, Warning,
-TEXT("TCG Effect: PlayTwoGraveyardCardsToEmptyZones First=%s Second=%s ZoneA=%s ZoneB=%s Played=%s"),
-*FirstDefinitionId.ToString(),
-*SecondDefinitionId.ToString(),
-*EmptyZoneIds[0].ToString(),
-*EmptyZoneIds[1].ToString(),
-(bPlayedFirst && bPlayedSecond) ? TEXT("true") : TEXT("false"));
-
-return bPlayedFirst && bPlayedSecond;
-}
-
 static bool MoveFirstFilteredDeckCardToHandForEffect(
     ATCG_GameState* GameState,
     const FTCGEffectChainEntry& ChainEntry,
@@ -2645,11 +2541,6 @@ bool ATCG_GameState::ResolveEffectStep(FTCGEffectChainEntry& ChainEntry, const F
 	case ETCGEffectStepType::PlayHandCardOnUnit:
 	{
 		bStepSucceeded = PlayFirstFilteredHandCardOnFirstFilteredUnitForEffect(this, ChainEntry, Step);
-		break;
-	}
-	case ETCGEffectStepType::PlayTwoGraveyardCardsToEmptyZones:
-	{
-		bStepSucceeded = PlayTwoFilteredGraveyardCardsToEmptyZonesForEffect(this, ChainEntry, Step);
 		break;
 	}
     case ETCGEffectStepType::MoveDeckCardToHand:

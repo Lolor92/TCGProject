@@ -26,7 +26,7 @@ namespace
 		OverdrivePilotKaia
 	};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlayWrongMaterialCount;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlay;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
@@ -201,17 +201,22 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
         RecoveryEffect.TriggerFilter.bRequireMaterialCount = true;
         RecoveryEffect.TriggerFilter.RequiredMaterialCount = 2;
 
-        FTCGEffectStep PlayPairStep;
-        PlayPairStep.StepType = ETCGEffectStepType::PlayTwoGraveyardCardsToEmptyZones;
-        PlayPairStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
-        PlayPairStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
-        PlayPairStep.TargetFilter.bRequireTopCard = false;
-        PlayPairStep.TargetFilter.NameContains = "Machine";
-        PlayPairStep.SecondaryTargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
-        PlayPairStep.SecondaryTargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
-        PlayPairStep.SecondaryTargetFilter.bRequireTopCard = false;
-        PlayPairStep.SecondaryTargetFilter.NameContains = "Pilot";
-        RecoveryEffect.Steps.Add(PlayPairStep);
+        FTCGEffectStep PlayMachineStep;
+        PlayMachineStep.StepType = ETCGEffectStepType::PlayGraveyardCardToEmptyZone;
+        PlayMachineStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+        PlayMachineStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+        PlayMachineStep.TargetFilter.bRequireTopCard = false;
+        PlayMachineStep.TargetFilter.NameContains = "Machine";
+        RecoveryEffect.Steps.Add(PlayMachineStep);
+
+        FTCGEffectStep PlayPilotStep;
+        PlayPilotStep.StepType = ETCGEffectStepType::PlayGraveyardCardToEmptyZone;
+        PlayPilotStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+        PlayPilotStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+        PlayPilotStep.TargetFilter.bRequireTopCard = false;
+        PlayPilotStep.TargetFilter.NameContains = "Pilot";
+        PlayPilotStep.bRequiresPreviousStepSuccess = true;
+        RecoveryEffect.Steps.Add(PlayPilotStep);
 
         SourceMaterialDefinition->Effects.Add(RecoveryEffect);
 
@@ -463,17 +468,22 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
         RecoveryEffect.TriggerFilter.bRequireMaterialCount = true;
         RecoveryEffect.TriggerFilter.RequiredMaterialCount = 2;
 
-        FTCGEffectStep PlayPairStep;
-        PlayPairStep.StepType = ETCGEffectStepType::PlayTwoGraveyardCardsToEmptyZones;
-        PlayPairStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
-        PlayPairStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
-        PlayPairStep.TargetFilter.bRequireTopCard = false;
-        PlayPairStep.TargetFilter.NameContains = "Machine";
-        PlayPairStep.SecondaryTargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
-        PlayPairStep.SecondaryTargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
-        PlayPairStep.SecondaryTargetFilter.bRequireTopCard = false;
-        PlayPairStep.SecondaryTargetFilter.NameContains = "Pilot";
-        RecoveryEffect.Steps.Add(PlayPairStep);
+        FTCGEffectStep PlayMachineStep;
+        PlayMachineStep.StepType = ETCGEffectStepType::PlayGraveyardCardToEmptyZone;
+        PlayMachineStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+        PlayMachineStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+        PlayMachineStep.TargetFilter.bRequireTopCard = false;
+        PlayMachineStep.TargetFilter.NameContains = "Machine";
+        RecoveryEffect.Steps.Add(PlayMachineStep);
+
+        FTCGEffectStep PlayPilotStep;
+        PlayPilotStep.StepType = ETCGEffectStepType::PlayGraveyardCardToEmptyZone;
+        PlayPilotStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+        PlayPilotStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+        PlayPilotStep.TargetFilter.bRequireTopCard = false;
+        PlayPilotStep.TargetFilter.NameContains = "Pilot";
+        PlayPilotStep.bRequiresPreviousStepSuccess = true;
+        RecoveryEffect.Steps.Add(PlayPilotStep);
 
         SourceMaterialDefinition->Effects.Add(RecoveryEffect);
 
@@ -709,17 +719,22 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		RecoveryEffect.TriggerFilter.bRequireMaterialCount = true;
 		RecoveryEffect.TriggerFilter.RequiredMaterialCount = 2;
 
-		FTCGEffectStep PlayPairStep;
-		PlayPairStep.StepType = ETCGEffectStepType::PlayTwoGraveyardCardsToEmptyZones;
-		PlayPairStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
-		PlayPairStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
-		PlayPairStep.TargetFilter.bRequireTopCard = false;
-		PlayPairStep.TargetFilter.NameContains = "Machine";
-		PlayPairStep.SecondaryTargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
-		PlayPairStep.SecondaryTargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
-		PlayPairStep.SecondaryTargetFilter.bRequireTopCard = false;
-		PlayPairStep.SecondaryTargetFilter.NameContains = "Pilot";
-		RecoveryEffect.Steps.Add(PlayPairStep);
+		FTCGEffectStep PlayMachineStep;
+		PlayMachineStep.StepType = ETCGEffectStepType::PlayGraveyardCardToEmptyZone;
+		PlayMachineStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		PlayMachineStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+		PlayMachineStep.TargetFilter.bRequireTopCard = false;
+		PlayMachineStep.TargetFilter.NameContains = "Machine";
+		RecoveryEffect.Steps.Add(PlayMachineStep);
+
+		FTCGEffectStep PlayPilotStep;
+		PlayPilotStep.StepType = ETCGEffectStepType::PlayGraveyardCardToEmptyZone;
+		PlayPilotStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		PlayPilotStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+		PlayPilotStep.TargetFilter.bRequireTopCard = false;
+		PlayPilotStep.TargetFilter.NameContains = "Pilot";
+		PlayPilotStep.bRequiresPreviousStepSuccess = true;
+		RecoveryEffect.Steps.Add(PlayPilotStep);
 
 		RecoveryMaterialDefinition->Effects.Add(RecoveryEffect);
 
