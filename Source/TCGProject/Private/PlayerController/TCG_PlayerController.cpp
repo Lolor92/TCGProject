@@ -4,6 +4,7 @@
 #include "Cards/TCG_CardTypes.h"
 #include "GameState/TCG_DebugScenarioRunner.h"
 #include "GameState/TCG_GameState.h"
+#include "PlayerState/TCG_PlayerState.h"
 #include "UI/TCGMatchHUDWidgetBase.h"
 
 void ATCG_PlayerController::BeginPlay()
@@ -19,6 +20,16 @@ void ATCG_PlayerController::BeginPlay()
 	else
 	{
 		SeedDebugMatchForHUDIfNeeded();
+		RefreshMatchHUDFromGameState();
+	}
+}
+
+void ATCG_PlayerController::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	if (!bUseDebugHUDData)
+	{
 		RefreshMatchHUDFromGameState();
 	}
 }
@@ -73,6 +84,17 @@ void ATCG_PlayerController::SeedDebugMatchForHUDIfNeeded()
 	UE_LOG(LogTemp, Warning, TEXT("TCG UI: Seeded real debug match data for HUD preview"));
 }
 
+int32 ATCG_PlayerController::ResolveLocalPlayerIndex() const
+{
+	const ATCG_PlayerState* TCGPlayerState = GetPlayerState<ATCG_PlayerState>();
+	if (TCGPlayerState && TCGPlayerState->PlayerIndex != INDEX_NONE)
+	{
+		return TCGPlayerState->PlayerIndex;
+	}
+
+	return LocalPlayerIndex;
+}
+
 void ATCG_PlayerController::RefreshMatchHUDFromGameState()
 {
 	if (!IsLocalController() || !MatchHUDWidget)
@@ -86,7 +108,7 @@ void ATCG_PlayerController::RefreshMatchHUDFromGameState()
 		return;
 	}
 
-	SetMatchHUDData(BuildHUDDataFromGameState(*TCGGameState, LocalPlayerIndex));
+	SetMatchHUDData(BuildHUDDataFromGameState(*TCGGameState, ResolveLocalPlayerIndex()));
 }
 
 FTCGMatchHUDWidgetData ATCG_PlayerController::BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const
