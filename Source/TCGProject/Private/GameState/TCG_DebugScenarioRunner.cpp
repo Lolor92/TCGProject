@@ -276,7 +276,7 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 			ETCGCardElement::Water,
 			1,
 			1,
-			1);
+			2);
 
 		FTCGCardInstance* WrongOpponentUnit = GameState->FindCardInstance(WrongOpponentUnitId);
 		if (WrongOpponentUnit)
