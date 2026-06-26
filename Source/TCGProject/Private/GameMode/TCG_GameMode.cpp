@@ -2,10 +2,12 @@
 #include "GameFramework/PlayerController.h"
 #include "GameState/TCG_DebugScenarioRunner.h"
 #include "GameState/TCG_GameState.h"
+#include "Pawn/TCG_BoardCameraPawn.h"
 #include "PlayerState/TCG_PlayerState.h"
 
 ATCG_GameMode::ATCG_GameMode()
 {
+	DefaultPawnClass = ATCG_BoardCameraPawn::StaticClass();
 	GameStateClass = ATCG_GameState::StaticClass();
 	PlayerStateClass = ATCG_PlayerState::StaticClass();
 }
