@@ -7,6 +7,7 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "Framework/Application/SlateApplication.h"
 #include "GameFramework/Actor.h"
 #include "GameState/TCG_DebugScenarioRunner.h"
 #include "GameState/TCG_GameState.h"
@@ -160,6 +161,19 @@ void ATCG_PlayerController::SetupInputComponent()
 void ATCG_PlayerController::PlayerTick(const float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
+
+	if (bIsDraggingHandCard)
+	{
+		const bool bLeftMousePhysicallyDown = FSlateApplication::IsInitialized()
+			&& FSlateApplication::Get().GetPressedMouseButtons().Contains(EKeys::LeftMouseButton);
+
+		if (!bLeftMousePhysicallyDown)
+		{
+			EndHandCardDrag();
+			return;
+		}
+	}
+
 	DrawHandCardDragPreview();
 }
 
@@ -346,7 +360,8 @@ void ATCG_PlayerController::HandleHUDHandCardPressed(const int32 HandIndex, UObj
 
 void ATCG_PlayerController::HandleHUDHandCardReleased(const int32 HandIndex, UObject* SourceObject)
 {
-	EndHandCardDrag();
+	// UMG Button release can fire when capture changes while dragging away from the widget.
+	// The player controller ends drag from Slate's physical mouse-button state instead.
 }
 
 bool ATCG_PlayerController::CanSelectedHandCardPlayToZone(const FName ZoneId) const
