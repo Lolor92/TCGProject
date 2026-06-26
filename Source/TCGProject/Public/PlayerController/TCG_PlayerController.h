@@ -41,10 +41,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="TCG|UI|Placement")
 	void TryPlaySelectedHandCardToZone(FName ZoneId);
 
-	
 	UFUNCTION(BlueprintCallable, Category="TCG|UI|Placement")
 	void HandleCardZoneActorClicked(FName ZoneId);
-UFUNCTION(Client, Reliable)
+
+	UFUNCTION(Client, Reliable)
 	void ClientSetAssignedPlayerIndex(int32 NewPlayerIndex);
 
 	UFUNCTION(BlueprintPure, Category="TCG|UI")
@@ -106,20 +106,22 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
 	float DragPreviewLineThickness = 4.0f;
 
+	// Pixel padding around projected field-zone bounds for drag release. This is intentionally forgiving.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="0.0", UIMin="0.0"))
+	float DragDropZoneScreenPadding = 80.0f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="10.0", UIMin="10.0"))
-	float DragDropZoneSearchRadius = 180.0f;
+	float DragDropZoneScreenSearchRadius = 300.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
 	FGuid SelectedHandCardInstanceId;
 
-	
 	UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
 	bool bIsDraggingHandCard = false;
 
 	bool bSuppressNextZoneActorClick = false;
 
-	bool bWasLeftMouseDownDuringHandDrag = false;
-void PushDebugHUDData();
+	void PushDebugHUDData();
 	void SeedDebugMatchForHUDIfNeeded();
 	int32 ResolveLocalPlayerIndex() const;
 	void ApplyFixedBoardCamera();
@@ -129,13 +131,14 @@ void PushDebugHUDData();
 	bool TryResolveZoneIdFromActor(const AActor* Actor, FName& OutZoneId) const;
 	bool DoesActorMatchZoneId(const AActor* Actor, FName ZoneId) const;
 	void HandleBoardZoneClick();
-	
+
 	void EndHandCardDrag();
 	void DrawHandCardDragPreview();
 	bool GetCursorBoardPreviewLocation(FVector& OutPreviewLocation, FName& OutHoveredZoneId) const;
-	bool ResolveDragDropZoneFromCursor(FName& OutZoneId, FString& OutDebugHitName) const;
+	bool ResolveDragDropZoneFromCursor(FName& OutZoneId, FString& OutDebugInfo) const;
+	bool GetProjectedZoneScreenRect(const AActor& ZoneActor, FVector2D& OutMin, FVector2D& OutMax) const;
 	FString BuildPlacementSummaryLog(const ATCG_GameState& TCGGameState) const;
-FTCGCardWidgetData FindLocalHandCardDataByHandIndex(int32 HandIndex) const;
+	FTCGCardWidgetData FindLocalHandCardDataByHandIndex(int32 HandIndex) const;
 	FTCGMatchHUDWidgetData BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const;
 	FTCGCardWidgetData BuildCardWidgetDataFromCard(const ATCG_GameState& TCGGameState, const FTCGCardInstance& Card, int32 HandIndex) const;
 	FName GetCardElementName(ETCGCardElement Element) const;
@@ -143,14 +146,13 @@ FTCGCardWidgetData FindLocalHandCardDataByHandIndex(int32 HandIndex) const;
 	UFUNCTION()
 	void HandleHUDHandCardSelected(int32 HandIndex, UObject* SourceObject);
 
-	
-
 	UFUNCTION()
 	void HandleHUDHandCardPressed(int32 HandIndex, UObject* SourceObject);
 
 	UFUNCTION()
 	void HandleHUDHandCardReleased(int32 HandIndex, UObject* SourceObject);
-UFUNCTION(Server, Reliable)
+
+	UFUNCTION(Server, Reliable)
 	void ServerTryPlaySelectedHandCardToZone(FGuid CardInstanceId, FName ZoneId);
 
 	UFUNCTION(Client, Reliable)
