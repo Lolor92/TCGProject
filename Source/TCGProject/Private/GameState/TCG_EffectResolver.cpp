@@ -53,6 +53,189 @@ return true;
 return false;
 }
 
+static int32 CountMaterialsUnderUnitForActivationCheck(
+const ATCG_GameState* GameState,
+const FGuid& TopCardInstanceId)
+{
+if (!GameState || !TopCardInstanceId.IsValid())
+{
+return 0;
+}
+
+const FTCGCardInstance* TopCard = GameState->FindCardInstance(TopCardInstanceId);
+if (!TopCard || TopCard->Location != ETCGCardLocation::Board || !TopCard->StackId.IsValid())
+{
+return 0;
+}
+
+int32 Count = 0;
+for (const FTCGCardInstance& Card : GameState->MatchCards)
+{
+if (Card.Location == ETCGCardLocation::Board
+&& Card.StackId == TopCard->StackId
+&& Card.CardInstanceId != TopCard->CardInstanceId
+&& Card.StackIndex < TopCard->StackIndex)
+{
+Count++;
+}
+}
+
+return Count;
+}
+
+static bool DoesCardNameMatchFilterForActivationCheck(
+const FTCGCardInstance& Card,
+const FTCGEffectTargetFilter& Filter)
+{
+const FString CardDefinitionIdString = Card.CardDefinitionId.ToString();
+
+if (!Filter.NameContains.IsEmpty()
+&& !CardDefinitionIdString.Contains(Filter.NameContains, ESearchCase::IgnoreCase))
+{
+return false;
+}
+
+if (Filter.NameContainsAny.Num() <= 0)
+{
+return true;
+}
+
+for (const FString& NameOption : Filter.NameContainsAny)
+{
+if (!NameOption.IsEmpty()
+&& CardDefinitionIdString.Contains(NameOption, ESearchCase::IgnoreCase))
+{
+return true;
+}
+}
+
+return false;
+}
+
+static bool DoesTopBoardUnitMatchActivationFilter(
+const ATCG_GameState* GameState,
+const FTCGCardInstance& Card,
+const FTCGEffectTargetFilter& Filter,
+int32 ControllerPlayerIndex,
+const FGuid& SourceCardInstanceId)
+{
+if (!GameState)
+{
+return false;
+}
+
+const int32 RequiredOwner =
+Filter.OwnerMode == ETCGEffectTargetMode::Opponent
+? 1 - ControllerPlayerIndex
+: ControllerPlayerIndex;
+
+if (Card.OwnerPlayerIndex != RequiredOwner) return false;
+if (Card.Location != ETCGCardLocation::Board) return false;
+if (!Card.StackId.IsValid()) return false;
+if (Filter.RequiredLocation != ETCGCardLocation::None
+&& Filter.RequiredLocation != ETCGCardLocation::Board) return false;
+if (Filter.bRequireElement && Card.Element != Filter.RequiredElement) return false;
+if (Filter.bExcludeSourceCard && Card.CardInstanceId == SourceCardInstanceId) return false;
+if (!DoesCardNameMatchFilterForActivationCheck(Card, Filter)) return false;
+
+if (Filter.bRequireTopCard)
+{
+const FTCGCardInstance* TopCard = GameState->FindTopCardInStack(Card.StackId);
+if (!TopCard || TopCard->CardInstanceId != Card.CardInstanceId)
+{
+return false;
+}
+}
+
+return true;
+}
+
+static bool EffectHasMatchingMaterialDestroyStep(const FTCGCardEffectRef& EffectRef)
+{
+for (const FTCGEffectStep& Step : EffectRef.Steps)
+{
+if (Step.StepType == ETCGEffectStepType::DestroyUnitsWithMatchingMaterialCount)
+{
+return true;
+}
+}
+
+return false;
+}
+
+static bool HasValidMatchingMaterialDestroyPairForActivation(
+const ATCG_GameState* GameState,
+const FTCGCardEffectRef& EffectRef,
+int32 ControllerPlayerIndex,
+const FGuid& SourceCardInstanceId)
+{
+if (!GameState)
+{
+return false;
+}
+
+for (const FTCGEffectStep& Step : EffectRef.Steps)
+{
+if (Step.StepType != ETCGEffectStepType::DestroyUnitsWithMatchingMaterialCount)
+{
+continue;
+}
+
+FTCGEffectTargetFilter OwnFilter = Step.TargetFilter;
+OwnFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+OwnFilter.RequiredLocation = ETCGCardLocation::Board;
+OwnFilter.bRequireTopCard = true;
+
+FTCGEffectTargetFilter OpponentFilter = Step.SecondaryTargetFilter;
+OpponentFilter.OwnerMode = ETCGEffectTargetMode::Opponent;
+OpponentFilter.RequiredLocation = ETCGCardLocation::Board;
+OpponentFilter.bRequireTopCard = true;
+
+for (const FTCGCardInstance& OwnCard : GameState->MatchCards)
+{
+if (!DoesTopBoardUnitMatchActivationFilter(
+GameState,
+OwnCard,
+OwnFilter,
+ControllerPlayerIndex,
+SourceCardInstanceId))
+{
+continue;
+}
+
+const int32 OwnMaterialCount = CountMaterialsUnderUnitForActivationCheck(
+GameState,
+OwnCard.CardInstanceId);
+
+for (const FTCGCardInstance& OpponentCard : GameState->MatchCards)
+{
+if (!DoesTopBoardUnitMatchActivationFilter(
+GameState,
+OpponentCard,
+OpponentFilter,
+ControllerPlayerIndex,
+SourceCardInstanceId))
+{
+continue;
+}
+
+const int32 OpponentMaterialCount = CountMaterialsUnderUnitForActivationCheck(
+GameState,
+OpponentCard.CardInstanceId);
+
+if (OpponentMaterialCount == OwnMaterialCount)
+{
+return true;
+}
+}
+}
+
+return false;
+}
+
+return true;
+}
+
 static bool DoesSourceCardMatchSourceFilterForEffect(
 	const ATCG_GameState* GameState,
 	const FTCGCardInstance& SourceCard,
@@ -208,6 +391,23 @@ bool UTCG_EffectResolver::AddCardEffectRefToChain(ATCG_GameState* GameState, TAr
 	const bool bConvertedLegacyEffect = ConvertEffectResolverLegacyDebugEffectToSteps(ResolvedEffectRef);
 	if (ResolvedEffectRef.Steps.Num() <= 0) return false;
 	if (!DoesSourceCardMatchSourceFilterForEffect(GameState, *SourceCard, ResolvedEffectRef)) return false;
+
+	if (EffectHasMatchingMaterialDestroyStep(ResolvedEffectRef)
+		&& !HasValidMatchingMaterialDestroyPairForActivation(
+			GameState,
+			ResolvedEffectRef,
+			SourceCard->OwnerPlayerIndex,
+			SourceCardInstanceId))
+	{
+		if (bLogEffectResolverChainHelpers)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Chain skip Source=%s Reason=NoValidMatchingMaterialDestroyPair"),
+				*SourceCard->CardDefinitionId.ToString());
+		}
+
+		return false;
+	}
 
 	if (ResolvedEffectRef.Trigger == ETCGEffectTrigger::OnPlay
 		&& ResolvedEffectRef.TriggerFilter.bRequireTopCard
