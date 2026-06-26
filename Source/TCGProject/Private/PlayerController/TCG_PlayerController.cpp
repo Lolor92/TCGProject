@@ -49,6 +49,7 @@ void ATCG_PlayerController::CreateMatchHUD()
 	MatchHUDWidget = CreateWidget<UTCGMatchHUDWidgetBase>(this, MatchHUDWidgetClass);
 	if (MatchHUDWidget)
 	{
+		MatchHUDWidget->OnHUDHandCardSelected.AddUniqueDynamic(this, &ATCG_PlayerController::HandleHUDHandCardSelected);
 		MatchHUDWidget->AddToViewport();
 	}
 }
@@ -93,6 +94,106 @@ int32 ATCG_PlayerController::ResolveLocalPlayerIndex() const
 	}
 
 	return LocalPlayerIndex;
+}
+
+FTCGCardWidgetData ATCG_PlayerController::FindLocalHandCardDataByHandIndex(const int32 HandIndex) const
+{
+	if (!MatchHUDWidget)
+	{
+		return FTCGCardWidgetData();
+	}
+
+	const FTCGMatchHUDWidgetData& CurrentHUDData = MatchHUDWidget->GetHUDData();
+	for (const FTCGCardWidgetData& CardData : CurrentHUDData.LocalHand.Cards)
+	{
+		if (CardData.HandIndex == HandIndex)
+		{
+			return CardData;
+		}
+	}
+
+	return FTCGCardWidgetData();
+}
+
+void ATCG_PlayerController::HandleHUDHandCardSelected(const int32 HandIndex, UObject* SourceObject)
+{
+	const FTCGCardWidgetData SelectedCardData = FindLocalHandCardDataByHandIndex(HandIndex);
+	SelectedHandCardInstanceId = SelectedCardData.CardInstanceId;
+}
+
+bool ATCG_PlayerController::CanSelectedHandCardPlayToZone(const FName ZoneId) const
+{
+	if (!SelectedHandCardInstanceId.IsValid() || !GetWorld())
+	{
+		return false;
+	}
+
+	const ATCG_GameState* TCGGameState = GetWorld()->GetGameState<ATCG_GameState>();
+	if (!TCGGameState)
+	{
+		return false;
+	}
+
+	return TCGGameState->CanPlayerPlayCardToZone(ResolveLocalPlayerIndex(), SelectedHandCardInstanceId, ZoneId);
+}
+
+void ATCG_PlayerController::TryPlaySelectedHandCardToZone(const FName ZoneId)
+{
+	if (!SelectedHandCardInstanceId.IsValid())
+	{
+		return;
+	}
+
+	if (!CanSelectedHandCardPlayToZone(ZoneId))
+	{
+		return;
+	}
+
+	ServerTryPlaySelectedHandCardToZone(SelectedHandCardInstanceId, ZoneId);
+}
+
+void ATCG_PlayerController::ServerTryPlaySelectedHandCardToZone_Implementation(const FGuid CardInstanceId, const FName ZoneId)
+{
+	ATCG_GameState* TCGGameState = GetWorld() ? GetWorld()->GetGameState<ATCG_GameState>() : nullptr;
+	if (!TCGGameState)
+	{
+		return;
+	}
+
+	const int32 PlayerIndex = ResolveLocalPlayerIndex();
+	if (!TCGGameState->PlayerPlayCardToZone(PlayerIndex, CardInstanceId, ZoneId))
+	{
+		ClientRefreshMatchHUD();
+		return;
+	}
+
+	SelectedHandCardInstanceId.Invalidate();
+	RefreshAllLocalMatchHUDs();
+}
+
+void ATCG_PlayerController::ClientRefreshMatchHUD_Implementation()
+{
+	SelectedHandCardInstanceId.Invalidate();
+	RefreshMatchHUDFromGameState();
+}
+
+void ATCG_PlayerController::RefreshAllLocalMatchHUDs()
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		ATCG_PlayerController* TCGPlayerController = Cast<ATCG_PlayerController>(It->Get());
+		if (!TCGPlayerController)
+		{
+			continue;
+		}
+
+		TCGPlayerController->ClientRefreshMatchHUD();
+	}
 }
 
 void ATCG_PlayerController::RefreshMatchHUDFromGameState()
@@ -163,6 +264,7 @@ FTCGMatchHUDWidgetData ATCG_PlayerController::BuildHUDDataFromGameState(const AT
 FTCGCardWidgetData ATCG_PlayerController::BuildCardWidgetDataFromCard(const ATCG_GameState& TCGGameState, const FTCGCardInstance& Card, int32 HandIndex) const
 {
 	FTCGCardWidgetData CardData;
+	CardData.CardInstanceId = Card.CardInstanceId;
 
 	const UTCG_CardDefinition* CardDefinition = TCGGameState.FindDebugCardDefinitionById(Card.CardDefinitionId);
 	CardData.CardName = CardDefinition && !CardDefinition->DisplayName.IsEmpty()
