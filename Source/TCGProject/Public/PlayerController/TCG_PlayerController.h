@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
-#include "TimerManager.h"
 #include "UI/TCGUIDataTypes.h"
 #include "TCG_PlayerController.generated.h"
 
@@ -32,7 +31,6 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI")
 	TSubclassOf<UTCGMatchHUDWidgetBase> MatchHUDWidgetClass;
@@ -43,9 +41,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI")
 	int32 LocalPlayerIndex = 0;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI", meta=(ClampMin="0.05", UIMin="0.05"))
-	float HUDRefreshInterval = 0.25f;
-
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Debug")
 	bool bUseDebugHUDData = true;
 
@@ -54,11 +49,7 @@ protected:
 
 	void PushDebugHUDData();
 	void SeedDebugMatchForHUDIfNeeded();
-	void StartMatchHUDRefreshTimer();
-	void StopMatchHUDRefreshTimer();
 	FTCGMatchHUDWidgetData BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const;
 	FTCGCardWidgetData BuildCardWidgetDataFromCard(const ATCG_GameState& TCGGameState, const FTCGCardInstance& Card, int32 HandIndex) const;
 	FName GetCardElementName(ETCGCardElement Element) const;
-
-	FTimerHandle MatchHUDRefreshTimerHandle;
 };
