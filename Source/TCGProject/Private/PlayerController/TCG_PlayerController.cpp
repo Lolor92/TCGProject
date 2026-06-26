@@ -155,7 +155,18 @@ FTCGCardWidgetData ATCG_PlayerController::BuildCardWidgetDataFromCard(const ATCG
 	CardData.StackCount = 1;
 	CardData.MaterialCount = TCGGameState.GetCardsUnderneathCount(Card.CardInstanceId);
 	CardData.bIsTopCard = true;
-	CardData.bIsPlayable = TCGGameState.CanPlayerPlayCardToZone(Card.OwnerPlayerIndex, Card.CardInstanceId, ATCG_GameState::GetFieldZoneId(Card.OwnerPlayerIndex, 0));
+	CardData.bIsPlayable = false;
+
+	for (int32 FieldIndex = 0; FieldIndex < ATCG_GameState::FieldZoneCount; ++FieldIndex)
+	{
+		const FName ZoneId = ATCG_GameState::GetFieldZoneId(Card.OwnerPlayerIndex, FieldIndex);
+		if (TCGGameState.CanPlayerPlayCardToZone(Card.OwnerPlayerIndex, Card.CardInstanceId, ZoneId))
+		{
+			CardData.bIsPlayable = true;
+			break;
+		}
+	}
+
 	CardData.bCanOverlay = false;
 	CardData.ZoneLabel = Card.ZoneId.IsNone() ? FText::FromString(TEXT("Hand")) : FText::FromName(Card.ZoneId);
 
