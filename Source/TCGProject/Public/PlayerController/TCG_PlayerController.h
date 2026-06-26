@@ -35,6 +35,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="TCG|UI|Placement")
 	bool CanSelectedHandCardPlayToZone(FName ZoneId) const;
 
+	UFUNCTION(BlueprintPure, Category="TCG|UI|Placement")
+	TArray<FName> GetValidPlacementZoneIdsForSelectedHandCard() const;
+
 	UFUNCTION(BlueprintCallable, Category="TCG|UI|Placement")
 	void TryPlaySelectedHandCardToZone(FName ZoneId);
 
@@ -43,6 +46,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnRep_PlayerState() override;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI")
@@ -54,6 +58,18 @@ protected:
 	// Fallback used only before the replicated player index is available.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI")
 	int32 LocalPlayerIndex = 0;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|Camera")
+	FVector Player0CameraLocation = FVector(0.0f, -1200.0f, 900.0f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|Camera")
+	FRotator Player0CameraRotation = FRotator(-55.0f, 0.0f, 0.0f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|Camera")
+	FVector Player1CameraLocation = FVector(0.0f, 1200.0f, 900.0f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|Camera")
+	FRotator Player1CameraRotation = FRotator(-55.0f, 180.0f, 0.0f);
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Debug")
 	bool bUseDebugHUDData = true;
@@ -67,6 +83,7 @@ protected:
 	void PushDebugHUDData();
 	void SeedDebugMatchForHUDIfNeeded();
 	int32 ResolveLocalPlayerIndex() const;
+	void ApplyFixedBoardCamera();
 	void RefreshAllLocalMatchHUDs();
 	FTCGCardWidgetData FindLocalHandCardDataByHandIndex(int32 HandIndex) const;
 	FTCGMatchHUDWidgetData BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const;
