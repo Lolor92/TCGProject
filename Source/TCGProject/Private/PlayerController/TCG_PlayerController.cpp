@@ -164,13 +164,13 @@ void ATCG_PlayerController::PlayerTick(const float DeltaTime)
 	if (bIsDraggingHandCard)
 	{
 		const bool bLeftMouseDown = IsInputKeyDown(EKeys::LeftMouseButton);
-		if (bWasLeftMouseDownDuringHandDrag && !bLeftMouseDown)
+		if (!bLeftMouseDown)
 		{
 			EndHandCardDrag();
 			return;
 		}
 
-		bWasLeftMouseDownDuringHandDrag = bLeftMouseDown;
+		bWasLeftMouseDownDuringHandDrag = true;
 	}
 
 	DrawHandCardDragPreview();
