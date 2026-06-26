@@ -667,7 +667,11 @@ break;
 }
 }
 }
-const TSubclassOf<ATCG_CardVisualActor> VisualClass = CardVisualActorClass ? CardVisualActorClass : ATCG_CardVisualActor::StaticClass();
+TSubclassOf<ATCG_CardVisualActor> VisualClass = CardVisualActorClass;
+		if (!VisualClass)
+		{
+			VisualClass = ATCG_CardVisualActor::StaticClass();
+		}
 
 FActorSpawnParameters SpawnParams;
 SpawnParams.Owner = this;
