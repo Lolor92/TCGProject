@@ -5,6 +5,13 @@ static bool DoesCardNameMatchFilterForEffect(
 const FTCGCardInstance& Card,
 const FTCGEffectTargetFilter& Filter);
 
+static bool DoesCardMatchGenericEffectFilter(
+const ATCG_GameState* GameState,
+const FTCGCardInstance& Card,
+const FTCGEffectTargetFilter& Filter,
+int32 ControllerPlayerIndex,
+const FGuid& SourceCardInstanceId);
+
 namespace
 {
 	static bool DiscardSourcePreventMaterialLossByCardEffect(
@@ -85,6 +92,7 @@ case ETCGEffectStepType::MoveDeckCardToHand: return TEXT("MoveDeckCardToHand");
 		case ETCGEffectStepType::StealMaterials: return TEXT("StealMaterials");
 		case ETCGEffectStepType::DiscardSource: return TEXT("DiscardSource");
 		case ETCGEffectStepType::DestroyUnit: return TEXT("DestroyUnit");
+		case ETCGEffectStepType::DestroyUnitsWithMatchingMaterialCount: return TEXT("DestroyUnitsWithMatchingMaterialCount");
 		case ETCGEffectStepType::ReturnUnitToHand: return TEXT("ReturnUnitToHand");
 		case ETCGEffectStepType::BanishSource: return TEXT("BanishSource");
 		case ETCGEffectStepType::DrawCardsForBothPlayers: return TEXT("DrawCardsForBothPlayers");
@@ -1440,6 +1448,169 @@ GameState->ResolveEffectChain(DestroyedResponseChain);
 
 return bDestroyed;
 }
+
+
+static bool TryDestroySpecificUnitByCardEffect(
+ATCG_GameState* GameState,
+const FTCGEffectChainEntry& ChainEntry,
+const FGuid& UnitToDestroyId)
+{
+if (!GameState || !UnitToDestroyId.IsValid())
+{
+return false;
+}
+
+FTCGEffectChainEntry DestroyEntry = ChainEntry;
+DestroyEntry.TargetCardInstanceId = UnitToDestroyId;
+
+FTCGEffectStep DestroyStep;
+DestroyStep.StepType = ETCGEffectStepType::DestroyUnit;
+DestroyStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+
+return DestroyTargetUnitByCardEffect(GameState, DestroyEntry, DestroyStep);
+}
+
+static FTCGCardInstance* FindFirstFilteredTopUnitForMatchingMaterialEffect(
+ATCG_GameState* GameState,
+const FTCGEffectTargetFilter& Filter,
+int32 ControllerPlayerIndex,
+const FGuid& SourceCardInstanceId,
+int32 RequiredMaterialCount,
+bool bUseRequiredMaterialCount)
+{
+if (!GameState)
+{
+return nullptr;
+}
+
+for (FTCGCardInstance& Card : GameState->MatchCards)
+{
+if (!DoesCardMatchGenericEffectFilter(
+GameState,
+Card,
+Filter,
+ControllerPlayerIndex,
+SourceCardInstanceId))
+{
+continue;
+}
+
+if (Card.Location != ETCGCardLocation::Board || !Card.StackId.IsValid())
+{
+continue;
+}
+
+if (bUseRequiredMaterialCount
+&& CountMaterialsUnderUnitForEffect(GameState, Card.CardInstanceId) != RequiredMaterialCount)
+{
+continue;
+}
+
+return &Card;
+}
+
+return nullptr;
+}
+
+static bool DestroyUnitsWithMatchingMaterialCountGeneric(
+ATCG_GameState* GameState,
+FTCGEffectChainEntry& ChainEntry,
+const FTCGEffectStep& Step)
+{
+if (!GameState)
+{
+return false;
+}
+
+FTCGCardInstance* OwnUnit = nullptr;
+
+if (ChainEntry.SecondaryTargetCardInstanceId.IsValid())
+{
+FTCGCardInstance* SelectedUnit = GameState->FindCardInstance(ChainEntry.SecondaryTargetCardInstanceId);
+if (SelectedUnit
+&& SelectedUnit->Location == ETCGCardLocation::Board
+&& SelectedUnit->OwnerPlayerIndex == ChainEntry.ControllerPlayerIndex
+&& SelectedUnit->StackId.IsValid())
+{
+OwnUnit = SelectedUnit;
+}
+}
+
+if (!OwnUnit)
+{
+FTCGEffectTargetFilter OwnFilter = Step.TargetFilter;
+OwnFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+OwnFilter.RequiredLocation = ETCGCardLocation::Board;
+OwnFilter.bRequireTopCard = true;
+
+OwnUnit = FindFirstFilteredTopUnitForMatchingMaterialEffect(
+GameState,
+OwnFilter,
+ChainEntry.ControllerPlayerIndex,
+ChainEntry.SourceCardInstanceId,
+0,
+false);
+}
+
+if (!OwnUnit)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DestroyMatchingMaterialCount failed Reason=NoOwnUnit"));
+
+return false;
+}
+
+const FGuid OwnUnitId = OwnUnit->CardInstanceId;
+const FName OwnDefinitionId = OwnUnit->CardDefinitionId;
+const int32 MatchingMaterialCount = CountMaterialsUnderUnitForEffect(GameState, OwnUnitId);
+
+FTCGEffectTargetFilter OpponentFilter = Step.SecondaryTargetFilter;
+OpponentFilter.OwnerMode = ETCGEffectTargetMode::Opponent;
+OpponentFilter.RequiredLocation = ETCGCardLocation::Board;
+OpponentFilter.bRequireTopCard = true;
+
+FTCGCardInstance* OpponentUnit = FindFirstFilteredTopUnitForMatchingMaterialEffect(
+GameState,
+OpponentFilter,
+ChainEntry.ControllerPlayerIndex,
+ChainEntry.SourceCardInstanceId,
+MatchingMaterialCount,
+true);
+
+if (!OpponentUnit)
+{
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DestroyMatchingMaterialCount failed Own=%s Materials=%d Reason=NoOpponentUnitWithSameMaterials"),
+*OwnDefinitionId.ToString(),
+MatchingMaterialCount);
+
+return false;
+}
+
+const FGuid OpponentUnitId = OpponentUnit->CardInstanceId;
+const FName OpponentDefinitionId = OpponentUnit->CardDefinitionId;
+
+const bool bOwnDestroyResolved = TryDestroySpecificUnitByCardEffect(
+GameState,
+ChainEntry,
+OwnUnitId);
+
+const bool bOpponentDestroyResolved = TryDestroySpecificUnitByCardEffect(
+GameState,
+ChainEntry,
+OpponentUnitId);
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: DestroyMatchingMaterialCount Own=%s Opponent=%s Materials=%d OwnResolved=%s OpponentResolved=%s Success=%s"),
+*OwnDefinitionId.ToString(),
+*OpponentDefinitionId.ToString(),
+MatchingMaterialCount,
+bOwnDestroyResolved ? TEXT("true") : TEXT("false"),
+bOpponentDestroyResolved ? TEXT("true") : TEXT("false"),
+(bOwnDestroyResolved && bOpponentDestroyResolved) ? TEXT("true") : TEXT("false"));
+
+return bOwnDestroyResolved && bOpponentDestroyResolved;
+}
 }
 
 bool ATCG_GameState::AddCardEffectRefToChain(TArray<FTCGEffectChainEntry>& Chain, const FGuid& SourceCardInstanceId, const FGuid& TargetCardInstanceId, const FTCGCardEffectRef& EffectRef)
@@ -2701,6 +2872,18 @@ break;
 				TEXT("TCG Effect: Step DestroyUnit Player=%d TargetMode=%s Success=%s"),
 				ChainEntry.ControllerPlayerIndex,
 				GetTCGEffectTargetModeDebugName(Step.TargetMode),
+				bStepSucceeded ? TEXT("true") : TEXT("false"));
+		}
+		break;
+	}
+	case ETCGEffectStepType::DestroyUnitsWithMatchingMaterialCount:
+	{
+		bStepSucceeded = DestroyUnitsWithMatchingMaterialCountGeneric(this, ChainEntry, Step);
+		if (bLogEffectResolution)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("TCG Effect: Step DestroyUnitsWithMatchingMaterialCount Player=%d Success=%s"),
+				ChainEntry.ControllerPlayerIndex,
 				bStepSucceeded ? TEXT("true") : TEXT("false"));
 		}
 		break;
