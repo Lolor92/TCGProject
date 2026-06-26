@@ -3,7 +3,9 @@
 #include "Board/TCG_BoardLayoutActor.h"
 #include "Components/BoxComponent.h"
 #include "Components/TextRenderComponent.h"
+#include "GameState/TCG_GameState.h"
 #include "Net/UnrealNetwork.h"
+#include "PlayerController/TCG_PlayerController.h"
 
 namespace
 {
@@ -31,6 +33,9 @@ FString ZoneTypeToString(const ETCGCardZoneType ZoneType)
 
 ATCG_CardZoneActor::ATCG_CardZoneActor()
 {
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = true;
+
 	bReplicates = true;
 	bAlwaysRelevant = true;
 	SetReplicateMovement(true);
@@ -40,7 +45,10 @@ ATCG_CardZoneActor::ATCG_CardZoneActor()
 
 	DebugBounds = CreateDefaultSubobject<UBoxComponent>(TEXT("DebugBounds"));
 	DebugBounds->SetupAttachment(SceneRoot);
-	DebugBounds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	DebugBounds->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	DebugBounds->SetCollisionObjectType(ECC_WorldDynamic);
+	DebugBounds->SetCollisionResponseToAllChannels(ECR_Ignore);
+	DebugBounds->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	DebugBounds->SetGenerateOverlapEvents(false);
 	DebugBounds->SetHiddenInGame(!bShowDebugShapeInGame);
 	DebugBounds->bDrawOnlyIfSelected = false;
@@ -52,6 +60,28 @@ ATCG_CardZoneActor::ATCG_CardZoneActor()
 	ZoneLabel->SetWorldSize(24.0f);
 	ZoneLabel->SetHiddenInGame(!bShowDebugShapeInGame || !bShowLabel);
 	ZoneLabel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
+void ATCG_CardZoneActor::BeginPlay()
+{
+	Super::BeginPlay();
+
+	OnClicked.AddUniqueDynamic(this, &ATCG_CardZoneActor::HandleZoneClicked);
+	RefreshPlacementHighlight();
+}
+
+void ATCG_CardZoneActor::Tick(const float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	PlacementHighlightRefreshAccumulator += DeltaSeconds;
+	if (PlacementHighlightRefreshAccumulator < PlacementHighlightRefreshInterval)
+	{
+		return;
+	}
+
+	PlacementHighlightRefreshAccumulator = 0.0f;
+	RefreshPlacementHighlight();
 }
 
 void ATCG_CardZoneActor::OnConstruction(const FTransform& Transform)
@@ -67,6 +97,16 @@ void ATCG_CardZoneActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 
 	DOREPLIFETIME(ATCG_CardZoneActor, ZoneId);
 	DOREPLIFETIME(ATCG_CardZoneActor, CustomLabel);
+}
+
+FName ATCG_CardZoneActor::GetGameplayZoneName() const
+{
+	if (ZoneId.ZoneType == ETCGCardZoneType::Field)
+	{
+		return ATCG_GameState::GetFieldZoneId(ZoneId.PlayerIndex, ZoneId.ZoneIndex);
+	}
+
+	return ZoneId.ZoneName;
 }
 
 FText ATCG_CardZoneActor::GetResolvedLabel() const
@@ -106,6 +146,7 @@ void ATCG_CardZoneActor::ConfigureZone(
 	bShowDebugShapeInGame = bNewShowDebugShapeInGame;
 
 	UpdateVisuals();
+	RefreshPlacementHighlight();
 }
 
 void ATCG_CardZoneActor::SetPlacementAnchor(ATCG_BoardLayoutActor* NewPlacementAnchor)
@@ -164,14 +205,59 @@ void ATCG_CardZoneActor::UpdateVisuals()
 {
 	DebugBounds->SetBoxExtent(DebugBoxExtent);
 	DebugBounds->SetRelativeRotation(DebugVisualRotation);
-	DebugBounds->ShapeColor = DebugColor;
-	DebugBounds->SetHiddenInGame(!bShowDebugShapeInGame);
+	DebugBounds->ShapeColor = bPlacementHighlightActive ? PlacementHighlightColor : DebugColor;
+	DebugBounds->SetHiddenInGame(!bShowDebugShapeInGame && !bPlacementHighlightActive);
 
 	ZoneLabel->SetText(GetResolvedLabel());
-	ZoneLabel->SetTextRenderColor(DebugColor);
+	ZoneLabel->SetTextRenderColor(bPlacementHighlightActive ? PlacementHighlightColor : DebugColor);
 	ZoneLabel->SetRelativeLocation(FVector(0.0, 0.0, DebugBoxExtent.Z + LabelHeightOffset));
 	ZoneLabel->SetRelativeRotation(DebugVisualRotation + FRotator(90.0, 0.0, 0.0));
 	ZoneLabel->SetRelativeScale3D(FVector(LabelScale));
 	ZoneLabel->SetVisibility(bShowLabel);
-	ZoneLabel->SetHiddenInGame(!bShowDebugShapeInGame || !bShowLabel);
+	ZoneLabel->SetHiddenInGame((!bShowDebugShapeInGame && !bPlacementHighlightActive) || !bShowLabel);
+}
+
+void ATCG_CardZoneActor::RefreshPlacementHighlight()
+{
+	if (ZoneId.ZoneType != ETCGCardZoneType::Field || !GetWorld())
+	{
+		SetPlacementHighlightActive(false);
+		return;
+	}
+
+	ATCG_PlayerController* TCGPlayerController = Cast<ATCG_PlayerController>(GetWorld()->GetFirstPlayerController());
+	if (!TCGPlayerController)
+	{
+		SetPlacementHighlightActive(false);
+		return;
+	}
+
+	SetPlacementHighlightActive(TCGPlayerController->CanSelectedHandCardPlayToZone(GetGameplayZoneName()));
+}
+
+void ATCG_CardZoneActor::SetPlacementHighlightActive(const bool bActive)
+{
+	if (bPlacementHighlightActive == bActive)
+	{
+		return;
+	}
+
+	bPlacementHighlightActive = bActive;
+	UpdateVisuals();
+}
+
+void ATCG_CardZoneActor::HandleZoneClicked(AActor* TouchedActor, FKey ButtonPressed)
+{
+	if (ZoneId.ZoneType != ETCGCardZoneType::Field || !GetWorld())
+	{
+		return;
+	}
+
+	ATCG_PlayerController* TCGPlayerController = Cast<ATCG_PlayerController>(GetWorld()->GetFirstPlayerController());
+	if (!TCGPlayerController)
+	{
+		return;
+	}
+
+	TCGPlayerController->TryPlaySelectedHandCardToZone(GetGameplayZoneName());
 }
