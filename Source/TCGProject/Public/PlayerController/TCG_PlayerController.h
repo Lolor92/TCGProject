@@ -41,6 +41,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="TCG|UI|Placement")
 	void TryPlaySelectedHandCardToZone(FName ZoneId);
 
+	UFUNCTION(Client, Reliable)
+	void ClientSetAssignedPlayerIndex(int32 NewPlayerIndex);
+
 	UFUNCTION(BlueprintPure, Category="TCG|UI")
 	UTCGMatchHUDWidgetBase* GetMatchHUDWidget() const { return MatchHUDWidget; }
 
@@ -58,6 +61,9 @@ protected:
 	// Fallback used only before the replicated player index is available.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI")
 	int32 LocalPlayerIndex = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category="TCG|UI")
+	int32 AssignedLocalPlayerIndex = INDEX_NONE;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|Camera")
 	FVector Player0CameraLocation = FVector(0.0f, -1200.0f, 900.0f);
