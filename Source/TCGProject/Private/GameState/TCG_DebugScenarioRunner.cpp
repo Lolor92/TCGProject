@@ -17,10 +17,11 @@ namespace
 		FilteredMaterialDefense,
 		GraveyardPilotMachineAttach,
 		MatchingMaterialDestroy,
+		MatchingMaterialDestroyNoTargets,
 		OverdrivePilotKaia
 	};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::MatchingMaterialDestroy;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::MatchingMaterialDestroyNoTargets;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
@@ -125,6 +126,199 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 
 
 
+
+	if (DebugRunnerScenario == ETCGDebugRunnerScenario::MatchingMaterialDestroyNoTargets)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Matching material destroy no targets scenario start"));
+
+		GameState->MatchCards.Empty();
+		GameState->SetMatchResult(ETCGMatchResult::None);
+		GameState->SetPhase(ETCGMatchPhase::Battle);
+		GameState->RoundNumber = 1;
+		GameState->TurnNumber = 1;
+		GameState->PlacementStepIndex = 0;
+		GameState->SetCurrentTurnPlayer(INDEX_NONE);
+		GameState->ClearPendingDiscardChoice();
+		GameState->ClearPendingGraveyardToDeckChoice();
+
+		GameState->DebugCardDefinitions.RemoveAll([](const TObjectPtr<UTCG_CardDefinition>& Definition)
+		{
+			return Definition
+				&& (Definition->CardDefinitionId == "Debug_MatchingMaterialDestroy_NoTargets_Attacker"
+					|| Definition->CardDefinitionId == "Debug_MatchingMaterialDestroy_NoTargets_OwnUnit");
+		});
+
+		auto MakeDefinition = [GameState](
+			FName CardDefinitionId,
+			const TCHAR* DisplayName,
+			ETCGCardElement Element,
+			int32 BaseAttack)
+		{
+			UTCG_CardDefinition* Definition = NewObject<UTCG_CardDefinition>(GameState);
+			Definition->CardDefinitionId = CardDefinitionId;
+			Definition->DisplayName = FText::FromString(DisplayName);
+			Definition->Element = Element;
+			Definition->BaseAttack = BaseAttack;
+			return Definition;
+		};
+
+		UTCG_CardDefinition* AttackerDefinition = MakeDefinition(
+			"Debug_MatchingMaterialDestroy_NoTargets_Attacker",
+			TEXT("Debug Matching Material Destroy No Targets Attacker"),
+			ETCGCardElement::Dark,
+			10);
+
+		FTCGCardEffectRef AttackEffect;
+		AttackEffect.Trigger = ETCGEffectTrigger::OnAttack;
+		AttackEffect.bOptional = true;
+		AttackEffect.TriggerFilter.bRequireTopCard = true;
+
+		FTCGEffectStep SelectOwnUnitStep;
+		SelectOwnUnitStep.StepType = ETCGEffectStepType::SelectTarget;
+		SelectOwnUnitStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		SelectOwnUnitStep.TargetFilter.RequiredLocation = ETCGCardLocation::Board;
+		SelectOwnUnitStep.TargetFilter.bRequireTopCard = true;
+		SelectOwnUnitStep.TargetFilter.NameContains = "NoTargets_OwnUnit";
+		AttackEffect.Steps.Add(SelectOwnUnitStep);
+
+		FTCGEffectStep SelectOpponentUnitStep;
+		SelectOpponentUnitStep.StepType = ETCGEffectStepType::SelectTarget;
+		SelectOpponentUnitStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Opponent;
+		SelectOpponentUnitStep.TargetFilter.RequiredLocation = ETCGCardLocation::Board;
+		SelectOpponentUnitStep.TargetFilter.bRequireTopCard = true;
+		SelectOpponentUnitStep.TargetFilter.bRequireSameMaterialCountAsFirstSelectedTarget = true;
+		SelectOpponentUnitStep.TargetFilter.NameContains = "NoTargets_OpponentUnit";
+		SelectOpponentUnitStep.bRequiresPreviousStepSuccess = true;
+		AttackEffect.Steps.Add(SelectOpponentUnitStep);
+
+		FTCGEffectStep DestroyMatchingStep;
+		DestroyMatchingStep.StepType = ETCGEffectStepType::DestroyUnitsWithMatchingMaterialCount;
+		DestroyMatchingStep.bRequiresPreviousStepSuccess = true;
+		AttackEffect.Steps.Add(DestroyMatchingStep);
+
+		AttackerDefinition->Effects.Add(AttackEffect);
+
+		UTCG_CardDefinition* OwnUnitDefinition = MakeDefinition(
+			"Debug_MatchingMaterialDestroy_NoTargets_OwnUnit",
+			TEXT("Debug No Targets Own Unit"),
+			ETCGCardElement::Light,
+			1);
+
+		GameState->DebugCardDefinitions.Add(AttackerDefinition);
+		GameState->DebugCardDefinitions.Add(OwnUnitDefinition);
+
+		FTCGCardInstance* AttackerCard = GameState->AddCardInstanceFromDefinition(
+			AttackerDefinition,
+			0,
+			ETCGCardLocation::Board);
+		const FGuid AttackerId = AttackerCard ? AttackerCard->CardInstanceId : FGuid();
+
+		FTCGCardInstance* OwnUnit = GameState->AddCardInstanceFromDefinition(
+			OwnUnitDefinition,
+			0,
+			ETCGCardLocation::Board);
+		const FGuid OwnUnitId = OwnUnit ? OwnUnit->CardInstanceId : FGuid();
+
+		if (!AttackerCard || !OwnUnit || !AttackerId.IsValid() || !OwnUnitId.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Matching material destroy no targets setup failed"));
+			GameState->EndMatch(ETCGMatchResult::Draw);
+			return;
+		}
+
+		AttackerCard->ZoneId = ATCG_GameState::GetFieldZoneId(0, 0);
+		AttackerCard->StackId = FGuid::NewGuid();
+		AttackerCard->StackIndex = 0;
+
+		OwnUnit->ZoneId = ATCG_GameState::GetFieldZoneId(0, 1);
+		OwnUnit->StackId = FGuid::NewGuid();
+		OwnUnit->StackIndex = 2;
+
+		auto AddMaterialUnderUnit = [GameState](const FGuid& TopUnitId, FName MaterialName, int32 OwnerPlayerIndex, int32 StackIndex)
+		{
+			FTCGCardInstance* TopUnit = GameState->FindCardInstance(TopUnitId);
+			if (!TopUnit)
+			{
+				return FGuid();
+			}
+
+			FTCGCardInstance& Material = GameState->AddCardInstance(
+				MaterialName,
+				ETCGCardElement::Earth,
+				1,
+				OwnerPlayerIndex,
+				ETCGCardLocation::Board);
+
+			Material.ZoneId = TopUnit->ZoneId;
+			Material.StackId = TopUnit->StackId;
+			Material.StackIndex = StackIndex;
+			return Material.CardInstanceId;
+		};
+
+		AddMaterialUnderUnit(OwnUnitId, "Debug_MatchingMaterialDestroy_NoTargets_OwnMatA", 0, 0);
+		AddMaterialUnderUnit(OwnUnitId, "Debug_MatchingMaterialDestroy_NoTargets_OwnMatB", 0, 1);
+
+		const FGuid OpponentUnitId = AddDebugBoardUnit(
+			"Debug_MatchingMaterialDestroy_NoTargets_OpponentUnit",
+			ETCGCardElement::Water,
+			1,
+			1,
+			0);
+
+		FTCGCardInstance* OpponentUnit = GameState->FindCardInstance(OpponentUnitId);
+		if (OpponentUnit)
+		{
+			OpponentUnit->StackIndex = 1;
+		}
+
+		AddMaterialUnderUnit(OpponentUnitId, "Debug_MatchingMaterialDestroy_NoTargets_OppMatA", 1, 0);
+
+		TArray<FTCGEffectChainEntry> AttackChain;
+		TArray<FTCGCardEffectRef> AttackEffectRefs;
+		GameState->GetPrintedEffectRefsForCard(*AttackerCard, AttackEffectRefs);
+
+		for (const FTCGCardEffectRef& EffectRef : AttackEffectRefs)
+		{
+			if (GameState->DoesCardEffectMatchTrigger(EffectRef, ETCGEffectTrigger::OnAttack))
+			{
+				GameState->AddCardEffectRefToChain(AttackChain, AttackerId, OpponentUnitId, EffectRef);
+			}
+		}
+
+		const int32 OwnMaterials = CountMaterialsUnderUnit(OwnUnitId);
+		const int32 OpponentMaterials = CountMaterialsUnderUnit(OpponentUnitId);
+		const bool bChainEmpty = AttackChain.Num() == 0;
+
+		const FTCGCardInstance* OwnAfter = GameState->FindCardInstance(OwnUnitId);
+		const FTCGCardInstance* OpponentAfter = GameState->FindCardInstance(OpponentUnitId);
+
+		const bool bOwnStayedBoard =
+			OwnAfter
+			&& OwnAfter->Location == ETCGCardLocation::Board;
+
+		const bool bOpponentStayedBoard =
+			OpponentAfter
+			&& OpponentAfter->Location == ETCGCardLocation::Board;
+
+		const bool bExpectedAll =
+			bChainEmpty
+			&& OwnMaterials == 2
+			&& OpponentMaterials == 1
+			&& bOwnStayedBoard
+			&& bOpponentStayedBoard;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: MatchingMaterialDestroyNoTargets summary ChainCount=%d OwnMaterials=%d OpponentMaterials=%d OwnStayed=%s OpponentStayed=%s ExpectedAll=%s"),
+			AttackChain.Num(),
+			OwnMaterials,
+			OpponentMaterials,
+			bOwnStayedBoard ? TEXT("true") : TEXT("false"),
+			bOpponentStayedBoard ? TEXT("true") : TEXT("false"),
+			bExpectedAll ? TEXT("true") : TEXT("false"));
+
+		GameState->EndMatch(ETCGMatchResult::Draw);
+		return;
+	}
 
 	if (DebugRunnerScenario == ETCGDebugRunnerScenario::MatchingMaterialDestroy)
 	{
