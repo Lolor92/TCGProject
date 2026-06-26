@@ -12,6 +12,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Pawn/TCG_BoardCameraPawn.h"
 #include "PlayerState/TCG_PlayerState.h"
+#include "TimerManager.h"
 #include "UI/TCGMatchHUDWidgetBase.h"
 
 namespace
@@ -636,6 +637,20 @@ void ATCG_PlayerController::ClientRefreshMatchHUD_Implementation()
 	SelectedHandCardInstanceId.Invalidate();
 	ClearPlacementHighlights();
 	RefreshMatchHUDFromGameState();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			RefreshMatchHUDFromGameState();
+		}));
+
+		FTimerHandle DelayedHUDRefreshHandle;
+		World->GetTimerManager().SetTimer(DelayedHUDRefreshHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			RefreshMatchHUDFromGameState();
+		}), 0.10f, false);
+	}
 }
 
 void ATCG_PlayerController::RefreshAllLocalMatchHUDs()
