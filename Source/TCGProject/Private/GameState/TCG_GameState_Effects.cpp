@@ -1898,6 +1898,10 @@ else if (Step.TargetMode == ETCGEffectTargetMode::TriggerTarget)
 {
 TargetUnitId = ChainEntry.TargetCardInstanceId;
 }
+else if (Step.TargetMode == ETCGEffectTargetMode::SelectedTarget)
+{
+TargetUnitId = ChainEntry.SecondaryTargetCardInstanceId;
+}
 else
 {
 UE_LOG(LogTemp, Warning,
