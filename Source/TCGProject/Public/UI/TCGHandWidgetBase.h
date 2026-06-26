@@ -5,6 +5,9 @@
 #include "UI/TCGUIDataTypes.h"
 #include "TCGHandWidgetBase.generated.h"
 
+class UPanelWidget;
+class UTCGCardWidgetBase;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FTCGHandCardSelectedSignature, int32, HandIndex, UObject*, SourceObject);
 
 UCLASS(Abstract, Blueprintable)
@@ -18,6 +21,12 @@ void SetHandData(const FTCGHandWidgetData& InHandData);
 
 UFUNCTION(BlueprintPure, Category="TCG|UI|Hand")
 const FTCGHandWidgetData& GetHandData() const { return HandData; }
+
+UFUNCTION(BlueprintCallable, Category="TCG|UI|Hand")
+void SetCardWidgetClass(TSubclassOf<UTCGCardWidgetBase> InCardWidgetClass);
+
+UFUNCTION(BlueprintCallable, Category="TCG|UI|Hand")
+void RebuildHandCards();
 
 UFUNCTION(BlueprintCallable, Category="TCG|UI|Hand")
 void SelectHandCard(int32 HandIndex);
@@ -34,6 +43,21 @@ FTCGHandCardSelectedSignature OnHandCardSelected;
 protected:
 UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="TCG|UI|Hand")
 FTCGHandWidgetData HandData;
+
+UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="TCG|UI|Hand")
+TSubclassOf<UTCGCardWidgetBase> CardWidgetClass;
+
+UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="TCG|UI|Hand")
+bool bAutoRebuildCardWidgets = true;
+
+UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional), Category="TCG|UI|Hand")
+TObjectPtr<UPanelWidget> CardContainer = nullptr;
+
+UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Hand")
+TArray<TObjectPtr<UTCGCardWidgetBase>> SpawnedCardWidgets;
+
+UFUNCTION()
+void HandleCardWidgetClicked(int32 HandIndex, UObject* SourceObject);
 
 UFUNCTION(BlueprintImplementableEvent, Category="TCG|UI|Hand")
 void BP_OnHandDataChanged();
