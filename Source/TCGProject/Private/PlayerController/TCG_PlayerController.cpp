@@ -17,6 +17,12 @@
 #include "TimerManager.h"
 #include "UI/TCGMatchHUDWidgetBase.h"
 
+#if PLATFORM_WINDOWS
+#include "Windows/AllowWindowsPlatformTypes.h"
+#include <Windows.h>
+#include "Windows/HideWindowsPlatformTypes.h"
+#endif
+
 namespace
 {
 	void TCGScreenDebug(const UObject* WorldContextObject, const FString& Message, const FColor& Color = FColor::Yellow)
@@ -155,8 +161,24 @@ void ATCG_PlayerController::SetupInputComponent()
 
 void ATCG_PlayerController::PlayerTick(const float DeltaTime)
 {
-	Super::PlayerTick(DeltaTime);
-	DrawHandCardDragPreview();
+Super::PlayerTick(DeltaTime);
+
+if (bIsDraggingHandCard)
+{
+#if PLATFORM_WINDOWS
+const bool bLeftMouseDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+#else
+const bool bLeftMouseDown = IsInputKeyDown(EKeys::LeftMouseButton);
+#endif
+
+if (!bLeftMouseDown)
+{
+EndHandCardDrag();
+return;
+}
+}
+
+DrawHandCardDragPreview();
 }
 
 void ATCG_PlayerController::OnPossess(APawn* InPawn)
