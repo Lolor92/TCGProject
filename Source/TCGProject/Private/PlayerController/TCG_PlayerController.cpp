@@ -332,7 +332,6 @@ void ATCG_PlayerController::HandleHUDHandCardPressed(const int32 HandIndex, UObj
 	// The hand widget already selects on press before broadcasting this event.
 	// Do not select again here, or the log/detail/highlight path fires multiple times.
 	bIsDraggingHandCard = SelectedHandCardInstanceId.IsValid();
-	bWasLeftMouseDownDuringHandDrag = false;
 	bSuppressNextZoneActorClick = false;
 
 	if (bIsDraggingHandCard)
@@ -425,7 +424,6 @@ void ATCG_PlayerController::EndHandCardDrag()
 	}
 
 	bIsDraggingHandCard = false;
-	bWasLeftMouseDownDuringHandDrag = false;
 	FlushPersistentDebugLines(GetWorld());
 
 	if (!SelectedHandCardInstanceId.IsValid())
@@ -448,48 +446,72 @@ void ATCG_PlayerController::EndHandCardDrag()
 }
 
 
+bool ATCG_PlayerController::GetProjectedZoneScreenRect(const AActor& ZoneActor, FVector2D& OutMin, FVector2D& OutMax) const
+{
+FVector Origin = ZoneActor.GetActorLocation();
+FVector Extent(100.0f, 70.0f, 8.0f);
+ZoneActor.GetActorBounds(true, Origin, Extent);
+
+Extent.X = FMath::Max(Extent.X, 100.0f);
+Extent.Y = FMath::Max(Extent.Y, 70.0f);
+Extent.Z = FMath::Max(Extent.Z, 8.0f);
+
+bool bProjectedAnyCorner = false;
+OutMin = FVector2D(FLT_MAX, FLT_MAX);
+OutMax = FVector2D(-FLT_MAX, -FLT_MAX);
+
+for (int32 XSign = -1; XSign <= 1; XSign += 2)
+{
+for (int32 YSign = -1; YSign <= 1; YSign += 2)
+{
+for (int32 ZSign = -1; ZSign <= 1; ZSign += 2)
+{
+const FVector Corner = Origin + FVector(Extent.X * XSign, Extent.Y * YSign, Extent.Z * ZSign);
+FVector2D ScreenPoint;
+if (ProjectWorldLocationToScreen(Corner, ScreenPoint, true))
+{
+bProjectedAnyCorner = true;
+OutMin.X = FMath::Min(OutMin.X, ScreenPoint.X);
+OutMin.Y = FMath::Min(OutMin.Y, ScreenPoint.Y);
+OutMax.X = FMath::Max(OutMax.X, ScreenPoint.X);
+OutMax.Y = FMath::Max(OutMax.Y, ScreenPoint.Y);
+}
+}
+}
+}
+
+return bProjectedAnyCorner;
+}
+
 bool ATCG_PlayerController::ResolveDragDropZoneFromCursor(FName& OutZoneId, FString& OutDebugHitName) const
 {
 OutZoneId = NAME_None;
 OutDebugHitName = TEXT("nothing");
 
-if (!GetWorld() || !SelectedHandCardInstanceId.IsValid())
+float MouseX = 0.0f;
+float MouseY = 0.0f;
+if (!GetMousePosition(MouseX, MouseY))
 {
+OutDebugHitName = TEXT("no mouse position");
 return false;
 }
 
-FVector CursorWorldPoint = FVector::ZeroVector;
-
-FHitResult HitResult;
-if (GetHitResultUnderCursor(ECC_Visibility, true, HitResult))
+const FVector2D MouseScreenPosition(MouseX, MouseY);
+const TArray<FName> ValidZoneIds = GetValidPlacementZoneIdsForSelectedHandCard();
+if (ValidZoneIds.Num() == 0)
 {
-CursorWorldPoint = HitResult.ImpactPoint;
-OutDebugHitName = GetNameSafe(HitResult.GetActor());
-}
-else
-{
-FVector WorldOrigin = FVector::ZeroVector;
-FVector WorldDirection = FVector::ForwardVector;
-if (!DeprojectMousePositionToWorld(WorldOrigin, WorldDirection) || FMath::IsNearlyZero(WorldDirection.Z))
-{
+OutDebugHitName = TEXT("no valid zones");
 return false;
-}
-
-const float DistanceToBoardPlane = -WorldOrigin.Z / WorldDirection.Z;
-if (DistanceToBoardPlane < 0.0f)
-{
-return false;
-}
-
-CursorWorldPoint = WorldOrigin + (WorldDirection * DistanceToBoardPlane);
 }
 
 TArray<AActor*> ZoneActors;
 UGameplayStatics::GetAllActorsOfClass(this, ATCG_CardZoneActor::StaticClass(), ZoneActors);
 
-float BestDistanceSq = FMath::Square(DragDropZoneSearchRadius);
+float BestDistanceSq = FMath::Square(DragDropZoneScreenSearchRadius);
 FName BestZoneId = NAME_None;
 FString BestZoneName;
+float ClosestAnyDistanceSq = FLT_MAX;
+FString ClosestAnyZoneName;
 
 for (AActor* Actor : ZoneActors)
 {
@@ -500,13 +522,42 @@ continue;
 }
 
 const FName CandidateZoneId = ZoneActor->GetGameplayZoneName();
-if (!CanSelectedHandCardPlayToZone(CandidateZoneId))
+if (!ValidZoneIds.Contains(CandidateZoneId))
 {
 continue;
 }
 
-const FVector ZoneLocation = ZoneActor->GetActorLocation();
-const float DistanceSq = FVector::DistSquared2D(CursorWorldPoint, ZoneLocation);
+FVector2D ScreenMin;
+FVector2D ScreenMax;
+if (!GetProjectedZoneScreenRect(*ZoneActor, ScreenMin, ScreenMax))
+{
+continue;
+}
+
+ScreenMin -= FVector2D(DragDropZoneScreenPadding, DragDropZoneScreenPadding);
+ScreenMax += FVector2D(DragDropZoneScreenPadding, DragDropZoneScreenPadding);
+
+const FVector2D ScreenCenter = (ScreenMin + ScreenMax) * 0.5f;
+const float DistanceSq = FVector2D::DistSquared(MouseScreenPosition, ScreenCenter);
+if (DistanceSq < ClosestAnyDistanceSq)
+{
+ClosestAnyDistanceSq = DistanceSq;
+ClosestAnyZoneName = FString::Printf(TEXT("%s dist %.1f"), *GetNameSafe(ZoneActor), FMath::Sqrt(DistanceSq));
+}
+
+const bool bInsideScreenRect =
+MouseScreenPosition.X >= ScreenMin.X
+&& MouseScreenPosition.X <= ScreenMax.X
+&& MouseScreenPosition.Y >= ScreenMin.Y
+&& MouseScreenPosition.Y <= ScreenMax.Y;
+
+if (bInsideScreenRect)
+{
+OutZoneId = CandidateZoneId;
+OutDebugHitName = GetNameSafe(ZoneActor);
+return true;
+}
+
 if (DistanceSq < BestDistanceSq)
 {
 BestDistanceSq = DistanceSq;
@@ -515,14 +566,17 @@ BestZoneName = GetNameSafe(ZoneActor);
 }
 }
 
-if (BestZoneId.IsNone())
+if (!BestZoneId.IsNone())
 {
-return false;
-}
-
 OutZoneId = BestZoneId;
 OutDebugHitName = BestZoneName;
 return true;
+}
+
+OutDebugHitName = ClosestAnyZoneName.IsEmpty()
+? FString::Printf(TEXT("screen %.0f %.0f, no projected valid zones"), MouseX, MouseY)
+: FString::Printf(TEXT("screen %.0f %.0f, closest %s"), MouseX, MouseY, *ClosestAnyZoneName);
+return false;
 }
 
 bool ATCG_PlayerController::GetCursorBoardPreviewLocation(FVector& OutPreviewLocation, FName& OutHoveredZoneId) const
