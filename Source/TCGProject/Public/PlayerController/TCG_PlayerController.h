@@ -49,6 +49,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void SetupInputComponent() override;
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnRep_PlayerState() override;
 
@@ -83,6 +84,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Debug")
 	bool bSeedDebugMatchWhenEmpty = true;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
+	bool bDrawPlacementDebugHighlights = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="1.0", UIMin="1.0"))
+	float PlacementHighlightLineThickness = 8.0f;
+
 	UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
 	FGuid SelectedHandCardInstanceId;
 
@@ -91,6 +98,11 @@ protected:
 	int32 ResolveLocalPlayerIndex() const;
 	void ApplyFixedBoardCamera();
 	void RefreshAllLocalMatchHUDs();
+	void RefreshPlacementHighlights();
+	void ClearPlacementHighlights();
+	bool TryResolveZoneIdFromActor(const AActor* Actor, FName& OutZoneId) const;
+	bool DoesActorMatchZoneId(const AActor* Actor, FName ZoneId) const;
+	void HandleBoardZoneClick();
 	FTCGCardWidgetData FindLocalHandCardDataByHandIndex(int32 HandIndex) const;
 	FTCGMatchHUDWidgetData BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const;
 	FTCGCardWidgetData BuildCardWidgetDataFromCard(const ATCG_GameState& TCGGameState, const FTCGCardInstance& Card, int32 HandIndex) const;
