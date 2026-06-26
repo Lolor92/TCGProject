@@ -529,9 +529,6 @@ return false;
 TArray<AActor*> ZoneActors;
 UGameplayStatics::GetAllActorsOfClass(this, ATCG_CardZoneActor::StaticClass(), ZoneActors);
 
-float BestDistanceSq = FMath::Square(DragDropZoneScreenSearchRadius);
-FName BestZoneId = NAME_None;
-FString BestZoneName;
 float ClosestAnyDistanceSq = FLT_MAX;
 FString ClosestAnyZoneName;
 
@@ -579,25 +576,11 @@ OutZoneId = CandidateZoneId;
 OutDebugHitName = GetNameSafe(ZoneActor);
 return true;
 }
-
-if (DistanceSq < BestDistanceSq)
-{
-BestDistanceSq = DistanceSq;
-BestZoneId = CandidateZoneId;
-BestZoneName = GetNameSafe(ZoneActor);
-}
-}
-
-if (!BestZoneId.IsNone())
-{
-OutZoneId = BestZoneId;
-OutDebugHitName = BestZoneName;
-return true;
 }
 
 OutDebugHitName = ClosestAnyZoneName.IsEmpty()
 ? FString::Printf(TEXT("screen %.0f %.0f, no projected valid zones"), MouseX, MouseY)
-: FString::Printf(TEXT("screen %.0f %.0f, closest %s"), MouseX, MouseY, *ClosestAnyZoneName);
+: FString::Printf(TEXT("screen %.0f %.0f, closest %s but outside drop rectangle"), MouseX, MouseY, *ClosestAnyZoneName);
 return false;
 }
 
