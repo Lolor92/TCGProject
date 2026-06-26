@@ -15,10 +15,11 @@ namespace
 		GraveyardMachineProtection,
 		SelectedGraveyardPlay,
 		FilteredMaterialDefense,
+		GraveyardPilotMachineAttach,
 		OverdrivePilotKaia
 	};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::FilteredMaterialDefense;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::GraveyardPilotMachineAttach;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
@@ -123,6 +124,148 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 
 
 
+
+	if (DebugRunnerScenario == ETCGDebugRunnerScenario::GraveyardPilotMachineAttach)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Graveyard pilot machine attach scenario start"));
+
+		GameState->MatchCards.Empty();
+		GameState->SetMatchResult(ETCGMatchResult::None);
+		GameState->SetPhase(ETCGMatchPhase::Placement);
+		GameState->RoundNumber = 1;
+		GameState->TurnNumber = 1;
+		GameState->PlacementStepIndex = 0;
+		GameState->Player0PlacementFieldZonesUsedThisRound.Reset();
+		GameState->Player1PlacementFieldZonesUsedThisRound.Reset();
+		GameState->SetCurrentTurnPlayer(0);
+		GameState->ClearPendingDiscardChoice();
+		GameState->ClearPendingGraveyardToDeckChoice();
+
+		GameState->DebugCardDefinitions.RemoveAll([](const TObjectPtr<UTCG_CardDefinition>& Definition)
+		{
+			return Definition
+				&& (Definition->CardDefinitionId == "Debug_GraveyardPilotMachineAttach_Source"
+					|| Definition->CardDefinitionId == "Debug_GraveyardPilotMachineAttach_Pilot"
+					|| Definition->CardDefinitionId == "Debug_GraveyardPilotMachineAttach_Junk");
+		});
+
+		auto MakeDefinition = [GameState](
+			FName CardDefinitionId,
+			const TCHAR* DisplayName,
+			ETCGCardElement Element,
+			int32 BaseAttack)
+		{
+			UTCG_CardDefinition* Definition = NewObject<UTCG_CardDefinition>(GameState);
+			Definition->CardDefinitionId = CardDefinitionId;
+			Definition->DisplayName = FText::FromString(DisplayName);
+			Definition->Element = Element;
+			Definition->BaseAttack = BaseAttack;
+			return Definition;
+		};
+
+		UTCG_CardDefinition* SourceDefinition = MakeDefinition(
+			"Debug_GraveyardPilotMachineAttach_Source",
+			TEXT("Debug Graveyard Pilot Machine Attach Source"),
+			ETCGCardElement::Light,
+			1);
+
+		FTCGCardEffectRef AttachEffect;
+		AttachEffect.Trigger = ETCGEffectTrigger::OnPlay;
+		AttachEffect.bOptional = true;
+		AttachEffect.TriggerFilter.bRequireTopCard = true;
+
+		FTCGEffectStep AttachStep;
+		AttachStep.StepType = ETCGEffectStepType::AttachGraveyardCardToSourceMaterial;
+		AttachStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		AttachStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
+		AttachStep.TargetFilter.bRequireTopCard = false;
+		AttachStep.TargetFilter.NameContainsAny.Add(TEXT("Pilot"));
+		AttachStep.TargetFilter.NameContainsAny.Add(TEXT("Machine"));
+		AttachEffect.Steps.Add(AttachStep);
+
+		SourceDefinition->Effects.Add(AttachEffect);
+
+		UTCG_CardDefinition* PilotDefinition = MakeDefinition(
+			"Debug_GraveyardPilotMachineAttach_Pilot",
+			TEXT("Debug Graveyard Pilot Unit"),
+			ETCGCardElement::Wind,
+			2);
+
+		UTCG_CardDefinition* JunkDefinition = MakeDefinition(
+			"Debug_GraveyardPilotMachineAttach_Junk",
+			TEXT("Debug Graveyard Junk Unit"),
+			ETCGCardElement::Earth,
+			2);
+
+		GameState->DebugCardDefinitions.Add(SourceDefinition);
+		GameState->DebugCardDefinitions.Add(PilotDefinition);
+		GameState->DebugCardDefinitions.Add(JunkDefinition);
+
+		FTCGCardInstance* SourceCard = GameState->AddCardInstanceFromDefinition(
+			SourceDefinition,
+			0,
+			ETCGCardLocation::Hand);
+		const FGuid SourceId = SourceCard ? SourceCard->CardInstanceId : FGuid();
+
+		FTCGCardInstance* PilotCard = GameState->AddCardInstanceFromDefinition(
+			PilotDefinition,
+			0,
+			ETCGCardLocation::Graveyard);
+		const FGuid PilotId = PilotCard ? PilotCard->CardInstanceId : FGuid();
+
+		FTCGCardInstance* JunkCard = GameState->AddCardInstanceFromDefinition(
+			JunkDefinition,
+			0,
+			ETCGCardLocation::Graveyard);
+		const FGuid JunkId = JunkCard ? JunkCard->CardInstanceId : FGuid();
+
+		if (!SourceId.IsValid() || !PilotId.IsValid() || !JunkId.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Graveyard pilot machine attach setup failed"));
+			GameState->EndMatch(ETCGMatchResult::Draw);
+			return;
+		}
+
+		const bool bPlayedSource = GameState->PlayCardToZone(
+			SourceId,
+			ATCG_GameState::GetFieldZoneId(0, 0));
+
+		const FTCGCardInstance* SourceAfter = GameState->FindCardInstance(SourceId);
+		const FTCGCardInstance* PilotAfter = GameState->FindCardInstance(PilotId);
+		const FTCGCardInstance* JunkAfter = GameState->FindCardInstance(JunkId);
+
+		const int32 MaterialsAfter = CountMaterialsUnderUnit(SourceId);
+
+		const bool bPilotAttached =
+			SourceAfter
+			&& PilotAfter
+			&& SourceAfter->Location == ETCGCardLocation::Board
+			&& PilotAfter->Location == ETCGCardLocation::Board
+			&& SourceAfter->StackId.IsValid()
+			&& PilotAfter->StackId == SourceAfter->StackId
+			&& PilotAfter->StackIndex < SourceAfter->StackIndex;
+
+		const bool bJunkStayedGraveyard =
+			JunkAfter
+			&& JunkAfter->Location == ETCGCardLocation::Graveyard;
+
+		const bool bExpectedAll =
+			bPlayedSource
+			&& bPilotAttached
+			&& bJunkStayedGraveyard
+			&& MaterialsAfter == 1;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: GraveyardPilotMachineAttach summary PlayedSource=%s PilotAttached=%s JunkStayedGraveyard=%s MaterialsAfter=%d ExpectedAll=%s"),
+			bPlayedSource ? TEXT("true") : TEXT("false"),
+			bPilotAttached ? TEXT("true") : TEXT("false"),
+			bJunkStayedGraveyard ? TEXT("true") : TEXT("false"),
+			MaterialsAfter,
+			bExpectedAll ? TEXT("true") : TEXT("false"));
+
+		GameState->EndMatch(ETCGMatchResult::Draw);
+		return;
+	}
 
 	if (DebugRunnerScenario == ETCGDebugRunnerScenario::FilteredMaterialDefense)
 	{
