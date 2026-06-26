@@ -654,38 +654,25 @@ const bool bCanDropHere = ResolveDragDropZoneFromCursor(DropZoneId, DropDebugInf
 
 if (!DragPreviewCardActor)
 {
-FTCGCardWidgetData CardData;
-if (MatchHUDWidget)
+if (TWeakObjectPtr<ATCG_CardVisualActor>* ExistingActorPtr = CardVisualActors.Find(SelectedHandCardInstanceId))
+{
+if (ExistingActorPtr->IsValid())
+{
+DragPreviewCardActor = ExistingActorPtr->Get();
+}
+}
+
+if (!DragPreviewCardActor && MatchHUDWidget)
 {
 const FTCGMatchHUDWidgetData& HUDData = MatchHUDWidget->GetHUDData();
 for (const FTCGCardWidgetData& HandCardData : HUDData.LocalHand.Cards)
 {
 if (HandCardData.CardInstanceId == SelectedHandCardInstanceId)
 {
-CardData = HandCardData;
+DragPreviewCardActor = GetOrCreateCardVisualActor(HandCardData);
 break;
 }
 }
-}
-TSubclassOf<ATCG_CardVisualActor> VisualClass = CardVisualActorClass;
-		if (!VisualClass)
-		{
-			VisualClass = ATCG_CardVisualActor::StaticClass();
-		}
-
-FActorSpawnParameters SpawnParams;
-SpawnParams.Owner = this;
-SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-DragPreviewCardActor = GetWorld()->SpawnActor<ATCG_CardVisualActor>(
-VisualClass,
-PreviewLocation,
-GetControlRotation(),
-SpawnParams);
-
-if (DragPreviewCardActor)
-{
-DragPreviewCardActor->SetCardData(CardData);
 }
 }
 
@@ -701,9 +688,194 @@ void ATCG_PlayerController::DestroyHandDragPreview()
 {
 if (DragPreviewCardActor)
 {
+CardVisualActors.Remove(DragPreviewCardActor->GetCardData().CardInstanceId);
 DragPreviewCardActor->Destroy();
 DragPreviewCardActor = nullptr;
 }
+}
+
+void ATCG_PlayerController::SyncCardVisualActorsFromGameState(const ATCG_GameState& TCGGameState)
+{
+if (!IsLocalPlayerController() || !GetWorld())
+{
+return;
+}
+
+TSet<FGuid> SeenCards;
+
+const int32 LocalIndex = ResolveLocalPlayerIndex();
+
+TArray<FTCGCardInstance> LocalHandCards;
+TCGGameState.GetCardsInHand(LocalIndex, LocalHandCards);
+
+for (int32 HandIndex = 0; HandIndex < LocalHandCards.Num(); ++HandIndex)
+{
+const FTCGCardWidgetData CardData = BuildCardWidgetDataFromCard(TCGGameState, LocalHandCards[HandIndex], HandIndex);
+SeenCards.Add(CardData.CardInstanceId);
+
+ATCG_CardVisualActor* CardActor = GetOrCreateCardVisualActor(CardData);
+if (!CardActor || CardActor == DragPreviewCardActor)
+{
+continue;
+}
+
+MoveCardVisualActorToHandSlot(*CardActor, HandIndex);
+CardActor->SetPreviewVisualState(false);
+}
+
+for (const FTCGCardInstance& Card : TCGGameState.MatchCards)
+{
+if (Card.Location != ETCGCardLocation::Board)
+{
+continue;
+}
+
+if (Card.CardInstanceId == SelectedHandCardInstanceId && bIsDraggingHandCard)
+{
+continue;
+}
+
+const FTCGCardWidgetData CardData = BuildCardWidgetDataFromCard(TCGGameState, Card, INDEX_NONE);
+SeenCards.Add(CardData.CardInstanceId);
+
+ATCG_CardVisualActor* CardActor = GetOrCreateCardVisualActor(CardData);
+if (!CardActor || CardActor == DragPreviewCardActor)
+{
+continue;
+}
+
+MoveCardVisualActorToFieldZone(*CardActor, Card.ZoneId);
+CardActor->SetPreviewVisualState(false);
+}
+
+// Conservative cleanup: only remove actors for cards that are no longer visible
+// and are not the active drag body. This prevents one drag from eating another card.
+for (auto It = CardVisualActors.CreateIterator(); It; ++It)
+{
+const FGuid CardInstanceId = It.Key();
+const TWeakObjectPtr<ATCG_CardVisualActor> CardActor = It.Value();
+
+if (SeenCards.Contains(CardInstanceId) || (DragPreviewCardActor && CardActor.Get() == DragPreviewCardActor))
+{
+continue;
+}
+
+if (CardActor.IsValid())
+{
+CardActor->Destroy();
+}
+
+It.RemoveCurrent();
+}
+}
+
+ATCG_CardVisualActor* ATCG_PlayerController::GetOrCreateCardVisualActor(const FTCGCardWidgetData& CardData)
+{
+if (!CardData.CardInstanceId.IsValid() || !GetWorld())
+{
+return nullptr;
+}
+
+if (TWeakObjectPtr<ATCG_CardVisualActor>* ExistingActorPtr = CardVisualActors.Find(CardData.CardInstanceId))
+{
+if (ExistingActorPtr->IsValid())
+{
+ATCG_CardVisualActor* ExistingActor = ExistingActorPtr->Get();
+ExistingActor->SetCardData(CardData);
+return ExistingActor;
+}
+}
+
+TSubclassOf<ATCG_CardVisualActor> VisualClass = CardVisualActorClass;
+if (!VisualClass)
+{
+VisualClass = ATCG_CardVisualActor::StaticClass();
+}
+
+FActorSpawnParameters SpawnParams;
+SpawnParams.Owner = this;
+SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+ATCG_CardVisualActor* NewActor = GetWorld()->SpawnActor<ATCG_CardVisualActor>(
+VisualClass,
+FVector::ZeroVector,
+FRotator::ZeroRotator,
+SpawnParams);
+
+if (NewActor)
+{
+NewActor->SetCardData(CardData);
+CardVisualActors.Add(CardData.CardInstanceId, NewActor);
+}
+
+return NewActor;
+}
+
+void ATCG_PlayerController::MoveCardVisualActorToHandSlot(ATCG_CardVisualActor& CardActor, const int32 HandIndex) const
+{
+if (!PlayerCameraManager)
+{
+return;
+}
+
+const FVector CameraLocation = PlayerCameraManager->GetCameraLocation();
+const FRotator CameraRotation = PlayerCameraManager->GetCameraRotation();
+
+const FVector Forward = CameraRotation.Vector();
+const FVector Right = FRotationMatrix(CameraRotation).GetScaledAxis(EAxis::Y);
+const FVector Up = FRotationMatrix(CameraRotation).GetScaledAxis(EAxis::Z);
+
+const FTCGMatchHUDWidgetData* HUDData = MatchHUDWidget ? &MatchHUDWidget->GetHUDData() : nullptr;
+const int32 HandCount = HUDData ? HUDData->LocalHand.Cards.Num() : 1;
+const float CenteredHandIndex = static_cast<float>(HandIndex) - (static_cast<float>(HandCount - 1) * 0.5f);
+
+const FVector HandLocation =
+CameraLocation
++ (Forward * HandVisualDistanceFromCamera)
++ (Right * CenteredHandIndex * HandVisualHorizontalSpacing)
++ (Up * HandVisualVerticalOffset)
++ (Forward * HandIndex * HandVisualDepthSpacing);
+
+CardActor.SetActorLocation(HandLocation);
+CardActor.SetActorRotation(FRotator(0.0f, CameraRotation.Yaw, 0.0f));
+}
+
+bool ATCG_PlayerController::FindFieldZoneActor(const FName ZoneId, ATCG_CardZoneActor*& OutZoneActor) const
+{
+OutZoneActor = nullptr;
+
+if (!GetWorld() || ZoneId.IsNone())
+{
+return false;
+}
+
+TArray<AActor*> ZoneActors;
+UGameplayStatics::GetAllActorsOfClass(this, ATCG_CardZoneActor::StaticClass(), ZoneActors);
+
+for (AActor* Actor : ZoneActors)
+{
+ATCG_CardZoneActor* ZoneActor = Cast<ATCG_CardZoneActor>(Actor);
+if (ZoneActor && ZoneActor->GetGameplayZoneName() == ZoneId)
+{
+OutZoneActor = ZoneActor;
+return true;
+}
+}
+
+return false;
+}
+
+bool ATCG_PlayerController::MoveCardVisualActorToFieldZone(ATCG_CardVisualActor& CardActor, const FName ZoneId) const
+{
+ATCG_CardZoneActor* ZoneActor = nullptr;
+if (!FindFieldZoneActor(ZoneId, ZoneActor) || !ZoneActor)
+{
+return false;
+}
+
+CardActor.SetActorLocation(ZoneActor->GetActorLocation() + FVector(0.0f, 0.0f, FieldVisualHeightOffset));
+CardActor.SetActorRotation(ZoneActor->GetActorRotation());
+return true;
 }
 
 void ATCG_PlayerController::HandleBoardZoneClick()
@@ -1054,6 +1226,7 @@ void ATCG_PlayerController::RefreshMatchHUDFromGameState()
 	}
 
 	SetMatchHUDData(BuildHUDDataFromGameState(*TCGGameState, ResolveLocalPlayerIndex()));
+SyncCardVisualActorsFromGameState(*TCGGameState);
 }
 
 FTCGMatchHUDWidgetData ATCG_PlayerController::BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const
