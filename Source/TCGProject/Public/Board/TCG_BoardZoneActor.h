@@ -16,11 +16,16 @@ class TCGPROJECT_API ATCG_BoardZoneActor : public AActor
 public:
 	ATCG_BoardZoneActor();
 
+	virtual void Tick(float DeltaSeconds) override;
+
 	UFUNCTION(BlueprintPure, Category="TCG|Board Zone")
 	FName GetZoneId() const { return ZoneId; }
 
 	UFUNCTION(BlueprintCallable, Category="TCG|Board Zone")
 	void SetZoneId(FName NewZoneId);
+
+	UFUNCTION(BlueprintCallable, Category="TCG|Board Zone")
+	void RefreshPlacementHighlight();
 
 	UFUNCTION(BlueprintCallable, Category="TCG|Board Zone")
 	void SetPlacementHighlightActive(bool bActive);
@@ -29,6 +34,7 @@ public:
 	bool IsPlacementHighlightActive() const { return bPlacementHighlightActive; }
 
 protected:
+	virtual void BeginPlay() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="TCG|Board Zone")
@@ -49,6 +55,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="TCG|Board Zone")
 	TObjectPtr<UMaterialInterface> HighlightMaterial = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="TCG|Board Zone", meta=(ClampMin="0.02", UIMin="0.02"))
+	float HighlightRefreshInterval = 0.05f;
+
 private:
+	UFUNCTION()
+	void HandleClicked(AActor* TouchedActor, FKey ButtonPressed);
+
+	float HighlightRefreshAccumulator = 0.0f;
 	bool bPlacementHighlightActive = false;
 };
