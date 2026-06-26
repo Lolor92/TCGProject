@@ -49,7 +49,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Debug")
 	bool bUseDebugHUDData = true;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Debug")
+	bool bSeedDebugMatchWhenEmpty = true;
+
 	void PushDebugHUDData();
+	void SeedDebugMatchForHUDIfNeeded();
 	void StartMatchHUDRefreshTimer();
 	void StopMatchHUDRefreshTimer();
 	FTCGMatchHUDWidgetData BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const;
