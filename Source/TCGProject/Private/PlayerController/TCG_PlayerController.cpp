@@ -2,9 +2,8 @@
 
 #include "Cards/TCG_CardDefinition.h"
 #include "Cards/TCG_CardTypes.h"
-#include "GameState/TCG_GameState.h"
 #include "GameState/TCG_DebugScenarioRunner.h"
-#include "TimerManager.h"
+#include "GameState/TCG_GameState.h"
 #include "UI/TCGMatchHUDWidgetBase.h"
 
 void ATCG_PlayerController::BeginPlay()
@@ -21,14 +20,7 @@ void ATCG_PlayerController::BeginPlay()
 	{
 		SeedDebugMatchForHUDIfNeeded();
 		RefreshMatchHUDFromGameState();
-		StartMatchHUDRefreshTimer();
 	}
-}
-
-void ATCG_PlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	StopMatchHUDRefreshTimer();
-	Super::EndPlay(EndPlayReason);
 }
 
 void ATCG_PlayerController::CreateMatchHUD()
@@ -95,26 +87,6 @@ void ATCG_PlayerController::RefreshMatchHUDFromGameState()
 	}
 
 	SetMatchHUDData(BuildHUDDataFromGameState(*TCGGameState, LocalPlayerIndex));
-}
-
-void ATCG_PlayerController::StartMatchHUDRefreshTimer()
-{
-	if (!IsLocalController() || bUseDebugHUDData || HUDRefreshInterval <= 0.0f)
-	{
-		return;
-	}
-
-	GetWorldTimerManager().SetTimer(
-		MatchHUDRefreshTimerHandle,
-		this,
-		&ATCG_PlayerController::RefreshMatchHUDFromGameState,
-		HUDRefreshInterval,
-		true);
-}
-
-void ATCG_PlayerController::StopMatchHUDRefreshTimer()
-{
-	GetWorldTimerManager().ClearTimer(MatchHUDRefreshTimerHandle);
 }
 
 FTCGMatchHUDWidgetData ATCG_PlayerController::BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const
