@@ -191,36 +191,94 @@ bool ATCG_GameState::HasPendingAttachSourceToWaterUnitChoice() const { return Pe
 void ATCG_GameState::GetPendingAttachSourceToWaterUnitChoiceOptions(TArray<FGuid>& OutCardInstanceIds) const { OutCardInstanceIds = PendingAttachSourceToWaterUnitChoice.EligibleTargetCardInstanceIds; }
 void ATCG_GameState::ClearPendingAttachSourceToWaterUnitChoice() { PendingAttachSourceToWaterUnitChoice.Reset(); }
 
-bool ATCG_GameState::BeginPendingPlayGraveyardCardToEmptyZoneChoice(int32 PlayerIndex, const FTCGEffectTargetFilter& TargetFilter, const FTCGEffectChainEntry& ChainEntry)
+bool ATCG_GameState::BeginPendingPlayGraveyardCardToEmptyZoneChoice(
+int32 PlayerIndex,
+const FTCGEffectTargetFilter& TargetFilter,
+const FTCGEffectChainEntry& ChainEntry)
 {
-	if (!IsValidPlayerIndex(PlayerIndex) || PendingPlayGraveyardCardToEmptyZoneChoice.bIsPending) return false;
-	const int32 OwnerPlayerIndex = TargetFilter.OwnerMode == ETCGEffectTargetMode::Opponent ? 1 - PlayerIndex : PlayerIndex;
-	PendingPlayGraveyardCardToEmptyZoneChoice.Reset();
-	PendingPlayGraveyardCardToEmptyZoneChoice.bIsPending = true;
-	PendingPlayGraveyardCardToEmptyZoneChoice.PlayerIndex = PlayerIndex;
-	PendingPlayGraveyardCardToEmptyZoneChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
-	PendingPlayGraveyardCardToEmptyZoneChoice.ChainIndex = ChainEntry.ChainIndex;
-	for (const FTCGCardInstance& Card : MatchCards)
-	{
-		if (Card.OwnerPlayerIndex != OwnerPlayerIndex) continue;
-		if (Card.Location != ETCGCardLocation::Graveyard) continue;
-		if (TargetFilter.bRequireElement && Card.Element != TargetFilter.RequiredElement) continue;
-		if (TargetFilter.bExcludeSourceCard && Card.CardInstanceId == ChainEntry.SourceCardInstanceId) continue;
-		PendingPlayGraveyardCardToEmptyZoneChoice.EligibleCardInstanceIds.Add(Card.CardInstanceId);
-	}
-	for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
-	{
-		const FName ZoneId = GetFieldZoneId(PlayerIndex, FieldIndex);
-		FGuid ExistingStackId;
-		if (!FindStackIdInZone(ZoneId, ExistingStackId)) PendingPlayGraveyardCardToEmptyZoneChoice.EligibleZoneIds.Add(ZoneId);
-	}
-	if (PendingPlayGraveyardCardToEmptyZoneChoice.EligibleCardInstanceIds.Num() <= 0 || PendingPlayGraveyardCardToEmptyZoneChoice.EligibleZoneIds.Num() <= 0)
-	{
-		ClearPendingPlayGraveyardCardToEmptyZoneChoice();
-		return false;
-	}
-	UE_LOG(LogTemp, Warning, TEXT("TCG Effect: Pending play graveyard card to empty zone choice started Player=%d Cards=%d Zones=%d"), PlayerIndex, PendingPlayGraveyardCardToEmptyZoneChoice.EligibleCardInstanceIds.Num(), PendingPlayGraveyardCardToEmptyZoneChoice.EligibleZoneIds.Num());
-	return true;
+ClearPendingPlayGraveyardCardToEmptyZoneChoice();
+
+if (!IsValidPlayerIndex(PlayerIndex))
+{
+return false;
+}
+
+PendingPlayGraveyardCardToEmptyZoneChoice.bIsPending = true;
+PendingPlayGraveyardCardToEmptyZoneChoice.PlayerIndex = PlayerIndex;
+PendingPlayGraveyardCardToEmptyZoneChoice.SourceCardInstanceId = ChainEntry.SourceCardInstanceId;
+PendingPlayGraveyardCardToEmptyZoneChoice.ChainIndex = ChainEntry.ChainIndex;
+
+const int32 RequiredOwnerPlayerIndex =
+TargetFilter.OwnerMode == ETCGEffectTargetMode::Opponent
+? 1 - PlayerIndex
+: PlayerIndex;
+
+auto DoesCardNameMatchFilter = [&TargetFilter](const FTCGCardInstance& Card)
+{
+const FString CardDefinitionIdString = Card.CardDefinitionId.ToString();
+
+if (!TargetFilter.NameContains.IsEmpty()
+&& !CardDefinitionIdString.Contains(TargetFilter.NameContains, ESearchCase::IgnoreCase))
+{
+return false;
+}
+
+if (TargetFilter.NameContainsAny.Num() <= 0)
+{
+return true;
+}
+
+for (const FString& NameOption : TargetFilter.NameContainsAny)
+{
+if (!NameOption.IsEmpty()
+&& CardDefinitionIdString.Contains(NameOption, ESearchCase::IgnoreCase))
+{
+return true;
+}
+}
+
+return false;
+};
+
+for (const FTCGCardInstance& Card : MatchCards)
+{
+if (Card.OwnerPlayerIndex != RequiredOwnerPlayerIndex) continue;
+if (Card.Location != ETCGCardLocation::Graveyard) continue;
+if (TargetFilter.bExcludeSourceCard && Card.CardInstanceId == ChainEntry.SourceCardInstanceId) continue;
+if (TargetFilter.bRequireElement && Card.Element != TargetFilter.RequiredElement) continue;
+if (!DoesCardNameMatchFilter(Card)) continue;
+
+PendingPlayGraveyardCardToEmptyZoneChoice.EligibleCardInstanceIds.Add(Card.CardInstanceId);
+}
+
+for (int32 FieldIndex = 0; FieldIndex < FieldZoneCount; ++FieldIndex)
+{
+const FName ZoneId = GetFieldZoneId(PlayerIndex, FieldIndex);
+
+FGuid ExistingStackId;
+if (!FindStackIdInZone(ZoneId, ExistingStackId))
+{
+PendingPlayGraveyardCardToEmptyZoneChoice.EligibleZoneIds.Add(ZoneId);
+}
+}
+
+const bool bStarted =
+PendingPlayGraveyardCardToEmptyZoneChoice.EligibleCardInstanceIds.Num() > 0
+&& PendingPlayGraveyardCardToEmptyZoneChoice.EligibleZoneIds.Num() > 0;
+
+if (!bStarted)
+{
+ClearPendingPlayGraveyardCardToEmptyZoneChoice();
+return false;
+}
+
+UE_LOG(LogTemp, Warning,
+TEXT("TCG Effect: Pending play graveyard card to empty zone choice started Player=%d Cards=%d Zones=%d"),
+PlayerIndex,
+PendingPlayGraveyardCardToEmptyZoneChoice.EligibleCardInstanceIds.Num(),
+PendingPlayGraveyardCardToEmptyZoneChoice.EligibleZoneIds.Num());
+
+return true;
 }
 
 bool ATCG_GameState::SubmitPendingPlayGraveyardCardToEmptyZoneChoice(int32 PlayerIndex, const FGuid& ChosenCardInstanceId, FName ChosenZoneId)

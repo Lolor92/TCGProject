@@ -26,7 +26,7 @@ namespace
 		OverdrivePilotKaia
 	};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlay;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::CardEffectMaterialGraveyardPlayWrongMaterialCount;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
@@ -725,6 +725,7 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		PlayMachineStep.TargetFilter.RequiredLocation = ETCGCardLocation::Graveyard;
 		PlayMachineStep.TargetFilter.bRequireTopCard = false;
 		PlayMachineStep.TargetFilter.NameContains = "Machine";
+		PlayMachineStep.TargetFilter.bExcludeSourceCard = true;
 		RecoveryEffect.Steps.Add(PlayMachineStep);
 
 		FTCGEffectStep PlayPilotStep;
