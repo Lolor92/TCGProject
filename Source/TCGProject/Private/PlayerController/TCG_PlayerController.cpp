@@ -434,38 +434,95 @@ void ATCG_PlayerController::EndHandCardDrag()
 		return;
 	}
 
-	FHitResult HitResult;
-	if (!GetHitResultUnderCursor(ECC_Visibility, true, HitResult))
-	{
-		TCGScreenDebug(this, TEXT("TCG UI: Drag cancelled, card returned to hand"), FColor::Yellow);
-		return;
-	}
-
 	FName ZoneId = NAME_None;
-	if (const ATCG_CardZoneActor* ZoneActor = Cast<ATCG_CardZoneActor>(HitResult.GetActor()))
+	FString DebugHitName;
+	if (!ResolveDragDropZoneFromCursor(ZoneId, DebugHitName))
 	{
-		ZoneId = ZoneActor->GetGameplayZoneName();
-	}
-	else
-	{
-		TryResolveZoneIdFromActor(HitResult.GetActor(), ZoneId);
-	}
-
-	if (ZoneId.IsNone())
-	{
-		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag cancelled over %s, card returned to hand"), *GetNameSafe(HitResult.GetActor())), FColor::Yellow);
-		return;
-	}
-
-	if (!CanSelectedHandCardPlayToZone(ZoneId))
-	{
-		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag cancelled over invalid zone %s, card returned to hand"), *ZoneId.ToString()), FColor::Yellow);
+		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag cancelled over %s, card returned to hand"), *DebugHitName), FColor::Yellow);
 		return;
 	}
 
 	TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag release play to %s"), *ZoneId.ToString()), FColor::Green);
 	TryPlaySelectedHandCardToZone(ZoneId);
 	bSuppressNextZoneActorClick = true;
+}
+
+
+bool ATCG_PlayerController::ResolveDragDropZoneFromCursor(FName& OutZoneId, FString& OutDebugHitName) const
+{
+OutZoneId = NAME_None;
+OutDebugHitName = TEXT("nothing");
+
+if (!GetWorld() || !SelectedHandCardInstanceId.IsValid())
+{
+return false;
+}
+
+FVector CursorWorldPoint = FVector::ZeroVector;
+
+FHitResult HitResult;
+if (GetHitResultUnderCursor(ECC_Visibility, true, HitResult))
+{
+CursorWorldPoint = HitResult.ImpactPoint;
+OutDebugHitName = GetNameSafe(HitResult.GetActor());
+}
+else
+{
+FVector WorldOrigin = FVector::ZeroVector;
+FVector WorldDirection = FVector::ForwardVector;
+if (!DeprojectMousePositionToWorld(WorldOrigin, WorldDirection) || FMath::IsNearlyZero(WorldDirection.Z))
+{
+return false;
+}
+
+const float DistanceToBoardPlane = -WorldOrigin.Z / WorldDirection.Z;
+if (DistanceToBoardPlane < 0.0f)
+{
+return false;
+}
+
+CursorWorldPoint = WorldOrigin + (WorldDirection * DistanceToBoardPlane);
+}
+
+TArray<AActor*> ZoneActors;
+UGameplayStatics::GetAllActorsOfClass(this, ATCG_CardZoneActor::StaticClass(), ZoneActors);
+
+float BestDistanceSq = FMath::Square(DragDropZoneSearchRadius);
+FName BestZoneId = NAME_None;
+FString BestZoneName;
+
+for (AActor* Actor : ZoneActors)
+{
+const ATCG_CardZoneActor* ZoneActor = Cast<ATCG_CardZoneActor>(Actor);
+if (!ZoneActor)
+{
+continue;
+}
+
+const FName CandidateZoneId = ZoneActor->GetGameplayZoneName();
+if (!CanSelectedHandCardPlayToZone(CandidateZoneId))
+{
+continue;
+}
+
+const FVector ZoneLocation = ZoneActor->GetActorLocation();
+const float DistanceSq = FVector::DistSquared2D(CursorWorldPoint, ZoneLocation);
+if (DistanceSq < BestDistanceSq)
+{
+BestDistanceSq = DistanceSq;
+BestZoneId = CandidateZoneId;
+BestZoneName = GetNameSafe(ZoneActor);
+}
+}
+
+if (BestZoneId.IsNone())
+{
+return false;
+}
+
+OutZoneId = BestZoneId;
+OutDebugHitName = BestZoneName;
+return true;
 }
 
 bool ATCG_PlayerController::GetCursorBoardPreviewLocation(FVector& OutPreviewLocation, FName& OutHoveredZoneId) const
@@ -531,7 +588,9 @@ void ATCG_PlayerController::DrawHandCardDragPreview()
 		return;
 	}
 
-	const bool bCanDropHere = !HoveredZoneId.IsNone() && CanSelectedHandCardPlayToZone(HoveredZoneId);
+	FName DropZoneId = NAME_None;
+	FString DropDebugName;
+	const bool bCanDropHere = ResolveDragDropZoneFromCursor(DropZoneId, DropDebugName);
 	const FColor PreviewColor = bCanDropHere ? FColor::Green : FColor::Cyan;
 
 	DrawDebugBox(

@@ -106,6 +106,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
 	float DragPreviewLineThickness = 4.0f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="10.0", UIMin="10.0"))
+	float DragDropZoneSearchRadius = 180.0f;
+
 	UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
 	FGuid SelectedHandCardInstanceId;
 
@@ -130,6 +133,7 @@ void PushDebugHUDData();
 	void EndHandCardDrag();
 	void DrawHandCardDragPreview();
 	bool GetCursorBoardPreviewLocation(FVector& OutPreviewLocation, FName& OutHoveredZoneId) const;
+	bool ResolveDragDropZoneFromCursor(FName& OutZoneId, FString& OutDebugHitName) const;
 	FString BuildPlacementSummaryLog(const ATCG_GameState& TCGGameState) const;
 FTCGCardWidgetData FindLocalHandCardDataByHandIndex(int32 HandIndex) const;
 	FTCGMatchHUDWidgetData BuildHUDDataFromGameState(const ATCG_GameState& TCGGameState, int32 ForPlayerIndex) const;
