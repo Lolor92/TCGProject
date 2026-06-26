@@ -25,6 +25,99 @@ namespace
 
 		UE_LOG(LogTemp, Warning, TEXT("%s"), *Message);
 	}
+
+	FString NormalizeTCGZoneText(FString Text)
+	{
+		Text.ToLowerInline();
+
+		FString Normalized;
+		Normalized.Reserve(Text.Len());
+		for (const TCHAR Character : Text)
+		{
+			if (FChar::IsAlnum(Character))
+			{
+				Normalized.AppendChar(Character);
+			}
+		}
+
+		return Normalized;
+	}
+
+	bool ParseTCGFieldZoneId(const FName ZoneId, int32& OutPlayerIndex, int32& OutFieldIndex)
+	{
+		FString PlayerPart;
+		FString FieldPart;
+		if (!ZoneId.ToString().Split(TEXT("_Field_"), &PlayerPart, &FieldPart))
+		{
+			return false;
+		}
+
+		PlayerPart.RemoveFromStart(TEXT("Player"));
+		return LexTryParseString(OutPlayerIndex, *PlayerPart)
+			&& LexTryParseString(OutFieldIndex, *FieldPart);
+	}
+
+	TArray<FString> BuildTCGZoneAliases(const FName ZoneId)
+	{
+		TArray<FString> Aliases;
+		Aliases.Add(NormalizeTCGZoneText(ZoneId.ToString()));
+
+		int32 PlayerIndex = INDEX_NONE;
+		int32 FieldIndex = INDEX_NONE;
+		if (!ParseTCGFieldZoneId(ZoneId, PlayerIndex, FieldIndex))
+		{
+			return Aliases;
+		}
+
+		const TArray<FString> RawAliases = {
+			FString::Printf(TEXT("Player%d_Field_%d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("Player%dField%d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("Player%d Field %d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("Player%d_FieldZone_%d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("Player%dFieldZone%d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("Player%d_Zone_%d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("Player%dZone%d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("P%d_Field_%d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("P%dField%d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("P%d_Zone_%d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("P%dZone%d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("P%d_FieldZone_%d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("P%dFieldZone%d"), PlayerIndex, FieldIndex),
+			FString::Printf(TEXT("FieldZone%d"), FieldIndex),
+			FString::Printf(TEXT("Field_%d"), FieldIndex),
+			FString::Printf(TEXT("Field%d"), FieldIndex),
+			FString::Printf(TEXT("Zone_%d"), FieldIndex),
+			FString::Printf(TEXT("Zone%d"), FieldIndex),
+			FString::Printf(TEXT("Slot_%d"), FieldIndex),
+			FString::Printf(TEXT("Slot%d"), FieldIndex)
+		};
+
+		for (const FString& RawAlias : RawAliases)
+		{
+			Aliases.AddUnique(NormalizeTCGZoneText(RawAlias));
+		}
+
+		return Aliases;
+	}
+
+	bool DoesTextMatchTCGZone(const FString& CandidateText, const FName ZoneId)
+	{
+		const FString NormalizedCandidate = NormalizeTCGZoneText(CandidateText);
+		if (NormalizedCandidate.IsEmpty())
+		{
+			return false;
+		}
+
+		for (const FString& Alias : BuildTCGZoneAliases(ZoneId))
+		{
+			if (!Alias.IsEmpty() && NormalizedCandidate.Contains(Alias))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
 }
 
 void ATCG_PlayerController::BeginPlay()
@@ -344,15 +437,17 @@ bool ATCG_PlayerController::DoesActorMatchZoneId(const AActor* Actor, const FNam
 		return false;
 	}
 
-	if (Actor->ActorHasTag(ZoneId))
+	if (Actor->ActorHasTag(ZoneId) || DoesTextMatchTCGZone(Actor->GetName(), ZoneId))
 	{
 		return true;
 	}
 
-	const FString ZoneIdString = ZoneId.ToString();
-	if (Actor->GetName().Contains(ZoneIdString))
+	for (const FName ActorTag : Actor->Tags)
 	{
-		return true;
+		if (DoesTextMatchTCGZone(ActorTag.ToString(), ZoneId))
+		{
+			return true;
+		}
 	}
 
 	TArray<UActorComponent*> Components;
@@ -364,9 +459,17 @@ bool ATCG_PlayerController::DoesActorMatchZoneId(const AActor* Actor, const FNam
 			continue;
 		}
 
-		if (Component->ComponentHasTag(ZoneId) || Component->GetName().Contains(ZoneIdString))
+		if (Component->ComponentHasTag(ZoneId) || DoesTextMatchTCGZone(Component->GetName(), ZoneId))
 		{
 			return true;
+		}
+
+		for (const FName ComponentTag : Component->ComponentTags)
+		{
+			if (DoesTextMatchTCGZone(ComponentTag.ToString(), ZoneId))
+			{
+				return true;
+			}
 		}
 	}
 
@@ -427,6 +530,30 @@ void ATCG_PlayerController::RefreshPlacementHighlights()
 		ValidZoneIds.Num(),
 		MatchedActorCount),
 		MatchedActorCount > 0 ? FColor::Green : FColor::Red);
+
+	if (MatchedActorCount == 0)
+	{
+		int32 CandidateCount = 0;
+		for (const AActor* Actor : AllActors)
+		{
+			if (!Actor || CandidateCount >= 12)
+			{
+				continue;
+			}
+
+			const FString LowerName = Actor->GetName().ToLower();
+			if (LowerName.Contains(TEXT("zone"))
+				|| LowerName.Contains(TEXT("field"))
+				|| LowerName.Contains(TEXT("slot"))
+				|| LowerName.Contains(TEXT("player")))
+			{
+				CandidateCount++;
+				TCGScreenDebug(this, FString::Printf(
+					TEXT("TCG UI: Candidate zone actor %s"),
+					*GetNameSafe(Actor)), FColor::Cyan);
+			}
+		}
+	}
 }
 
 void ATCG_PlayerController::ClearPlacementHighlights()
