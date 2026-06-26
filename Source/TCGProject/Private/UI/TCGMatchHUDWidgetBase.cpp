@@ -123,5 +123,37 @@ CardDetailWidget->ClearCardData();
 
 void UTCGMatchHUDWidgetBase::HandleHandCardSelected(const int32 HandIndex, UObject* SourceObject)
 {
-SelectHandCard(HandIndex);
+FTCGCardWidgetData SelectedCardData;
+if (!HUDData.LocalHand.Cards.IsValidIndex(HandIndex))
+{
+bool bFound = false;
+for (const FTCGCardWidgetData& CardData : HUDData.LocalHand.Cards)
+{
+if (CardData.HandIndex == HandIndex)
+{
+SelectedCardData = CardData;
+bFound = true;
+break;
+}
+}
+
+if (!bFound)
+{
+return;
+}
+}
+else
+{
+SelectedCardData = HUDData.LocalHand.Cards[HandIndex];
+}
+
+HUDData.LocalHand.SelectedHandIndex = SelectedCardData.HandIndex;
+
+if (CardDetailWidget)
+{
+CardDetailWidget->SetCardData(SelectedCardData);
+}
+
+OnHUDHandCardSelected.Broadcast(SelectedCardData.HandIndex, SelectedCardData.SourceObject);
+BP_OnSelectionChanged(SelectedCardData.HandIndex, SelectedCardData.SourceObject);
 }
