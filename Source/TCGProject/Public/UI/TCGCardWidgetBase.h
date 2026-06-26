@@ -10,6 +10,7 @@ class UTextBlock;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FTCGCardWidgetClickedSignature, int32, HandIndex, UObject*, SourceObject);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FTCGCardWidgetPressedSignature, int32, HandIndex, UObject*, SourceObject);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FTCGCardWidgetReleasedSignature, int32, HandIndex, UObject*, SourceObject);
 
 UCLASS(Abstract, Blueprintable)
 class TCGPROJECT_API UTCGCardWidgetBase : public UUserWidget
@@ -35,11 +36,17 @@ void NotifyCardClicked();
 UFUNCTION(BlueprintCallable, Category="TCG|UI|Card")
 void NotifyCardPressed();
 
+UFUNCTION(BlueprintCallable, Category="TCG|UI|Card")
+void NotifyCardReleased();
+
 UPROPERTY(BlueprintAssignable, Category="TCG|UI|Card")
 FTCGCardWidgetClickedSignature OnCardClicked;
 
 UPROPERTY(BlueprintAssignable, Category="TCG|UI|Card")
 FTCGCardWidgetPressedSignature OnCardPressed;
+
+UPROPERTY(BlueprintAssignable, Category="TCG|UI|Card")
+FTCGCardWidgetReleasedSignature OnCardReleased;
 
 protected:
 virtual void NativeConstruct() override;
@@ -68,6 +75,9 @@ void HandleRootButtonClicked();
 
 UFUNCTION()
 void HandleRootButtonPressed();
+
+UFUNCTION()
+void HandleRootButtonReleased();
 
 void RefreshCardText();
 

@@ -143,6 +143,9 @@ FTCGCardWidgetData FindLocalHandCardDataByHandIndex(int32 HandIndex) const;
 
 	UFUNCTION()
 	void HandleHUDHandCardPressed(int32 HandIndex, UObject* SourceObject);
+
+	UFUNCTION()
+	void HandleHUDHandCardReleased(int32 HandIndex, UObject* SourceObject);
 UFUNCTION(Server, Reliable)
 	void ServerTryPlaySelectedHandCardToZone(FGuid CardInstanceId, FName ZoneId);
 

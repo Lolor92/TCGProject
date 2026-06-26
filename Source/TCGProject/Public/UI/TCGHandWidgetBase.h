@@ -10,6 +10,7 @@ class UTCGCardWidgetBase;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FTCGHandCardSelectedSignature, int32, HandIndex, UObject*, SourceObject);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FTCGHandCardPressedSignature, int32, HandIndex, UObject*, SourceObject);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FTCGHandCardReleasedSignature, int32, HandIndex, UObject*, SourceObject);
 
 UCLASS(Abstract, Blueprintable)
 class TCGPROJECT_API UTCGHandWidgetBase : public UUserWidget
@@ -44,6 +45,9 @@ FTCGHandCardSelectedSignature OnHandCardSelected;
 UPROPERTY(BlueprintAssignable, Category="TCG|UI|Hand")
 FTCGHandCardPressedSignature OnHandCardPressed;
 
+UPROPERTY(BlueprintAssignable, Category="TCG|UI|Hand")
+FTCGHandCardReleasedSignature OnHandCardReleased;
+
 protected:
 UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="TCG|UI|Hand")
 FTCGHandWidgetData HandData;
@@ -65,6 +69,9 @@ void HandleCardWidgetClicked(int32 HandIndex, UObject* SourceObject);
 
 UFUNCTION()
 void HandleCardWidgetPressed(int32 HandIndex, UObject* SourceObject);
+
+UFUNCTION()
+void HandleCardWidgetReleased(int32 HandIndex, UObject* SourceObject);
 
 UFUNCTION(BlueprintImplementableEvent, Category="TCG|UI|Hand")
 void BP_OnHandDataChanged();

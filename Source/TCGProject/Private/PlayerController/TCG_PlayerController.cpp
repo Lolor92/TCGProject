@@ -160,19 +160,6 @@ void ATCG_PlayerController::SetupInputComponent()
 void ATCG_PlayerController::PlayerTick(const float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
-
-	if (bIsDraggingHandCard)
-	{
-		const bool bLeftMouseDown = IsInputKeyDown(EKeys::LeftMouseButton);
-		if (!bLeftMouseDown)
-		{
-			EndHandCardDrag();
-			return;
-		}
-
-		bWasLeftMouseDownDuringHandDrag = true;
-	}
-
 	DrawHandCardDragPreview();
 }
 
@@ -231,6 +218,7 @@ void ATCG_PlayerController::CreateMatchHUD()
 	{
 		MatchHUDWidget->OnHUDHandCardSelected.AddUniqueDynamic(this, &ATCG_PlayerController::HandleHUDHandCardSelected);
 		MatchHUDWidget->OnHUDHandCardPressed.AddUniqueDynamic(this, &ATCG_PlayerController::HandleHUDHandCardPressed);
+		MatchHUDWidget->OnHUDHandCardReleased.AddUniqueDynamic(this, &ATCG_PlayerController::HandleHUDHandCardReleased);
 		MatchHUDWidget->AddToViewport();
 	}
 }
@@ -348,12 +336,17 @@ void ATCG_PlayerController::HandleHUDHandCardPressed(const int32 HandIndex, UObj
 	// The hand widget already selects on press before broadcasting this event.
 	// Do not select again here, or the log/detail/highlight path fires multiple times.
 	bIsDraggingHandCard = SelectedHandCardInstanceId.IsValid();
-	bWasLeftMouseDownDuringHandDrag = bIsDraggingHandCard && IsInputKeyDown(EKeys::LeftMouseButton);
+	bWasLeftMouseDownDuringHandDrag = false;
 
 	if (bIsDraggingHandCard)
 	{
 		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag started from hand index %d"), HandIndex), FColor::Cyan);
 	}
+}
+
+void ATCG_PlayerController::HandleHUDHandCardReleased(const int32 HandIndex, UObject* SourceObject)
+{
+	EndHandCardDrag();
 }
 
 bool ATCG_PlayerController::CanSelectedHandCardPlayToZone(const FName ZoneId) const
