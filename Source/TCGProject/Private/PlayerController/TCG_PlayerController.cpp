@@ -3,6 +3,7 @@
 #include "Cards/TCG_CardDefinition.h"
 #include "Cards/TCG_CardTypes.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameState/TCG_DebugScenarioRunner.h"
@@ -12,6 +13,19 @@
 #include "Pawn/TCG_BoardCameraPawn.h"
 #include "PlayerState/TCG_PlayerState.h"
 #include "UI/TCGMatchHUDWidgetBase.h"
+
+namespace
+{
+	void TCGScreenDebug(const UObject* WorldContextObject, const FString& Message, const FColor& Color = FColor::Yellow)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 3.0f, Color, Message);
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("%s"), *Message);
+	}
+}
 
 void ATCG_PlayerController::BeginPlay()
 {
@@ -193,6 +207,21 @@ void ATCG_PlayerController::HandleHUDHandCardSelected(const int32 HandIndex, UOb
 {
 	const FTCGCardWidgetData SelectedCardData = FindLocalHandCardDataByHandIndex(HandIndex);
 	SelectedHandCardInstanceId = SelectedCardData.CardInstanceId;
+
+	const TArray<FName> ValidZoneIds = GetValidPlacementZoneIdsForSelectedHandCard();
+	TCGScreenDebug(this, FString::Printf(
+		TEXT("TCG UI: Selected hand index %d valid zones %d local player %d card valid %s"),
+		HandIndex,
+		ValidZoneIds.Num(),
+		ResolveLocalPlayerIndex(),
+		SelectedHandCardInstanceId.IsValid() ? TEXT("true") : TEXT("false")),
+		ValidZoneIds.Num() > 0 ? FColor::Green : FColor::Red);
+
+	for (const FName ZoneId : ValidZoneIds)
+	{
+		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Valid zone %s"), *ZoneId.ToString()), FColor::Yellow);
+	}
+
 	RefreshPlacementHighlights();
 }
 
@@ -243,14 +272,17 @@ void ATCG_PlayerController::TryPlaySelectedHandCardToZone(const FName ZoneId)
 {
 	if (!SelectedHandCardInstanceId.IsValid())
 	{
+		TCGScreenDebug(this, TEXT("TCG UI: Play ignored, no selected hand card"), FColor::Red);
 		return;
 	}
 
 	if (!CanSelectedHandCardPlayToZone(ZoneId))
 	{
+		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Play ignored, invalid zone %s"), *ZoneId.ToString()), FColor::Red);
 		return;
 	}
 
+	TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Request play to %s"), *ZoneId.ToString()), FColor::Green);
 	ServerTryPlaySelectedHandCardToZone(SelectedHandCardInstanceId, ZoneId);
 }
 
@@ -264,6 +296,7 @@ void ATCG_PlayerController::HandleBoardZoneClick()
 	FHitResult HitResult;
 	if (!GetHitResultUnderCursor(ECC_Visibility, true, HitResult))
 	{
+		TCGScreenDebug(this, TEXT("TCG UI: Zone click found no hit under cursor"), FColor::Red);
 		return;
 	}
 
@@ -271,9 +304,13 @@ void ATCG_PlayerController::HandleBoardZoneClick()
 	FName ZoneId = NAME_None;
 	if (!TryResolveZoneIdFromActor(HitActor, ZoneId))
 	{
+		TCGScreenDebug(this, FString::Printf(
+			TEXT("TCG UI: Hit actor %s but no ZoneId matched"),
+			*GetNameSafe(HitActor)), FColor::Red);
 		return;
 	}
 
+	TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Hit zone %s"), *ZoneId.ToString()), FColor::Green);
 	TryPlaySelectedHandCardToZone(ZoneId);
 }
 
@@ -348,12 +385,14 @@ void ATCG_PlayerController::RefreshPlacementHighlights()
 	const TArray<FName> ValidZoneIds = GetValidPlacementZoneIdsForSelectedHandCard();
 	if (ValidZoneIds.Num() == 0)
 	{
+		TCGScreenDebug(this, TEXT("TCG UI: No valid zones to highlight"), FColor::Red);
 		return;
 	}
 
 	TArray<AActor*> AllActors;
 	UGameplayStatics::GetAllActorsOfClass(this, AActor::StaticClass(), AllActors);
 
+	int32 MatchedActorCount = 0;
 	for (const FName ZoneId : ValidZoneIds)
 	{
 		for (AActor* Actor : AllActors)
@@ -363,6 +402,7 @@ void ATCG_PlayerController::RefreshPlacementHighlights()
 				continue;
 			}
 
+			MatchedActorCount++;
 			FVector Origin = Actor->GetActorLocation();
 			FVector Extent(80.0f, 80.0f, 10.0f);
 			Actor->GetActorBounds(true, Origin, Extent);
@@ -381,6 +421,12 @@ void ATCG_PlayerController::RefreshPlacementHighlights()
 				PlacementHighlightLineThickness);
 		}
 	}
+
+	TCGScreenDebug(this, FString::Printf(
+		TEXT("TCG UI: Highlight valid zones %d matched actors %d"),
+		ValidZoneIds.Num(),
+		MatchedActorCount),
+		MatchedActorCount > 0 ? FColor::Green : FColor::Red);
 }
 
 void ATCG_PlayerController::ClearPlacementHighlights()
