@@ -17,12 +17,18 @@ class TCGPROJECT_API ATCG_CardZoneActor : public AActor
 public:
 	ATCG_CardZoneActor();
 
+	virtual void Tick(float DeltaSeconds) override;
+	virtual void BeginPlay() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	/** Returns the replicated identity cards use to know which deck, hand, pile, or field slot they are in. */
 	UFUNCTION(BlueprintPure, Category = "TCG|Zone")
 	const FTCGCardZoneId& GetZoneId() const { return ZoneId; }
+
+	/** Returns the simple gameplay zone name used by card instances, such as Player0_Field_0. */
+	UFUNCTION(BlueprintPure, Category = "TCG|Zone")
+	FName GetGameplayZoneName() const;
 
 	/** Returns the editor/debug label, preferring CustomLabel, then ZoneName, then a generated label. */
 	UFUNCTION(BlueprintPure, Category = "TCG|Zone")
@@ -88,7 +94,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TCG|Debug Shape")
 	FColor DebugColor = FColor(0, 160, 255);
 
-	/** Enables the simple debug footprint during play. It remains visible in the editor either way. */
+	/** Color used while this zone is a valid placement target for the selected hand card. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TCG|Placement")
+	FColor PlacementHighlightColor = FColor::Yellow;
+
+	/** Enables the simple debug footprint during play as well as in the editor. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TCG|Debug Shape")
 	bool bShowDebugShapeInGame = true;
 
@@ -104,10 +114,22 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TCG|Debug Label")
 	float LabelHeightOffset = 4.0f;
 
+	/** How often the zone asks the local player controller whether it should glow. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TCG|Placement", meta = (ClampMin = "0.02", UIMin = "0.02"))
+	float PlacementHighlightRefreshInterval = 0.05f;
+
 private:
 	/** Attaches or detaches this actor so anchor transform changes update the zone visually in the editor and in play. */
 	void ApplyPlacementAnchorAttachment();
 
 	/** Keeps editor-only/debug components in sync with editable properties. */
 	void UpdateVisuals();
+	void RefreshPlacementHighlight();
+	void SetPlacementHighlightActive(bool bActive);
+
+	UFUNCTION()
+	void HandleZoneClicked(AActor* TouchedActor, FKey ButtonPressed);
+
+	float PlacementHighlightRefreshAccumulator = 0.0f;
+	bool bPlacementHighlightActive = false;
 };
