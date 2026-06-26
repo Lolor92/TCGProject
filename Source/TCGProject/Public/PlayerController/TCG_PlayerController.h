@@ -98,7 +98,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
 	bool bDrawDragPreview = true;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
+	
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
+TSubclassOf<ATCG_CardVisualActor> CardVisualActorClass;
+
+UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
+TObjectPtr<ATCG_CardVisualActor> DragPreviewCardActor = nullptr;
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
 	FVector DragPreviewExtent = FVector(70.0f, 100.0f, 4.0f);
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
@@ -135,6 +141,7 @@ protected:
 
 	void EndHandCardDrag();
 	void DrawHandCardDragPreview();
+	void DestroyHandDragPreview();
 	bool GetCursorBoardPreviewLocation(FVector& OutPreviewLocation, FName& OutHoveredZoneId) const;
 	bool ResolveDragDropZoneFromCursor(FName& OutZoneId, FString& OutDebugInfo) const;
 	bool GetProjectedZoneScreenRect(const AActor& ZoneActor, FVector2D& OutMin, FVector2D& OutMax) const;
