@@ -172,16 +172,27 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 		AttackEffect.bOptional = true;
 		AttackEffect.TriggerFilter.bRequireTopCard = true;
 
+		FTCGEffectStep SelectOwnUnitStep;
+		SelectOwnUnitStep.StepType = ETCGEffectStepType::SelectTarget;
+		SelectOwnUnitStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
+		SelectOwnUnitStep.TargetFilter.RequiredLocation = ETCGCardLocation::Board;
+		SelectOwnUnitStep.TargetFilter.bRequireTopCard = true;
+		SelectOwnUnitStep.TargetFilter.NameContains = "ProtectedOwnUnit";
+		AttackEffect.Steps.Add(SelectOwnUnitStep);
+
+		FTCGEffectStep SelectOpponentUnitStep;
+		SelectOpponentUnitStep.StepType = ETCGEffectStepType::SelectTarget;
+		SelectOpponentUnitStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Opponent;
+		SelectOpponentUnitStep.TargetFilter.RequiredLocation = ETCGCardLocation::Board;
+		SelectOpponentUnitStep.TargetFilter.bRequireTopCard = true;
+		SelectOpponentUnitStep.TargetFilter.bRequireSameMaterialCountAsFirstSelectedTarget = true;
+		SelectOpponentUnitStep.TargetFilter.NameContains = "TargetOpponentUnit";
+		SelectOpponentUnitStep.bRequiresPreviousStepSuccess = true;
+		AttackEffect.Steps.Add(SelectOpponentUnitStep);
+
 		FTCGEffectStep DestroyMatchingStep;
 		DestroyMatchingStep.StepType = ETCGEffectStepType::DestroyUnitsWithMatchingMaterialCount;
-		DestroyMatchingStep.TargetFilter.OwnerMode = ETCGEffectTargetMode::Controller;
-		DestroyMatchingStep.TargetFilter.RequiredLocation = ETCGCardLocation::Board;
-		DestroyMatchingStep.TargetFilter.bRequireTopCard = true;
-		DestroyMatchingStep.TargetFilter.NameContains = "ProtectedOwnUnit";
-		DestroyMatchingStep.SecondaryTargetFilter.OwnerMode = ETCGEffectTargetMode::Opponent;
-		DestroyMatchingStep.SecondaryTargetFilter.RequiredLocation = ETCGCardLocation::Board;
-		DestroyMatchingStep.SecondaryTargetFilter.bRequireTopCard = true;
-		DestroyMatchingStep.SecondaryTargetFilter.NameContains = "TargetOpponentUnit";
+		DestroyMatchingStep.bRequiresPreviousStepSuccess = true;
 		AttackEffect.Steps.Add(DestroyMatchingStep);
 
 		AttackerDefinition->Effects.Add(AttackEffect);
