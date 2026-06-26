@@ -14,10 +14,11 @@ namespace
 		MachineMaterialRecovery,
 		GraveyardMachineProtection,
 		SelectedGraveyardPlay,
+		FilteredMaterialDefense,
 		OverdrivePilotKaia
 	};
 
-	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::SelectedGraveyardPlay;
+	constexpr ETCGDebugRunnerScenario DebugRunnerScenario = ETCGDebugRunnerScenario::FilteredMaterialDefense;
 	constexpr bool bDebugRunnerLogDebugSetup = false;
 	constexpr bool bDebugRunnerLogRoundFlow = true;
 	constexpr bool bDebugRunnerLogPlacementFlow = true;
@@ -122,6 +123,148 @@ void UTCG_DebugScenarioRunner::RunDebugTurnFlow(ATCG_GameState* GameState)
 
 
 
+
+	if (DebugRunnerScenario == ETCGDebugRunnerScenario::FilteredMaterialDefense)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Filtered material defense scenario start"));
+
+		GameState->MatchCards.Empty();
+		GameState->SetMatchResult(ETCGMatchResult::None);
+		GameState->SetPhase(ETCGMatchPhase::Battle);
+		GameState->RoundNumber = 1;
+		GameState->TurnNumber = 1;
+		GameState->PlacementStepIndex = 0;
+		GameState->SetCurrentTurnPlayer(INDEX_NONE);
+		GameState->ClearPendingDiscardChoice();
+		GameState->ClearPendingGraveyardToDeckChoice();
+
+		GameState->DebugCardDefinitions.RemoveAll([](const TObjectPtr<UTCG_CardDefinition>& Definition)
+		{
+			return Definition
+				&& Definition->CardDefinitionId == "Debug_FilteredMaterialDefense_Defender";
+		});
+
+		UTCG_CardDefinition* DefenderDefinition = NewObject<UTCG_CardDefinition>(GameState);
+		DefenderDefinition->CardDefinitionId = "Debug_FilteredMaterialDefense_Defender";
+		DefenderDefinition->DisplayName = FText::FromString(TEXT("Debug Filtered Material Defense"));
+		DefenderDefinition->Element = ETCGCardElement::Light;
+		DefenderDefinition->BaseAttack = 1;
+
+		FTCGCardEffectRef DefenseEffect;
+		DefenseEffect.Trigger = ETCGEffectTrigger::OnOpponentAttack;
+		DefenseEffect.bOptional = true;
+		DefenseEffect.TriggerFilter.bRequireTopCard = true;
+
+		FTCGEffectStep DetachCostStep;
+		DetachCostStep.StepType = ETCGEffectStepType::DetachFilteredMaterials;
+		DetachCostStep.TargetMode = ETCGEffectTargetMode::SourceCard;
+		DetachCostStep.Value = 2;
+		DetachCostStep.TargetFilter.NameContains = "Pilot";
+		DetachCostStep.SecondaryTargetFilter.NameContains = "Machine";
+		DefenseEffect.Steps.Add(DetachCostStep);
+
+		FTCGEffectStep DestroyAttackerStep;
+		DestroyAttackerStep.StepType = ETCGEffectStepType::DestroyUnit;
+		DestroyAttackerStep.TargetMode = ETCGEffectTargetMode::TriggerTarget;
+		DestroyAttackerStep.bRequiresPreviousStepSuccess = true;
+		DefenseEffect.Steps.Add(DestroyAttackerStep);
+
+		DefenderDefinition->Effects.Add(DefenseEffect);
+		GameState->DebugCardDefinitions.Add(DefenderDefinition);
+
+		const FGuid AttackerId = AddDebugBoardUnit(
+			"Debug_FilteredMaterialDefense_Attacker",
+			ETCGCardElement::Dark,
+			10,
+			0,
+			0);
+
+		FTCGCardInstance* DefenderCard = GameState->AddCardInstanceFromDefinition(
+			DefenderDefinition,
+			1,
+			ETCGCardLocation::Board);
+		const FGuid DefenderId = DefenderCard ? DefenderCard->CardInstanceId : FGuid();
+
+		if (!AttackerId.IsValid() || !DefenderId.IsValid() || !DefenderCard)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("TCG Debug: Filtered material defense setup failed"));
+			GameState->EndMatch(ETCGMatchResult::Draw);
+			return;
+		}
+
+		DefenderCard->ZoneId = ATCG_GameState::GetFieldZoneId(1, 0);
+		DefenderCard->StackId = FGuid::NewGuid();
+		DefenderCard->StackIndex = 2;
+
+		FTCGCardInstance& PilotMaterial = GameState->AddCardInstance(
+			"Debug_FilteredMaterialDefense_Pilot",
+			ETCGCardElement::Wind,
+			1,
+			1,
+			ETCGCardLocation::Board);
+		PilotMaterial.ZoneId = DefenderCard->ZoneId;
+		PilotMaterial.StackId = DefenderCard->StackId;
+		PilotMaterial.StackIndex = 0;
+
+		FTCGCardInstance& MachineMaterial = GameState->AddCardInstance(
+			"Debug_FilteredMaterialDefense_Machine",
+			ETCGCardElement::Fire,
+			1,
+			1,
+			ETCGCardLocation::Board);
+		MachineMaterial.ZoneId = DefenderCard->ZoneId;
+		MachineMaterial.StackId = DefenderCard->StackId;
+		MachineMaterial.StackIndex = 1;
+
+		const int32 MaterialsBefore = CountMaterialsUnderUnit(DefenderId);
+		const bool bResolvedBattle = GameState->ResolveBattlePhase();
+
+		const FTCGCardInstance* AttackerAfter = GameState->FindCardInstance(AttackerId);
+		const FTCGCardInstance* DefenderAfter = GameState->FindCardInstance(DefenderId);
+		const FTCGCardInstance* PilotAfter = GameState->FindCardInstance(PilotMaterial.CardInstanceId);
+		const FTCGCardInstance* MachineAfter = GameState->FindCardInstance(MachineMaterial.CardInstanceId);
+
+		const int32 MaterialsAfter = CountMaterialsUnderUnit(DefenderId);
+
+		const bool bAttackerDestroyed =
+			AttackerAfter
+			&& AttackerAfter->Location == ETCGCardLocation::Graveyard;
+
+		const bool bDefenderStayedBoard =
+			DefenderAfter
+			&& DefenderAfter->Location == ETCGCardLocation::Board;
+
+		const bool bPilotDetached =
+			PilotAfter
+			&& PilotAfter->Location == ETCGCardLocation::Graveyard;
+
+		const bool bMachineDetached =
+			MachineAfter
+			&& MachineAfter->Location == ETCGCardLocation::Graveyard;
+
+		const bool bExpectedAll =
+			bResolvedBattle
+			&& MaterialsBefore == 2
+			&& MaterialsAfter == 0
+			&& bPilotDetached
+			&& bMachineDetached
+			&& bAttackerDestroyed
+			&& bDefenderStayedBoard;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("TCG Debug: FilteredMaterialDefense summary BattleResolved=%s MaterialsBefore=%d MaterialsAfter=%d PilotDetached=%s MachineDetached=%s AttackerDestroyed=%s DefenderStayedBoard=%s ExpectedAll=%s"),
+			bResolvedBattle ? TEXT("true") : TEXT("false"),
+			MaterialsBefore,
+			MaterialsAfter,
+			bPilotDetached ? TEXT("true") : TEXT("false"),
+			bMachineDetached ? TEXT("true") : TEXT("false"),
+			bAttackerDestroyed ? TEXT("true") : TEXT("false"),
+			bDefenderStayedBoard ? TEXT("true") : TEXT("false"),
+			bExpectedAll ? TEXT("true") : TEXT("false"));
+
+		GameState->EndMatch(ETCGMatchResult::Draw);
+		return;
+	}
 
 	if (DebugRunnerScenario == ETCGDebugRunnerScenario::SelectedGraveyardPlay)
 {
