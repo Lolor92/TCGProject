@@ -34,7 +34,6 @@ if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 NotifyCardPressed();
 
 return FReply::Handled()
-.CaptureMouse(TakeWidget())
 .PreventThrottling();
 }
 
@@ -48,7 +47,6 @@ if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 NotifyCardReleased();
 
 return FReply::Handled()
-.ReleaseMouseCapture()
 .PreventThrottling();
 }
 
