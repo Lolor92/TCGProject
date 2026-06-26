@@ -7,6 +7,7 @@
 
 class ATCG_GameState;
 class ATCG_CardVisualActor;
+class ATCG_CardZoneActor;
 class UTCGMatchHUDWidgetBase;
 struct FTCGCardInstance;
 
@@ -94,33 +95,48 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="1.0", UIMin="1.0"))
 	float PlacementHighlightLineThickness = 8.0f;
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
+bool bDrawDragPreview = true;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
-	bool bDrawDragPreview = true;
-
-	
 UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
 TSubclassOf<ATCG_CardVisualActor> CardVisualActorClass;
 
 UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
 TObjectPtr<ATCG_CardVisualActor> DragPreviewCardActor = nullptr;
+
 UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
-	FVector DragPreviewExtent = FVector(70.0f, 100.0f, 4.0f);
+FVector DragPreviewExtent = FVector(70.0f, 100.0f, 4.0f);
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
-	float DragPreviewHeightOffset = 28.0f;
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
+float DragPreviewHeightOffset = 28.0f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
-	float DragPreviewLineThickness = 4.0f;
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
+float DragPreviewLineThickness = 4.0f;
 
-	// Pixel padding around projected field-zone bounds for drag release. This is intentionally forgiving.
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="0.0", UIMin="0.0"))
-	float DragDropZoneScreenPadding = 80.0f;
+// Pixel padding around projected field-zone bounds for drag release.
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="0.0", UIMin="0.0"))
+float DragDropZoneScreenPadding = 80.0f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="10.0", UIMin="10.0"))
-	float DragDropZoneScreenSearchRadius = 300.0f;
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="10.0", UIMin="10.0"))
+float DragDropZoneScreenSearchRadius = 300.0f;
 
-	UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Card Visual")
+float HandVisualDistanceFromCamera = 520.0f;
+
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Card Visual")
+float HandVisualHorizontalSpacing = 95.0f;
+
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Card Visual")
+float HandVisualVerticalOffset = -145.0f;
+
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Card Visual")
+float HandVisualDepthSpacing = 2.0f;
+
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Card Visual")
+float FieldVisualHeightOffset = 18.0f;
+
+TMap<FGuid, TWeakObjectPtr<ATCG_CardVisualActor>> CardVisualActors;
+UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
 	FGuid SelectedHandCardInstanceId;
 
 	UPROPERTY(BlueprintReadOnly, Category="TCG|UI|Placement")
@@ -142,6 +158,11 @@ UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement")
 	void EndHandCardDrag();
 	void DrawHandCardDragPreview();
 	void DestroyHandDragPreview();
+	void SyncCardVisualActorsFromGameState(const ATCG_GameState& TCGGameState);
+	ATCG_CardVisualActor* GetOrCreateCardVisualActor(const FTCGCardWidgetData& CardData);
+	void MoveCardVisualActorToHandSlot(ATCG_CardVisualActor& CardActor, int32 HandIndex) const;
+	bool MoveCardVisualActorToFieldZone(ATCG_CardVisualActor& CardActor, FName ZoneId) const;
+	bool FindFieldZoneActor(FName ZoneId, ATCG_CardZoneActor*& OutZoneActor) const;
 	bool GetCursorBoardPreviewLocation(FVector& OutPreviewLocation, FName& OutHoveredZoneId) const;
 	bool ResolveDragDropZoneFromCursor(FName& OutZoneId, FString& OutDebugInfo) const;
 	bool GetProjectedZoneScreenRect(const AActor& ZoneActor, FVector2D& OutMin, FVector2D& OutMax) const;
