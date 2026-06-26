@@ -6,7 +6,6 @@
 
 ATCG_GameMode::ATCG_GameMode()
 {
-	// Tell Unreal which GameState and PlayerState this GameMode uses.
 	GameStateClass = ATCG_GameState::StaticClass();
 	PlayerStateClass = ATCG_PlayerState::StaticClass();
 }
@@ -20,18 +19,19 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 	ATCG_PlayerState* TCGPlayerState = NewPlayer->GetPlayerState<ATCG_PlayerState>();
 	if (!TCGPlayerState) return;
 
-	// Assign player 0, then player 1, then 2, etc.
-	// For now we only care about 0 and 1.
 	TCGPlayerState->SetPlayerIndex(NextPlayerIndex);
 	NextPlayerIndex++;
 
-	// Once 2 players joined, start the match.
 	if (NextPlayerIndex >= 2)
 	{
 		ATCG_GameState* TCGGameState = GetGameState<ATCG_GameState>();
 		if (TCGGameState)
 		{
-			// Run the selected debug scenario from TCG_DebugScenarioRunner.cpp.
+			if (TCGGameState->MatchCards.Num() > 0)
+			{
+				return;
+			}
+
 			UTCG_DebugScenarioRunner::RunDebugTurnFlow(TCGGameState);
 		}
 	}
