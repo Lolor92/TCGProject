@@ -6,6 +6,7 @@
 #include "TCG_PlayerController.generated.h"
 
 class ATCG_GameState;
+class ATCG_CardVisualActor;
 class UTCGMatchHUDWidgetBase;
 struct FTCGCardInstance;
 

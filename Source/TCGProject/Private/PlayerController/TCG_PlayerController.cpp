@@ -16,6 +16,7 @@
 #include "PlayerState/TCG_PlayerState.h"
 #include "TimerManager.h"
 #include "UI/TCGMatchHUDWidgetBase.h"
+#include "Visual/TCG_CardVisualActor.h"
 
 #if PLATFORM_WINDOWS
 #include "Windows/AllowWindowsPlatformTypes.h"
@@ -635,33 +636,70 @@ bool ATCG_PlayerController::GetCursorBoardPreviewLocation(FVector& OutPreviewLoc
 
 void ATCG_PlayerController::DrawHandCardDragPreview()
 {
-	if (!bDrawDragPreview || !bIsDraggingHandCard || !SelectedHandCardInstanceId.IsValid() || !GetWorld())
-	{
-		return;
-	}
+if (!bDrawDragPreview || !bIsDraggingHandCard || !SelectedHandCardInstanceId.IsValid() || !GetWorld())
+{
+return;
+}
 
-	FVector PreviewLocation = FVector::ZeroVector;
-	FName HoveredZoneId = NAME_None;
-	if (!GetCursorBoardPreviewLocation(PreviewLocation, HoveredZoneId))
-	{
-		return;
-	}
+FVector PreviewLocation = FVector::ZeroVector;
+FName HoveredZoneId = NAME_None;
+if (!GetCursorBoardPreviewLocation(PreviewLocation, HoveredZoneId))
+{
+return;
+}
 
-	FName DropZoneId = NAME_None;
-	FString DropDebugName;
-	const bool bCanDropHere = ResolveDragDropZoneFromCursor(DropZoneId, DropDebugName);
-	const FColor PreviewColor = bCanDropHere ? FColor::Green : FColor::Cyan;
+FName DropZoneId = NAME_None;
+FString DropDebugInfo;
+const bool bCanDropHere = ResolveDragDropZoneFromCursor(DropZoneId, DropDebugInfo);
 
-	DrawDebugBox(
-		GetWorld(),
-		PreviewLocation,
-		DragPreviewExtent,
-		FQuat::Identity,
-		PreviewColor,
-		false,
-		0.0f,
-		0,
-		DragPreviewLineThickness);
+if (!DragPreviewCardActor)
+{
+FTCGCardWidgetData CardData;
+if (MatchHUDWidget)
+{
+const FTCGMatchHUDWidgetData& HUDData = MatchHUDWidget->GetHUDData();
+for (const FTCGCardWidgetData& HandCardData : HUDData.LocalHand.Cards)
+{
+if (HandCardData.CardInstanceId == SelectedHandCardInstanceId)
+{
+CardData = HandCardData;
+break;
+}
+}
+}
+const TSubclassOf<ATCG_CardVisualActor> VisualClass = CardVisualActorClass ? CardVisualActorClass : ATCG_CardVisualActor::StaticClass();
+
+FActorSpawnParameters SpawnParams;
+SpawnParams.Owner = this;
+SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+DragPreviewCardActor = GetWorld()->SpawnActor<ATCG_CardVisualActor>(
+VisualClass,
+PreviewLocation,
+GetControlRotation(),
+SpawnParams);
+
+if (DragPreviewCardActor)
+{
+DragPreviewCardActor->SetCardData(CardData);
+}
+}
+
+if (DragPreviewCardActor)
+{
+DragPreviewCardActor->SetActorLocation(PreviewLocation);
+DragPreviewCardActor->SetActorRotation(FRotator(0.0f, GetControlRotation().Yaw, 0.0f));
+DragPreviewCardActor->SetPreviewVisualState(bCanDropHere);
+}
+}
+
+void ATCG_PlayerController::DestroyHandDragPreview()
+{
+if (DragPreviewCardActor)
+{
+DragPreviewCardActor->Destroy();
+DragPreviewCardActor = nullptr;
+}
 }
 
 void ATCG_PlayerController::HandleBoardZoneClick()
