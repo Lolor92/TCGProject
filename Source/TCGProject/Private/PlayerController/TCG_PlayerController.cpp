@@ -441,31 +441,66 @@ void ATCG_PlayerController::HandleCardZoneActorClicked(const FName ZoneId)
 
 void ATCG_PlayerController::EndHandCardDrag()
 {
-	if (!bIsDraggingHandCard)
-	{
-		return;
-	}
+if (!bIsDraggingHandCard)
+{
+return;
+}
 
-	bIsDraggingHandCard = false;
-	FlushPersistentDebugLines(GetWorld());
+bIsDraggingHandCard = false;
+FlushPersistentDebugLines(GetWorld());
 
-	if (!SelectedHandCardInstanceId.IsValid())
-	{
-		TCGScreenDebug(this, TEXT("TCG UI: Drag cancelled, card returned to hand"), FColor::Yellow);
-		return;
-	}
+ATCG_CardVisualActor* ReleasedDragActor = DragPreviewCardActor;
+DragPreviewCardActor = nullptr;
 
-	FName ZoneId = NAME_None;
-	FString DebugHitName;
-	if (!ResolveDragDropZoneFromCursor(ZoneId, DebugHitName))
-	{
-		TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag cancelled over %s, card returned to hand"), *DebugHitName), FColor::Yellow);
-		return;
-	}
+if (!SelectedHandCardInstanceId.IsValid())
+{
+if (ReleasedDragActor)
+{
+DestroyHandDragPreview();
+}
 
-	TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag release play to %s"), *ZoneId.ToString()), FColor::Green);
-	TryPlaySelectedHandCardToZone(ZoneId);
-	bSuppressNextZoneActorClick = true;
+TCGScreenDebug(this, TEXT("TCG UI: Drag cancelled, card returned to hand"), FColor::Yellow);
+return;
+}
+
+FName ZoneId = NAME_None;
+FString DebugHitName;
+if (!ResolveDragDropZoneFromCursor(ZoneId, DebugHitName))
+{
+if (const ATCG_GameState* TCGGameState = GetWorld() ? GetWorld()->GetGameState<ATCG_GameState>() : nullptr)
+{
+SyncCardVisualActorsFromGameState(*TCGGameState);
+}
+else if (ReleasedDragActor)
+{
+MoveCardVisualActorToHandSlot(*ReleasedDragActor, 0);
+}
+
+TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag cancelled over %s, card returned to hand"), *DebugHitName), FColor::Yellow);
+return;
+}
+
+TCGScreenDebug(this, FString::Printf(TEXT("TCG UI: Drag release play to %s"), *ZoneId.ToString()), FColor::Green);
+
+// Snap immediately on the owning client too. The server refresh will confirm the same state.
+if (ReleasedDragActor)
+{
+MoveCardVisualActorToFieldZone(*ReleasedDragActor, ZoneId);
+ReleasedDragActor->SetPreviewVisualState(false);
+}
+
+TryPlaySelectedHandCardToZone(ZoneId);
+
+// Local drag/select state must not keep pointing at the placed card.
+SelectedHandCardInstanceId.Invalidate();
+ClearPlacementHighlights();
+
+if (const ATCG_GameState* TCGGameState = GetWorld() ? GetWorld()->GetGameState<ATCG_GameState>() : nullptr)
+{
+SyncCardVisualActorsFromGameState(*TCGGameState);
+}
+
+bSuppressNextZoneActorClick = true;
 }
 
 
@@ -714,7 +749,7 @@ const FTCGCardWidgetData CardData = BuildCardWidgetDataFromCard(TCGGameState, Lo
 SeenCards.Add(CardData.CardInstanceId);
 
 ATCG_CardVisualActor* CardActor = GetOrCreateCardVisualActor(CardData);
-if (!CardActor || CardActor == DragPreviewCardActor)
+if (!CardActor || (bIsDraggingHandCard && CardActor == DragPreviewCardActor))
 {
 continue;
 }
@@ -739,7 +774,7 @@ const FTCGCardWidgetData CardData = BuildCardWidgetDataFromCard(TCGGameState, Ca
 SeenCards.Add(CardData.CardInstanceId);
 
 ATCG_CardVisualActor* CardActor = GetOrCreateCardVisualActor(CardData);
-if (!CardActor || CardActor == DragPreviewCardActor)
+if (!CardActor || (bIsDraggingHandCard && CardActor == DragPreviewCardActor))
 {
 continue;
 }
@@ -755,7 +790,7 @@ for (auto It = CardVisualActors.CreateIterator(); It; ++It)
 const FGuid CardInstanceId = It.Key();
 const TWeakObjectPtr<ATCG_CardVisualActor> CardActor = It.Value();
 
-if (SeenCards.Contains(CardInstanceId) || (DragPreviewCardActor && CardActor.Get() == DragPreviewCardActor))
+if (SeenCards.Contains(CardInstanceId) || (bIsDraggingHandCard && DragPreviewCardActor && CardActor.Get() == DragPreviewCardActor))
 {
 continue;
 }

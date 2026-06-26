@@ -115,7 +115,7 @@ float DragPreviewLineThickness = 4.0f;
 
 // Pixel padding around projected field-zone bounds for drag release.
 UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="0.0", UIMin="0.0"))
-float DragDropZoneScreenPadding = 80.0f;
+float DragDropZoneScreenPadding = 35.0f;
 
 UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="TCG|UI|Placement", meta=(ClampMin="10.0", UIMin="10.0"))
 float DragDropZoneScreenSearchRadius = 300.0f;
