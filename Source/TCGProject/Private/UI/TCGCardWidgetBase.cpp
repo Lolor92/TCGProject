@@ -1,5 +1,7 @@
 #include "UI/TCGCardWidgetBase.h"
 
+#include "Blueprint/WidgetBlueprintLibrary.h"
+
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 
@@ -9,9 +11,7 @@ Super::NativeConstruct();
 
 if (Root_Button)
 {
-Root_Button->OnClicked.AddUniqueDynamic(this, &UTCGCardWidgetBase::HandleRootButtonClicked);
-Root_Button->OnPressed.AddUniqueDynamic(this, &UTCGCardWidgetBase::HandleRootButtonPressed);
-Root_Button->OnReleased.AddUniqueDynamic(this, &UTCGCardWidgetBase::HandleRootButtonReleased);
+Root_Button->SetIsEnabled(false);
 }
 
 RefreshCardText();
@@ -21,12 +21,38 @@ void UTCGCardWidgetBase::NativeDestruct()
 {
 if (Root_Button)
 {
-Root_Button->OnClicked.RemoveDynamic(this, &UTCGCardWidgetBase::HandleRootButtonClicked);
-Root_Button->OnPressed.RemoveDynamic(this, &UTCGCardWidgetBase::HandleRootButtonPressed);
-Root_Button->OnReleased.RemoveDynamic(this, &UTCGCardWidgetBase::HandleRootButtonReleased);
+Root_Button->SetIsEnabled(true);
 }
 
 Super::NativeDestruct();
+}
+
+FReply UTCGCardWidgetBase::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+{
+NotifyCardPressed();
+
+return FReply::Handled()
+.CaptureMouse(TakeWidget())
+.PreventThrottling();
+}
+
+return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+FReply UTCGCardWidgetBase::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+{
+NotifyCardReleased();
+
+return FReply::Handled()
+.ReleaseMouseCapture()
+.PreventThrottling();
+}
+
+return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 }
 
 void UTCGCardWidgetBase::SetCardData(const FTCGCardWidgetData& InCardData)
