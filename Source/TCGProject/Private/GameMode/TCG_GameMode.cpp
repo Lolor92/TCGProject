@@ -3,6 +3,7 @@
 #include "GameState/TCG_DebugScenarioRunner.h"
 #include "GameState/TCG_GameState.h"
 #include "Pawn/TCG_BoardCameraPawn.h"
+#include "PlayerController/TCG_PlayerController.h"
 #include "PlayerState/TCG_PlayerState.h"
 
 ATCG_GameMode::ATCG_GameMode()
@@ -21,8 +22,14 @@ void ATCG_GameMode::PostLogin(APlayerController* NewPlayer)
 	ATCG_PlayerState* TCGPlayerState = NewPlayer->GetPlayerState<ATCG_PlayerState>();
 	if (!TCGPlayerState) return;
 
-	TCGPlayerState->SetPlayerIndex(NextPlayerIndex);
+	const int32 AssignedPlayerIndex = NextPlayerIndex;
+	TCGPlayerState->SetPlayerIndex(AssignedPlayerIndex);
 	NextPlayerIndex++;
+
+	if (ATCG_PlayerController* TCGPlayerController = Cast<ATCG_PlayerController>(NewPlayer))
+	{
+		TCGPlayerController->ClientSetAssignedPlayerIndex(AssignedPlayerIndex);
+	}
 
 	if (NextPlayerIndex >= 2)
 	{
